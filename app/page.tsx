@@ -45,7 +45,8 @@ export default function Page() {
 
     try {
       const responses: string[] = []
-      for (const [idx, image] of images.entries()) {
+      for (let idx = 0; idx < images.length; idx++) {
+        const image = images[idx]
         const res = await fetch('/api/analyze-image', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
@@ -106,5 +107,6 @@ export default function Page() {
     </main>
   )
 }
+
 
 
