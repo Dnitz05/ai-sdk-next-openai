@@ -20,18 +20,19 @@
     "@ai-sdk/react": "1.2.6",
     "@vercel/blob": "^0.26.0",
     "ai": "4.3.2",
+    "canvas": "^2.11.2", // <-- Tornem a afegir canvas
+    "mammoth": "^1.4.2",
     "next": "latest",
     "openai": "4.52.6",
-    "pdf-lib": "^1.17.1",
-    "sharp": "^0.33.4",
+    "pdfjs-dist": "^3.10.111", // <-- Tornem a afegir pdfjs-dist (compatible amb canvas)
     "react": "^18",
     "react-dom": "^18",
     "react-markdown": "9.0.1",
-    "zod": "3.23.8",
-    "mammoth": "^1.4.2"
+    "zod": "3.23.8"
+    // sharp i pdf-lib eliminats
   },
   "devDependencies": {
-    "@types/node": "20.17.24",
+    "@types/node": "20.17.24", // <- Canviat a 20 per coherència amb Node 18/20
     "@types/react": "^18",
     "@types/react-dom": "^18",
     "autoprefixer": "^10.4.14",
