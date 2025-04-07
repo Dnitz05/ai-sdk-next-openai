@@ -39,7 +39,7 @@ export async function POST(req: Request) {
       const context = canvas.getContext('2d')
 
       // Renderitzem la pàgina del PDF al canvas
-      await page.render({ canvasContext: context, viewport }).promise
+     await page.render({ canvasContext: context as any, viewport }).promise
 
       // Obtenim el buffer PNG del canvas
       const pngBuffer = canvas.toBuffer('image/png')
