@@ -4,7 +4,6 @@ import sharp from 'sharp'
 import { put } from '@vercel/blob'
 
 export const maxDuration = 60 // segons
-export const maxSize = 20 * 1024 * 1024 // 20MB
 export const dynamic = 'force-dynamic'
 
 export async function POST(req: Request) {
