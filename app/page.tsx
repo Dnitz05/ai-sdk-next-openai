@@ -26,8 +26,13 @@ export default function Page() {
       })
 
       if (!res.ok) {
-        const err = await res.json()
-        throw new Error(err.error || 'Error desconegut')
+        let errData
+        try {
+          errData = await res.json()
+        } catch {
+          throw new Error('El servidor no ha retornat una resposta vàlida.')
+        }
+        throw new Error(errData.error || 'Error desconegut')
       }
 
       const data = await res.json()
@@ -48,6 +53,7 @@ export default function Page() {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
+        model: 'gpt-4o',
         messages: [
           { role: 'system', content: 'Ets un expert jurídic en normativa urbanística catalana. Respon en català.' },
           { role: 'user', content: `Analitza aquest document:\n\n${text}` },
@@ -60,37 +66,57 @@ export default function Page() {
     setLoading(false)
   }
 
+  const handleDownloadPdf = () => {
+    const blob = new Blob([response], { type: 'application/pdf' })
+    const url = URL.createObjectURL(blob)
+    const link = document.createElement('a')
+    link.href = url
+    link.download = 'resposta.pdf'
+    link.click()
+    URL.revokeObjectURL(url)
+  }
+
   return (
-    <main className="p-4 max-w-xl mx-auto">
-      <h1 className="text-2xl font-bold mb-4">Puja un document Word (.docx)</h1>
-      <input type="file" accept=".docx" onChange={handleUpload} className="mb-4" />
+    <main className="p-8 max-w-3xl mx-auto space-y-6">
+      <h1 className="text-3xl font-bold text-center">Anàlisi de Documents Jurídics</h1>
+      <div className="flex flex-col gap-2">
+        <label className="font-medium">Puja un document Word (.docx)</label>
+        <input type="file" accept=".docx" onChange={handleUpload} className="border p-2 rounded" />
+      </div>
+
       {loading && <p className="text-blue-600">⏳ Carregant...</p>}
       {error && <p className="text-red-600">⚠️ {error}</p>}
 
-      <textarea
-        className="w-full border rounded p-2 mt-4"
-        rows={12}
-        readOnly
-        value={text}
-        placeholder="Aquí apareixerà el text extret..."
-      />
-
       {text && (
-        <button
-          onClick={handleSendToChat}
-          className="mt-4 px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700"
-        >
-          Enviar al xat
-        </button>
+        <div>
+          <h2 className="font-semibold mt-4 mb-2">Text extret del document</h2>
+          <textarea
+            className="w-full border rounded p-2"
+            rows={12}
+            readOnly
+            value={text}
+          />
+          <button
+            onClick={handleSendToChat}
+            className="mt-4 px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700"
+          >
+            Enviar al xat
+          </button>
+        </div>
       )}
 
       {response && (
-        <div className="mt-6 p-4 border rounded bg-gray-50 whitespace-pre-wrap">
-          <strong className="block mb-2 text-lg text-green-700">Resposta de l'assistent:</strong>
-          {response}
+        <div className="bg-gray-50 p-4 rounded border mt-6">
+          <h2 className="font-semibold mb-2 text-green-700">Resposta de l'assistent</h2>
+          <pre className="whitespace-pre-wrap text-sm text-gray-800">{response}</pre>
+          <button
+            onClick={handleDownloadPdf}
+            className="mt-4 px-4 py-2 bg-green-600 text-white rounded hover:bg-green-700"
+          >
+            Descarregar com a PDF
+          </button>
         </div>
       )}
     </main>
   )
-} 
-
+}
