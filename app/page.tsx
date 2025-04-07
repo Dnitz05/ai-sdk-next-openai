@@ -2,41 +2,36 @@
 import { useState } from 'react'
 
 export default function Page() {
-  const [text, setText] = useState('')
+  const [images, setImages] = useState<string[]>([])
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
-  const [response, setResponse] = useState('')
+  const [results, setResults] = useState<string[]>([])
 
-  const handleUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleUploadPdf = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0]
     if (!file) return
 
     setLoading(true)
     setError('')
-    setText('')
-    setResponse('')
+    setImages([])
+    setResults([])
 
     const formData = new FormData()
     formData.append('file', file)
 
     try {
-      const res = await fetch('/api/upload', {
+      const res = await fetch('/api/upload-pdf', {
         method: 'POST',
         body: formData,
       })
 
       if (!res.ok) {
-        let errData
-        try {
-          errData = await res.json()
-        } catch {
-          throw new Error('El servidor no ha retornat una resposta vàlida.')
-        }
-        throw new Error(errData.error || 'Error desconegut')
+        const err = await res.json()
+        throw new Error(err.error || 'Error desconegut')
       }
 
       const data = await res.json()
-      setText(data.text)
+      setImages(data.pages)
     } catch (err: any) {
       setError(err.message)
     } finally {
@@ -44,77 +39,68 @@ export default function Page() {
     }
   }
 
-  const handleSendToChat = async () => {
-    if (!text) return
+  const handleAnalyzeImages = async () => {
     setLoading(true)
-    setResponse('')
+    setResults([])
 
-    const res = await fetch('/api/chat', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        model: 'gpt-4o',
-        messages: [
-          { role: 'system', content: 'Ets un expert jurídic en normativa urbanística catalana. Respon en català.' },
-          { role: 'user', content: `Analitza aquest document:\n\n${text}` },
-        ]
-      }),
-    })
+    try {
+      const responses: string[] = []
+      for (const [idx, image] of images.entries()) {
+        const res = await fetch('/api/analyze-image', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ image }),
+        })
 
-    const data = await res.json()
-    setResponse(data.choices?.[0]?.message?.content || 'Cap resposta')
-    setLoading(false)
-  }
-
-  const handleDownloadPdf = () => {
-    const blob = new Blob([response], { type: 'application/pdf' })
-    const url = URL.createObjectURL(blob)
-    const link = document.createElement('a')
-    link.href = url
-    link.download = 'resposta.pdf'
-    link.click()
-    URL.revokeObjectURL(url)
+        const data = await res.json()
+        responses.push(`Pàgina ${idx + 1}:\n${data.result}`)
+      }
+      setResults(responses)
+    } catch (err: any) {
+      setError('Error durant l’anàlisi: ' + err.message)
+    } finally {
+      setLoading(false)
+    }
   }
 
   return (
-    <main className="p-8 max-w-3xl mx-auto space-y-6">
-      <h1 className="text-3xl font-bold text-center">Anàlisi de Documents Jurídics</h1>
+    <main className="p-8 max-w-4xl mx-auto space-y-6">
+      <h1 className="text-3xl font-bold text-center">Anàlisi Visual de PDF</h1>
       <div className="flex flex-col gap-2">
-        <label className="font-medium">Puja un document Word (.docx)</label>
-        <input type="file" accept=".docx" onChange={handleUpload} className="border p-2 rounded" />
+        <label className="font-medium">Puja un document PDF</label>
+        <input type="file" accept="application/pdf" onChange={handleUploadPdf} className="border p-2 rounded" />
       </div>
 
       {loading && <p className="text-blue-600">⏳ Carregant...</p>}
       {error && <p className="text-red-600">⚠️ {error}</p>}
 
-      {text && (
-        <div>
-          <h2 className="font-semibold mt-4 mb-2">Text extret del document</h2>
-          <textarea
-            className="w-full border rounded p-2"
-            rows={12}
-            readOnly
-            value={text}
-          />
+      {images.length > 0 && (
+        <>
+          <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4">
+            {images.map((src, idx) => (
+              <div key={idx} className="border rounded overflow-hidden">
+                <img src={src} alt={`Pàgina ${idx + 1}`} className="w-full" />
+                <p className="text-center text-sm p-2">Pàgina {idx + 1}</p>
+              </div>
+            ))}
+          </div>
           <button
-            onClick={handleSendToChat}
-            className="mt-4 px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700"
+            onClick={handleAnalyzeImages}
+            className="mt-6 px-4 py-2 bg-green-600 text-white rounded hover:bg-green-700"
           >
-            Enviar al xat
+            Analitzar totes les pàgines amb IA
           </button>
-        </div>
+        </>
       )}
 
-      {response && (
-        <div className="bg-gray-50 p-4 rounded border mt-6">
-          <h2 className="font-semibold mb-2 text-green-700">Resposta de l'assistent</h2>
-          <pre className="whitespace-pre-wrap text-sm text-gray-800">{response}</pre>
-          <button
-            onClick={handleDownloadPdf}
-            className="mt-4 px-4 py-2 bg-green-600 text-white rounded hover:bg-green-700"
-          >
-            Descarregar com a PDF
-          </button>
+      {results.length > 0 && (
+        <div className="mt-8 space-y-4">
+          <h2 className="text-xl font-semibold text-green-700">Resultats:</h2>
+          {results.map((res, idx) => (
+            <div key={idx} className="bg-gray-100 p-4 rounded border">
+              <pre className="whitespace-pre-wrap text-sm text-gray-800">{res}</pre>
+            </div>
+          ))}
         </div>
       )}
     </main>
