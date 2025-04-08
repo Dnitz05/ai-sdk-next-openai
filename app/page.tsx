@@ -2,117 +2,182 @@
 
 import { useState } from 'react';
 
-export default function Page() {
-  // Estat per guardar les URLs de les imatges generades per CloudConvert
-  const [images, setImages] = useState<string[]>([]);
-  // Estat per indicar si alguna operació està en curs (pujada o anàlisi)
-  const [loading, setLoading] = useState(false);
-  // Estat per guardar missatges d'error
-  const [error, setError] = useState('');
-  // Estat per guardar els resultats de l'anàlisi (ara guardarem objectes)
-  const [results, setResults] = useState<any[]>([]); // <-- Canviat a any[] per guardar objectes
+// --- NOU COMPONENT PER RENDERITZAR ELEMENTS INDIVIDUALS ---
+interface Formatting {
+  alignment?: string;
+  style?: string[];
+  relative_size?: string;
+}
 
-  // Funció per gestionar la pujada del fitxer PDF
+interface Element {
+  type: string;
+  level?: number;
+  text_content?: string;
+  formatting: Formatting;
+  list_items?: string[];
+  table_data?: string[][];
+}
+
+// Funció helper per obtenir classes CSS de Tailwind basades en el format
+function getFormattingClasses(formatting: Formatting): string {
+  let classes = '';
+  // Alineació
+  switch (formatting.alignment) {
+    case 'center': classes += ' text-center'; break;
+    case 'right': classes += ' text-right'; break;
+    case 'justify': classes += ' text-justify'; break;
+    default: classes += ' text-left'; break; // Per defecte a l'esquerra
+  }
+  // Estil (negreta/cursiva)
+  if (formatting.style?.includes('bold')) {
+    classes += ' font-bold';
+  }
+  if (formatting.style?.includes('italics')) {
+    classes += ' italic';
+  }
+  // Mida relativa (ajusta les classes de mida segons necessitis)
+  switch (formatting.relative_size) {
+    case 'large': classes += ' text-xl md:text-2xl'; break; // Mida més gran
+    case 'medium': classes += ' text-lg md:text-xl'; break; // Mida mitjana
+    case 'small': classes += ' text-sm'; break;      // Mida petita
+    // 'normal' no necessita classe extra si la base és 'text-base'
+  }
+  return classes.trim(); // Treu espais inicials/finals
+}
+
+function ElementRenderer({ element }: { element: Element }) {
+  const formattingClasses = getFormattingClasses(element.formatting);
+
+  switch (element.type) {
+    case 'heading':
+      const Tag = `h${element.level || 2}` as keyof JSX.IntrinsicElements; // h2 per defecte si no hi ha nivell
+      // Afegim més marge inferior als títols
+      const headingMargin = `mb-${6 - (element.level || 2)}`; // Més marge per H1, menys per H6
+      return <Tag className={`${formattingClasses} ${headingMargin}`}>{element.text_content}</Tag>;
+
+    case 'paragraph':
+      return <p className={`${formattingClasses} mb-3`}>{element.text_content}</p>; // Marge inferior per paràgrafs
+
+    case 'list':
+      // Assumim llista desordenada (ul) si la IA no especifica més
+      return (
+        <ul className={`${formattingClasses} list-disc list-inside mb-3 pl-4`}>
+          {element.list_items?.map((item, index) => (
+            <li key={index} className="mb-1">{item}</li>
+          ))}
+        </ul>
+      );
+
+    case 'table':
+      return (
+        <div className="overflow-x-auto mb-4"> {/* Permet scroll horitzontal si la taula és ampla */}
+           <table className={`${formattingClasses} min-w-full border border-gray-300 text-sm`}>
+             <tbody className="bg-white divide-y divide-gray-200">
+               {element.table_data?.map((row, rowIndex) => (
+                 <tr key={rowIndex} className={rowIndex % 2 === 0 ? 'bg-gray-50' : ''}>
+                   {row.map((cell, cellIndex) => (
+                     // Podríem marcar la primera fila com a header (th) si volguéssim més lògica
+                     <td key={cellIndex} className="px-4 py-2 border border-gray-200">{cell}</td>
+                   ))}
+                 </tr>
+               ))}
+             </tbody>
+           </table>
+        </div>
+      );
+
+    case 'signature':
+    case 'date':
+    case 'footer':
+    case 'other':
+      // Renderitzem aquests tipus com a paràgrafs, aplicant format
+      return <p className={`${formattingClasses} text-sm text-gray-600 mb-2`}>{element.text_content}</p>;
+
+    default:
+      // Si és un tipus desconegut, mostrem el text si n'hi ha
+      return element.text_content ? <p className={formattingClasses}>{element.text_content}</p> : null;
+  }
+}
+// --- FI DEL NOU COMPONENT ---
+
+
+export default function Page() {
+  const [images, setImages] = useState<string[]>([]);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState('');
+  const [results, setResults] = useState<any[]>([]); // Guardem els objectes d'anàlisi
+
   const handleUploadPdf = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
-    if (!file) return; // Si no hi ha fitxer, no fem res
+    if (!file) return;
 
-    setLoading(true); // Iniciem estat de càrrega
-    setError(''); // Resetejem errors anteriors
-    setImages([]); // Resetejem imatges anteriors
-    setResults([]); // Resetejem resultats anteriors
+    setLoading(true);
+    setError('');
+    setImages([]);
+    setResults([]);
 
-    const formData = new FormData(); // Creem un formulari per enviar el fitxer
+    const formData = new FormData();
     formData.append('file', file);
 
     try {
-      // Cridem a l'endpoint que genera les imatges via CloudConvert
       const res = await fetch('/api/upload-pdf', {
         method: 'POST',
         body: formData,
       });
-
-      // Controlem si la resposta del backend no és correcta
       if (!res.ok) {
         let errorData = { error: 'Error desconegut del servidor generant imatges' };
-        try {
-            // Intentem llegir el missatge d'error JSON del backend
-            errorData = await res.json();
-        } catch (e) {
-            console.error("La resposta d'error de /api/upload-pdf no era JSON:", await res.text());
-        }
+        try { errorData = await res.json(); } catch (e) { console.error("Resp err /api/upload-pdf no JSON:", await res.text()); }
         throw new Error(errorData.error || 'Error desconegut');
       }
-
-      // Si la resposta és correcta, llegim el JSON amb les URLs de les imatges
       const data = await res.json();
-      setImages(data.pages); // Guardem les URLs a l'estat
-
+      setImages(data.pages);
     } catch (err: any) {
-      setError(err.message); // Mostrem l'error si alguna cosa falla
+      setError(err.message);
     } finally {
-      setLoading(false); // Finalitzem estat de càrrega
+      setLoading(false);
     }
   };
 
-  // Funció per analitzar totes les imatges generades amb la IA
   const handleAnalyzeImages = async () => {
-    if (images.length === 0) return; // No analitzem si no hi ha imatges
+    if (images.length === 0) return;
 
-    setLoading(true); // Iniciem estat de càrrega
-    setError(''); // Resetejem errors
-    setResults([]); // Resetejem resultats anteriors
+    setLoading(true);
+    setError('');
+    setResults([]);
 
     try {
-      // Creem una promesa per a cada crida a l'API d'anàlisi
       const analysisPromises = images.map((image, idx) =>
-        fetch('/api/analyze-image', { // Cridem a l'endpoint d'anàlisi
+        fetch('/api/analyze-image', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ image }), // Enviem la URL de la imatge
+          body: JSON.stringify({ image }),
         }).then(async (res) => {
-          // Controlem si la resposta de l'anàlisi no és correcta
           if (!res.ok) {
             let errorData = { error: `Error analitzant pàgina ${idx + 1}` };
-             try {
-                errorData = await res.json();
-             } catch(e) {
-                console.error(`La resposta d'error de analyze-image ${idx+1} no era JSON:`, await res.text());
-             }
-            // Llencem un error per aturar Promise.all si una de les pàgines falla
+             try { errorData = await res.json(); } catch(e) { console.error(`Resp err /analyze-image ${idx+1} no JSON:`, await res.text());}
             throw new Error(errorData.error || `Error desconegut analitzant pàgina ${idx + 1}`);
           }
-          // Llegim el resultat JSON de l'anàlisi
           const data = await res.json();
-          // Retornem un objecte amb el número de pàgina i l'anàlisi JSON
+          if (!data.result || !data.result.elements) { // Validació bàsica del JSON rebut
+             throw new Error(`Estructura JSON invàlida rebuda per pàgina ${idx + 1}`);
+          }
           return { page: idx + 1, analysis: data.result };
         })
       );
-
-      // Esperem que totes les promeses d'anàlisi acabin
       const allResults = await Promise.all(analysisPromises);
-
-      // Ordenem els resultats per número de pàgina (per si arriben desordenats)
       allResults.sort((a, b) => a.page - b.page);
-
-      // Guardem tots els resultats (objectes) a l'estat
       setResults(allResults);
-
     } catch (err: any) {
-      // Si alguna de les anàlisis falla, mostrem l'error
       setError('Error durant l’anàlisi: ' + err.message);
-      // Podríem decidir si mantenir resultats parcials o no: setResults([]);
     } finally {
-      setLoading(false); // Finalitzem estat de càrrega
+      setLoading(false);
     }
   };
 
-  // Renderització del component
   return (
-    <main className="p-8 max-w-5xl mx-auto space-y-6">
-      <h1 className="text-3xl font-bold text-center mb-8">Anàlisi Visual de PDF</h1>
+    <main className="p-4 md:p-8 max-w-6xl mx-auto space-y-6">
+      <h1 className="text-2xl md:text-3xl font-bold text-center mb-8">Anàlisi Visual de PDF</h1>
 
-      {/* Secció de Càrrega de Fitxer */}
       <div className="flex flex-col gap-2 p-4 border rounded shadow-sm bg-white">
         <label htmlFor="pdf-upload" className="font-medium text-gray-700">Puja un document PDF</label>
         <input
@@ -121,19 +186,17 @@ export default function Page() {
           accept="application/pdf"
           onChange={handleUploadPdf}
           className="border p-2 rounded text-sm file:mr-4 file:py-2 file:px-4 file:rounded file:border-0 file:text-sm file:font-semibold file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100 disabled:opacity-50"
-          disabled={loading} // Deshabilitem mentre carrega
+          disabled={loading}
         />
       </div>
 
-      {/* Indicador de Càrrega o Missatge d'Error */}
       {loading && <p className="text-center text-blue-600 font-medium">⏳ Processant... Si us plau, espera.</p>}
       {error && <p className="text-center text-red-600 font-semibold p-3 bg-red-50 border border-red-200 rounded">⚠️ {error}</p>}
 
-      {/* Secció per mostrar miniatures (només si hi ha imatges i no estem carregant ni hi ha error) */}
       {images.length > 0 && !loading && !error && (
         <div className="mt-6 p-4 border rounded shadow-sm bg-white">
            <h2 className="text-xl font-semibold text-gray-800 mb-4">Pàgines Detectades:</h2>
-           <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-4">
+           <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-4 mb-6">
              {images.map((src, idx) => (
                <div key={idx} className="border rounded overflow-hidden shadow-sm hover:shadow-md transition-shadow">
                  <img src={src} alt={`Pàgina ${idx + 1}`} className="w-full h-auto object-contain bg-gray-100" />
@@ -141,12 +204,11 @@ export default function Page() {
                </div>
              ))}
            </div>
-           {/* Botó per iniciar l'anàlisi */}
-           <div className="text-center mt-6">
+           <div className="text-center">
              <button
                onClick={handleAnalyzeImages}
                className="px-6 py-3 bg-green-600 text-white rounded font-semibold hover:bg-green-700 focus:outline-none focus:ring-2 focus:ring-green-500 focus:ring-opacity-50 disabled:opacity-50 disabled:cursor-not-allowed"
-               disabled={loading || results.length > 0} // Deshabilitem si ja s'està analitzant o si ja hi ha resultats
+               disabled={loading || results.length > 0}
              >
                Analitzar totes les pàgines amb IA
              </button>
@@ -154,22 +216,24 @@ export default function Page() {
         </div>
       )}
 
-      {/* Secció per mostrar resultats (el JSON formatejat) */}
+      {/* --- SECCIÓ DE RESULTATS VISUALITZATS --- */}
       {results.length > 0 && !loading && (
-        <div className="mt-8 space-y-4">
+        <div className="mt-8 space-y-6">
           <h2 className="text-2xl font-semibold text-green-800 border-b pb-2 mb-4">Resultats de l'Anàlisi:</h2>
-          {results.map((res, idx) => (
-            <div key={idx} className="bg-gray-50 p-4 rounded border shadow-sm">
-              {/* Mostrem el número de pàgina */}
-              <h3 className="font-semibold mb-2 text-lg text-gray-700">Pàgina {res.page}</h3>
-              {/* Modificat: Mostrem l'objecte 'analysis' com a JSON formatejat */}
-              <pre className="whitespace-pre-wrap text-sm text-gray-800 bg-white p-3 rounded border border-gray-200 overflow-x-auto">
-                {JSON.stringify(res.analysis, null, 2)}
-              </pre>
+          {results.map((pageResult) => (
+            <div key={pageResult.page} className="bg-white p-4 md:p-6 rounded border shadow-md mb-6">
+              <h3 className="font-bold text-xl mb-4 text-gray-700 border-b pb-2">Pàgina {pageResult.page}</h3>
+              <div className="prose prose-sm max-w-none"> {/* Utilitzem 'prose' de tailwind per estils base */}
+                {/* Iterem sobre els elements del JSON i usem ElementRenderer */}
+                {pageResult.analysis?.elements?.map((element: Element, index: number) => (
+                   <ElementRenderer key={index} element={element} />
+                 ))}
+              </div>
             </div>
           ))}
         </div>
       )}
+      {/* --- FI SECCIÓ RESULTATS --- */}
     </main>
   );
 }
