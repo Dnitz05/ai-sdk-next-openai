@@ -13,7 +13,7 @@ interface Formatting {
 
 interface Element {
   type: string;
-  level?: number;
+  level?: number; // Opcional
   text_content?: string;
   formatting: Formatting;
   list_items?: string[];
@@ -63,11 +63,15 @@ function ElementRenderer({ element }: { element: Element }) {
 
   switch (element.type) {
     case 'heading':
-      // Determina l'etiqueta H (h1-h6) basant-se en el nivell, h2 per defecte
-      const Tag = `h${element.level >= 1 && element.level <= 6 ? element.level : 2}` as keyof JSX.IntrinsicElements;
-      // Aplica marges verticals segons el nivell del títol
-      const headingMargin = `mt-${Math.max(2, 7 - (element.level || 2))} mb-${Math.max(1, 4 - (element.level || 2))}`; // Més marge per H1
-      // Aplica font sans-serif als títols per contrast (si la base és serif)
+      // === INICI CORRECCIÓ TYPESCRIPT ===
+      // Assignem un nivell per defecte (2) si element.level és undefined o null
+      const level = element.level ?? 2;
+      // Ens assegurem que el nivell estigui entre 1 i 6 per a les etiquetes H HTML vàlides
+      const validLevel = level >= 1 && level <= 6 ? level : 2;
+      const Tag = `h${validLevel}` as keyof JSX.IntrinsicElements;
+      // Calculem el marge usant el 'level' (que ara sabem que és un número)
+      const headingMargin = `mt-${Math.max(2, 7 - level)} mb-${Math.max(1, 4 - level)}`;
+      // === FI CORRECCIÓ TYPESCRIPT ===
       return <Tag className={`${formattingClasses} ${headingMargin} font-sans font-semibold`}>{element.text_content}</Tag>;
 
     case 'paragraph':
@@ -117,9 +121,9 @@ function ElementRenderer({ element }: { element: Element }) {
       // Signatura amb marge superior
       return <p className={`${formattingClasses} text-sm text-gray-700 mt-8 mb-1`}>{element.text_content}</p>;
 
-    case 'date':
-      // Data
-      return <p className={`${formattingClasses} text-sm text-gray-700 mb-4`}>{element.text_content}</p>;
+     case 'date':
+       // Data
+       return <p className={`${formattingClasses} text-sm text-gray-700 mb-4`}>{element.text_content}</p>;
 
     case 'footer':
       // Peu de pàgina amb línia superior
@@ -143,74 +147,12 @@ export default function Page() {
 
   // Gestor de pujada de PDF
   const handleUploadPdf = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-
-    setLoading(true);
-    setError('');
-    setImages([]);
-    setResults([]);
-
-    const formData = new FormData();
-    formData.append('file', file);
-
-    try {
-      const res = await fetch('/api/upload-pdf', { method: 'POST', body: formData });
-      if (!res.ok) {
-        let errorData = { error: 'Error generant imatges PDF' };
-        try { errorData = await res.json(); } catch (e) { console.error("Error no JSON /upload-pdf:", await res.text()); }
-        throw new Error(errorData.error);
-      }
-      const data = await res.json();
-      setImages(data.pages);
-    } catch (err: any) { setError(err.message); }
-    finally { setLoading(false); }
+    const file = e.target.files?.[0]; if (!file) return; setLoading(true); setError(''); setImages([]); setResults([]); const formData = new FormData(); formData.append('file', file); try { const res = await fetch('/api/upload-pdf', { method: 'POST', body: formData }); if (!res.ok) { let errorData = { error: 'Error generant imatges PDF' }; try { errorData = await res.json(); } catch (e) { console.error("Error no JSON /upload-pdf:", await res.text()); } throw new Error(errorData.error); } const data = await res.json(); setImages(data.pages); } catch (err: any) { setError(err.message); } finally { setLoading(false); }
   };
 
   // Gestor per analitzar les imatges amb IA
   const handleAnalyzeImages = async () => {
-    if (images.length === 0) return;
-
-    setLoading(true);
-    setError('');
-    // No resetejem results aquí, es farà al final si tot va bé
-    // setResults([]);
-
-    try {
-      const analysisPromises = images.map((image, idx) =>
-        fetch('/api/analyze-image', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ image }),
-        }).then(async (res) => {
-          if (!res.ok) {
-            let errorData = { error: `Error analitzant pàgina ${idx + 1}` };
-            try { errorData = await res.json(); } catch(e) { console.error(`Error no JSON /analyze-image p.${idx+1}:`, await res.text());}
-            throw new Error(errorData.error);
-          }
-          const data = await res.json();
-          // Validació bàsica de l'estructura rebuda
-          if (!data.result || !Array.isArray(data.result.elements)) {
-             throw new Error(`Estructura JSON invàlida rebuda per pàgina ${idx + 1}`);
-          }
-          return { page: idx + 1, analysis: data.result };
-        })
-      );
-
-      // Esperem totes les anàlisis
-      const allResults = await Promise.all(analysisPromises);
-      allResults.sort((a, b) => a.page - b.page); // Ordenem per pàgina
-      setResults(allResults); // Actualitzem l'estat amb tots els resultats
-
-    } catch (err: any) {
-      setError('Error durant l’anàlisi: ' + err.message);
-       // En cas d'error en alguna pàgina, podem decidir si mostrar resultats parcials
-       // o netejar-ho tot. De moment, es mostra l'error i es queden els resultats
-       // que haguessin pogut arribar abans de l'error (si no netegem 'results' aquí).
-       // setResults([]); // Descomentar per netejar resultats si una anàlisi falla
-    } finally {
-      setLoading(false);
-    }
+     if (images.length === 0) return; setLoading(true); setError(''); try { const analysisPromises = images.map((image, idx) => fetch('/api/analyze-image', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ image }), }).then(async (res) => { if (!res.ok) { let errorData = { error: `Error analitzant pàgina ${idx + 1}` }; try { errorData = await res.json(); } catch(e) { console.error(`Error no JSON /analyze-image p.${idx+1}:`, await res.text());} throw new Error(errorData.error); } const data = await res.json(); if (!data.result || !Array.isArray(data.result.elements)) { throw new Error(`Estructura JSON invàlida rebuda per pàgina ${idx + 1}`); } return { page: idx + 1, analysis: data.result }; }) ); const allResults = await Promise.all(analysisPromises); allResults.sort((a, b) => a.page - b.page); setResults(allResults); } catch (err: any) { setError('Error durant l’anàlisi: ' + err.message); } finally { setLoading(false); }
   };
 
   // Renderització JSX del component
@@ -269,7 +211,7 @@ export default function Page() {
               <h3 className="font-bold text-xl mb-6 text-gray-700 border-b pb-3">Pàgina {pageResult.page}</h3>
               {/* Contenidor per al contingut renderitzat amb font base */}
               <div className="font-serif text-gray-900 leading-relaxed space-y-3 text-sm"> {/* Font serif, interlineat, espai entre elements */}
-                 {/* Iterem sobre els elements del JSON i usem ElementRenderer */}
+                 {/* Usem ElementRenderer per cada element detectat */}
                  {pageResult.analysis?.elements?.map((element: Element, index: number) => (
                    <ElementRenderer key={`element-${pageResult.page}-${index}`} element={element} />
                  ))}
