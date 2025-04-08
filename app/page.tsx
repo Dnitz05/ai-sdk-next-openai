@@ -13,7 +13,7 @@ interface Formatting {
 
 interface Element {
   type: string;
-  level?: number; // Opcional
+  level?: number;
   text_content?: string;
   formatting: Formatting;
   list_items?: string[];
@@ -54,61 +54,86 @@ function getFormattingClasses(formatting: Formatting): string {
 
 /**
  * Component React per renderitzar un únic element estructural
- * (títol, paràgraf, llista, taula, etc.) basant-se en l'objecte element.
+ * Amb estils visuals refinats i detecció d'enllaços.
  * @param element - L'objecte element extret per la IA.
  * @returns El JSX corresponent a l'element.
  */
 function ElementRenderer({ element }: { element: Element }) {
   const formattingClasses = getFormattingClasses(element.formatting);
 
+  // Funció simple per convertir text amb Markdown links a JSX
+  const renderTextWithLinks = (text: string | undefined) => {
+    if (!text) return null;
+    const linkRegex = /\[([^\]]+)\]\((https?:\/\/[^\)]+)\)/g;
+    const parts: (string | JSX.Element)[] = []; // Tipus explícit
+    let lastIndex = 0;
+    let match;
+
+    while ((match = linkRegex.exec(text)) !== null) {
+      if (match.index > lastIndex) {
+        parts.push(text.substring(lastIndex, match.index));
+      }
+      const linkText = match[1];
+      const linkUrl = match[2];
+      // Afegim un key únic per a cada link
+      parts.push(
+        <a href={linkUrl} key={`link-${lastIndex}`} target="_blank" rel="noopener noreferrer" className="text-blue-600 hover:underline">
+          {linkText}
+        </a>
+      );
+      lastIndex = linkRegex.lastIndex;
+    }
+    if (lastIndex < text.length) {
+      parts.push(text.substring(lastIndex));
+    }
+    // Si només hi ha text (cap link), parts tindrà un sol element string
+    // Si hi ha links, serà un array de strings i JSX elements
+    // React pot renderitzar un array directament
+    return parts.length === 1 ? parts[0] : parts;
+  };
+
   switch (element.type) {
     case 'heading':
-      // === INICI CORRECCIÓ TYPESCRIPT ===
-      // Assignem un nivell per defecte (2) si element.level és undefined o null
       const level = element.level ?? 2;
-      // Ens assegurem que el nivell estigui entre 1 i 6 per a les etiquetes H HTML vàlides
       const validLevel = level >= 1 && level <= 6 ? level : 2;
       const Tag = `h${validLevel}` as keyof JSX.IntrinsicElements;
-      // Calculem el marge usant el 'level' (que ara sabem que és un número)
-      const headingMargin = `mt-${Math.max(2, 7 - level)} mb-${Math.max(1, 4 - level)}`;
-      // === FI CORRECCIÓ TYPESCRIPT ===
-      return <Tag className={`${formattingClasses} ${headingMargin} font-sans font-semibold`}>{element.text_content}</Tag>;
+      const headingMargin = `mt-${Math.max(2, 7 - level)} mb-${Math.max(2, 4 - level)}`;
+      const headingStyle = level <= 2 ? 'pb-2 border-b border-gray-200' : '';
+      // Apliquem renderTextWithLinks per si hi ha enllaços als títols
+      return <Tag className={`${formattingClasses} ${headingMargin} ${headingStyle} font-sans font-semibold text-gray-800`}>{renderTextWithLinks(element.text_content)}</Tag>;
 
     case 'paragraph':
-      // Paràgrafs amb interlineat relaxat i marge inferior
-      return <p className={`${formattingClasses} mb-4 leading-relaxed`}>{element.text_content}</p>;
+      return <p className={`${formattingClasses} mb-4 leading-relaxed`}>{renderTextWithLinks(element.text_content)}</p>;
 
     case 'list':
-      // Renderitza llistes (assumeix 'ul' per defecte) amb indentació i espaiat
       return (
-        <ul className={`${formattingClasses} list-disc list-outside mb-4 pl-6 space-y-1`}>
+        <ul className={`${formattingClasses} list-disc list-outside mb-4 pl-6 space-y-2`}>
           {element.list_items?.map((item, index) => (
-            <li key={index}>{item}</li>
+            // Apliquem renderTextWithLinks a cada ítem de la llista
+            <li key={index}>{renderTextWithLinks(item)}</li>
           ))}
         </ul>
       );
 
     case 'table':
-      // Renderitza taules amb estils millorats (vores, padding, files alternades, capçalera)
       return (
-        <div className="overflow-x-auto mb-6 shadow-sm border border-gray-200 rounded-md">
+        <div className="overflow-x-auto mb-6 shadow-md border border-gray-300 rounded-lg">
           <table className={`${formattingClasses} min-w-full text-sm border-collapse`}>
-            {/* Capçalera: Renderitza la primera fila amb <th> si existeix */}
             {element.table_data && element.table_data.length > 0 && (
-              <thead className="bg-gray-100">
+              <thead className="bg-gray-200">
                 <tr>
                   {element.table_data[0].map((cell, cellIndex) => (
-                    <th key={`header-cell-${cellIndex}`} className="px-4 py-2 border border-gray-300 text-left font-semibold text-gray-700">{cell}</th>
+                    <th key={`header-cell-${cellIndex}`} className="px-5 py-3 border-b-2 border-gray-300 text-left font-bold text-gray-600 uppercase tracking-wider">{cell}</th>
                   ))}
                 </tr>
               </thead>
             )}
-            {/* Cos: Renderitza la resta de files amb <td> */}
             <tbody className="bg-white">
               {element.table_data && element.table_data.length > 1 && element.table_data.slice(1).map((row, rowIndex) => (
-                <tr key={`body-row-${rowIndex}`} className="odd:bg-white even:bg-gray-50">
+                <tr key={`body-row-${rowIndex}`} className="border-b border-gray-200 last:border-b-0">
                   {row.map((cell, cellIndex) => (
-                    <td key={`body-cell-${rowIndex}-${cellIndex}`} className="px-4 py-2 border border-gray-300 align-top">{cell}</td>
+                     // Apliquem renderTextWithLinks a cada cel·la
+                    <td key={`body-cell-${rowIndex}-${cellIndex}`} className="px-5 py-3 border-r border-gray-200 last:border-r-0 align-top">{renderTextWithLinks(cell)}</td>
                   ))}
                 </tr>
               ))}
@@ -118,21 +143,17 @@ function ElementRenderer({ element }: { element: Element }) {
       );
 
     case 'signature':
-      // Signatura amb marge superior
-      return <p className={`${formattingClasses} text-sm text-gray-700 mt-8 mb-1`}>{element.text_content}</p>;
+      return <p className={`${formattingClasses} text-sm text-gray-700 mt-10 mb-1 italic`}>{renderTextWithLinks(element.text_content)}</p>;
 
      case 'date':
-       // Data
-       return <p className={`${formattingClasses} text-sm text-gray-700 mb-4`}>{element.text_content}</p>;
+       return <p className={`${formattingClasses} text-sm text-gray-700 mb-6`}>{renderTextWithLinks(element.text_content)}</p>;
 
     case 'footer':
-      // Peu de pàgina amb línia superior
-      return <p className={`${formattingClasses} text-xs text-gray-500 mt-6 pt-4 border-t`}>{element.text_content}</p>;
+       return <p className={`${formattingClasses} text-xs text-gray-500 mt-8 pt-4 border-t border-gray-200`}>{renderTextWithLinks(element.text_content)}</p>;
 
     case 'other':
     default:
-      // Per a tipus desconeguts o 'other', mostra el text com a paràgraf
-      return element.text_content ? <p className={`${formattingClasses} mb-3`}>{element.text_content}</p> : null;
+      return element.text_content ? <p className={`${formattingClasses} mb-3`}>{renderTextWithLinks(element.text_content)}</p> : null;
   }
 }
 // --- FI COMPONENTS/FUNCIONS HELPER ---
@@ -157,68 +178,72 @@ export default function Page() {
 
   // Renderització JSX del component
   return (
-    <main className="p-4 md:p-8 max-w-4xl mx-auto space-y-8"> {/* Ajustat max-w a 4xl */}
-      <h1 className="text-2xl md:text-3xl font-bold text-center mb-8 text-gray-800">Anàlisi Visual de PDF</h1>
+    <main className="p-4 md:p-8 max-w-4xl mx-auto space-y-8"> {/* Contenidor principal */}
+      <h1 className="text-3xl md:text-4xl font-bold text-center mb-10 text-gray-800 tracking-tight">Anàlisi Visual de PDF</h1> {/* Títol millorat */}
 
       {/* Secció Càrrega */}
-      <div className="flex flex-col gap-2 p-4 border rounded shadow-sm bg-white">
-        <label htmlFor="pdf-upload" className="font-medium text-gray-700">Puja un document PDF</label>
+      <section aria-labelledby="upload-section-title" className="p-5 border rounded-lg shadow-md bg-white">
+        <h2 id="upload-section-title" className="text-lg font-semibold text-gray-700 mb-3">1. Puja el teu document</h2>
+        <label htmlFor="pdf-upload" className="sr-only">Puja un document PDF</label> {/* Ocult visualment, útil per accessibilitat */}
         <input
           id="pdf-upload"
           type="file"
           accept="application/pdf"
           onChange={handleUploadPdf}
-          className="w-full border p-2 rounded text-sm file:mr-4 file:py-2 file:px-4 file:rounded file:border-0 file:text-sm file:font-semibold file:bg-violet-50 file:text-violet-700 hover:file:bg-violet-100 disabled:opacity-50 cursor-pointer"
+          className="w-full border p-2 rounded text-sm file:mr-4 file:py-2 file:px-4 file:rounded-md file:border-0 file:text-sm file:font-medium file:bg-violet-100 file:text-violet-700 hover:file:bg-violet-200 disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer focus:outline-none focus:ring-2 focus:ring-violet-500"
           disabled={loading}
         />
-      </div>
+         {loading && !images.length && <p className="text-center text-blue-600 font-medium mt-4">⏳ Carregant i processant PDF...</p>}
+         {error && !loading && <p className="text-center text-red-600 font-semibold mt-4">⚠️ {error}</p>}
+      </section>
 
-      {loading && <p className="text-center text-blue-600 font-medium">⏳ Processant... Si us plau, espera.</p>}
-      {error && <p className="text-center text-red-600 font-semibold p-3 bg-red-50 border border-red-200 rounded">⚠️ {error}</p>}
-
-      {/* Secció Miniatures */}
+      {/* Secció Miniatures i Botó Analitzar */}
       {images.length > 0 && !loading && !error && (
-        <div className="mt-6 p-4 border rounded shadow-sm bg-white">
-           <h2 className="text-xl font-semibold text-gray-800 mb-4">Pàgines Detectades:</h2>
+        <section aria-labelledby="preview-section-title" className="mt-6 p-5 border rounded-lg shadow-md bg-white">
+           <h2 id="preview-section-title" className="text-lg font-semibold text-gray-700 mb-4">2. Pàgines Detectades</h2>
            <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-4 mb-6">
              {images.map((src, idx) => (
-               <div key={`thumb-${idx}`} className="border rounded overflow-hidden shadow-sm hover:shadow-md transition-shadow">
-                 <img src={src} alt={`Pàgina ${idx + 1}`} loading="lazy" className="w-full h-auto object-contain bg-gray-50" />
+               <div key={`thumb-${idx}`} className="border rounded-lg overflow-hidden shadow-sm hover:shadow-lg transition-shadow duration-200 bg-gray-50">
+                 <img src={src} alt={`Previsualització pàgina ${idx + 1}`} loading="lazy" className="w-full h-auto object-contain" />
                  <p className="text-center text-xs font-medium p-2 bg-gray-100 border-t">Pàgina {idx + 1}</p>
                </div>
              ))}
            </div>
-           <div className="text-center">
+           <div className="text-center pt-4 border-t mt-6">
              <button
                onClick={handleAnalyzeImages}
-               className="px-6 py-3 bg-green-600 text-white rounded font-semibold hover:bg-green-700 focus:outline-none focus:ring-2 focus:ring-green-500 focus:ring-opacity-50 disabled:opacity-50 disabled:cursor-not-allowed"
-                // Deshabilitem si ja s'està analitzant o si ja hi ha resultats per evitar re-anàlisi
-               disabled={loading || results.length > 0}
+               className="px-6 py-3 bg-green-600 text-white rounded-md font-semibold hover:bg-green-700 focus:outline-none focus:ring-2 focus:ring-green-500 focus:ring-offset-2 focus:ring-opacity-75 disabled:opacity-50 disabled:cursor-not-allowed transition-colors duration-200"
+               disabled={loading || results.length > 0} // Evita re-analitzar
              >
-               Analitzar totes les pàgines amb IA
+               {loading ? 'Analitzant...' : '3. Analitzar Pàgines amb IA'}
              </button>
            </div>
-        </div>
+        </section>
+      )}
+
+      {/* Indicador durant anàlisi */}
+      {loading && results.length === 0 && images.length > 0 && (
+          <p className="text-center text-blue-600 font-medium mt-4">⏳ Analitzant amb IA... Això pot trigar una mica.</p>
       )}
 
       {/* Secció Resultats Visualitzats */}
       {results.length > 0 && !loading && (
-        <div className="mt-8 space-y-6">
-          <h2 className="text-2xl font-semibold text-gray-800 border-b pb-2 mb-6">Resultats de l'Anàlisi:</h2>
+        <section aria-labelledby="results-section-title" className="mt-10 space-y-8">
+          <h2 id="results-section-title" className="text-2xl font-semibold text-gray-800 border-b pb-3 mb-6">4. Resultats de l'Anàlisi</h2>
           {results.map((pageResult) => (
             // Targeta per a cada pàgina analitzada
-            <div key={`result-${pageResult.page}`} className="bg-white p-5 md:p-8 rounded border shadow-lg mb-8">
-              <h3 className="font-bold text-xl mb-6 text-gray-700 border-b pb-3">Pàgina {pageResult.page}</h3>
-              {/* Contenidor per al contingut renderitzat amb font base */}
-              <div className="font-serif text-gray-900 leading-relaxed space-y-3 text-sm"> {/* Font serif, interlineat, espai entre elements */}
-                 {/* Usem ElementRenderer per cada element detectat */}
+            <article key={`result-${pageResult.page}`} aria-labelledby={`page-title-${pageResult.page}`} className="bg-white p-6 md:p-10 rounded-lg border shadow-xl mb-8"> {/* Més padding i ombra */}
+              <h3 id={`page-title-${pageResult.page}`} className="font-bold text-xl mb-6 text-gray-600 border-b pb-3">Pàgina {pageResult.page}</h3>
+              {/* Contenidor per al contingut renderitzat amb font serif per defecte */}
+              <div className="font-serif text-gray-800 leading-relaxed space-y-3 text-sm md:text-base"> {/* Mida base una mica més gran a md */}
+                 {/* Iterem sobre els elements del JSON i usem ElementRenderer */}
                  {pageResult.analysis?.elements?.map((element: Element, index: number) => (
                    <ElementRenderer key={`element-${pageResult.page}-${index}`} element={element} />
                  ))}
               </div>
-            </div>
+            </article>
           ))}
-        </div>
+        </section>
       )}
     </main>
   );
