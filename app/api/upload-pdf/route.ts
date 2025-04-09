@@ -68,7 +68,7 @@ export async function POST(req: Request) {
                 if (uploadTask?.result?.form) {
                     await cloudConvert.tasks.upload(uploadTask, readableStream, file.name); // Ja no cal 'as any' aquí amb stream
                     console.log(`☁️ Fitxer ${file.name} pujat a CloudConvert.`);
-                    job = await cloudConvert.jobs.wait(job.id, maxDuration - 10); // Esperem una mica menys que el límit total
+                    job = await cloudConvert.jobs.wait(job.id); // <-- Només amb un argument
 
                     if (job.status === 'finished') {
                         const exportTask = job.tasks?.find(task => task.name === 'export-pngs');
