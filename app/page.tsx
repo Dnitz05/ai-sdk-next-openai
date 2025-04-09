@@ -1,230 +1,326 @@
 'use client';
 
 import { useState } from 'react';
-import React from 'react'; // Importem React per a JSX
+import React from 'react';
 
-// --- DEFINICIONS DE TIPUS I COMPONENTS/FUNCIONS HELPER ---
-interface Formatting {
-  alignment?: string;
-  style?: string[];
-  relative_size?: string;
-  decoration?: string[];
-  font_family_type?: string;
-  color?: string;
-  indentation?: boolean;
-}
+// --- Component per Renderitzar la Resposta de Google Document AI (Versió Inicial) ---
+function GoogleDocumentRenderer({ document }: { document: any }) {
+  // Si no hi ha document, mostrem un missatge d'espera o error si n'hi hagués
+  if (!document) return <p className="text-center text-gray-600 py-10">Esperant resultats de l'anàlisi...</p>;
 
-interface Element {
-  type: string;
-  level?: number;
-  text_content?: string;
-  formatting?: Formatting; // Fem formatting opcional
-  list_items?: string[];
-  table_data?: string[][];
-}
-
-/**
- * Funció helper per obtenir un color distintiu per a la vora esquerra segons el tipus d'element.
- */
-function getElementTypeColor(type: string): string {
-    switch (type) {
-        case 'heading': return '#1E3A8A'; // blue-900
-        case 'table': return '#065F46'; // emerald-800
-        case 'list': return '#9D174D'; // pink-800
-        case 'paragraph': return '#78716C'; // stone-500
-        case 'signature': case 'date': return '#7C2D12'; // orange-900
-        default: return '#A1A1AA'; // zinc-400
-    }
-}
-
-/**
- * Component React per renderitzar un únic element estructural
- * AMB VISUALITZACIÓ MILLORADA DE METADADES (Tipus i Format Descrit).
- */
-function ElementRenderer({ element }: { element: Element }) {
-  // Obtenim l'objecte formatting, o un objecte buit si no existeix
-  const formatting = element.formatting ?? {};
-
-  // Funció helper per mostrar "tags" o "pills" amb la informació de format detectada
-  const renderFormattingTags = (fmt: Formatting) => {
-    const tags: { label: string, value: string | boolean | string[] | undefined }[] = [
-        // Afegim només els atributs que tenen valor i no són el default "visual"
-        { label: 'Align', value: fmt.alignment && fmt.alignment !== 'left' ? fmt.alignment : undefined },
-        { label: 'Style', value: fmt.style?.filter(s => s === 'bold' || s === 'italics') }, // Només bold/italics
-        { label: 'Decor', value: fmt.decoration },
-        { label: 'Size', value: fmt.relative_size && fmt.relative_size !== 'normal' ? fmt.relative_size : undefined },
-        { label: 'Font', value: fmt.font_family_type && fmt.font_family_type !== 'unknown' ? fmt.font_family_type : undefined },
-        { label: 'Color', value: fmt.color && fmt.color !== 'black' ? fmt.color : undefined },
-        { label: 'Indent', value: fmt.indentation === true ? 'yes' : undefined },
-    ];
-
-    const validTags = tags.filter(tag => tag.value && (!Array.isArray(tag.value) || tag.value.length > 0));
-
-    if (validTags.length === 0) return null; // No mostrem res si no hi ha format destacable
-
-    return (
-      <div className="mt-2 flex flex-wrap items-center gap-x-2 gap-y-1">
-        <span className="text-xs font-medium text-gray-500">Format:</span>
-        {validTags.map(tag => (
-          <span key={tag.label} className="text-xs bg-gray-100 text-gray-800 px-2 py-0.5 rounded-full border border-gray-200">
-            {tag.label}: {Array.isArray(tag.value) ? tag.value.join(', ') : String(tag.value)}
-          </span>
-        ))}
-      </div>
-    );
+  // Funció auxiliar per extreure text basat en els 'textAnchors' de Google
+  // Aquesta funció és clau perquè Google retorna índexs dins del text complet.
+  const getText = (textAnchor: any, fullText: string): string => {
+      if (!textAnchor?.textSegments || !fullText) return '';
+      let extractedText = '';
+      for (const segment of textAnchor.textSegments) {
+        // Convertim els índexs a número, assegurant-nos que són vàlids
+        const startIndex = parseInt(segment.startIndex || '0', 10);
+        const endIndex = parseInt(segment.endIndex || '0', 10);
+        if (!isNaN(startIndex) && !isNaN(endIndex) && startIndex >= 0 && endIndex >= startIndex && endIndex <= fullText.length) {
+             // Afegim el tros de text corresponent
+             extractedText += fullText.substring(startIndex, endIndex);
+        } else {
+            // Advertim si un segment té índexs invàlids
+            console.warn("Segment d'índex invàlid:", segment, `Longitud del text: ${fullText.length}`);
+        }
+      }
+      // Retornem el text extret (sense trim inicialment per respectar espais originals)
+      return extractedText;
   };
 
-  // Funció simple per convertir text amb Markdown links a JSX (sense canvis)
-  const renderTextWithLinks = (text: string | undefined) => {
-    if (!text) return null;
-    const linkRegex = /\[([^\]]+)\]\((https?:\/\/[^\)]+)\)/g;
-    const parts: (string | JSX.Element)[] = [];
-    let lastIndex = 0; let match;
-    while ((match = linkRegex.exec(text)) !== null) {
-      if (match.index > lastIndex) { parts.push(text.substring(lastIndex, match.index)); }
-      parts.push( <a href={match[2]} key={`link-${lastIndex}`} target="_blank" rel="noopener noreferrer" className="text-blue-600 hover:underline">{match[1]}</a> );
-      lastIndex = linkRegex.lastIndex;
-    }
-    if (lastIndex < text.length) { parts.push(text.substring(lastIndex)); }
-    return parts.length === 1 ? parts[0] : parts;
-  };
-
-  // --- Renderització del contenidor per a l'element ---
+  // Renderització del document analitzat
   return (
-    // Contenidor amb vora esquerra colorejada segons tipus
-    <div className="mb-4 pl-3 py-2 border-l-4 rounded-r-sm bg-white hover:bg-gray-50 transition-colors duration-150"
-         style={{ borderColor: getElementTypeColor(element.type) }}
-    >
-      {/* Etiqueta petita indicant el tipus d'element */}
-      <span className="block text-xs font-bold uppercase tracking-wider mb-1"
-            style={{ color: getElementTypeColor(element.type) }}
-      >
-        {element.type}{element.type === 'heading' && element.level ? ` ${element.level}` : ''}
-      </span>
-
-      {/* Contingut principal de l'element */}
-      <div className="main-content text-gray-800">
-        {(() => {
-          // Apliquem només estils bàsics directament (negreta/cursiva)
-          let contentClasses = '';
-          if (formatting.style?.includes('bold')) contentClasses += ' font-semibold'; // Semibold en lloc de bold per menys contrast
-          if (formatting.style?.includes('italics')) contentClasses += ' italic';
-
-          switch (element.type) {
-            case 'heading':
-              // Títols amb mida base, la mida real es veu als tags de format
-              const level = element.level ?? 2;
-              const Tag = `h${level >= 1 && level <= 6 ? level : 2}` as keyof JSX.IntrinsicElements;
-              // Fem servir mides de font estàndard per H tags i sobreescrivim si cal amb classes
-               return <Tag className={`${contentClasses} font-sans text-lg md:text-xl`}>{renderTextWithLinks(element.text_content)}</Tag>;
-
-            case 'paragraph':
-              return <p className={`${contentClasses} leading-normal`}>{renderTextWithLinks(element.text_content)}</p>;
-
-            case 'list':
-              // Llistes sense format extra aplicat directament, es veurà als tags
-              return ( <ul className="list-disc list-outside ml-5 space-y-1"> {element.list_items?.map((item, index) => ( <li key={index} className={contentClasses}>{renderTextWithLinks(item)}</li> ))} </ul> );
-
-            case 'table':
-              // Taula amb estil molt net i bàsic
-              return (
-                <div className="overflow-x-auto mt-2 shadow-sm border border-gray-300 rounded">
-                  <table className="min-w-full text-xs md:text-sm border-collapse">
-                    {element.table_data && element.table_data.length > 0 && (
-                      <thead className="bg-gray-100">
-                        <tr>{element.table_data[0].map((cell, cellIndex) => ( <th key={`hcell-${cellIndex}`} className="px-3 py-2 border border-gray-200 text-left font-medium text-gray-600">{cell}</th> ))}</tr>
-                      </thead>
-                    )}
-                    <tbody className="bg-white divide-y divide-gray-200">
-                      {element.table_data && element.table_data.length > 1 && element.table_data.slice(1).map((row, rowIndex) => (
-                        <tr key={`row-${rowIndex}`} className="hover:bg-gray-50">
-                          {row.map((cell, cellIndex) => ( <td key={`cell-${rowIndex}-${cellIndex}`} className="px-3 py-2 border border-gray-200 align-top">{renderTextWithLinks(cell)}</td> ))}
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-              );
-
-            // Altres tipus: mostrem el text amb estil bàsic
-            case 'signature': case 'date': case 'footer': case 'other': default:
-              return element.text_content ? <p className={`${contentClasses}`}>{renderTextWithLinks(element.text_content)}</p> : null;
-          }
-        })()}
+    <div className="space-y-8">
+      {/* Secció 1: Text Complet Extret */}
+      <div>
+        <h3 className="text-xl font-semibold mb-3 pb-2 border-b border-gray-300 text-gray-800">Text Complet Extret</h3>
+        <pre className="whitespace-pre-wrap text-sm bg-gray-50 p-4 rounded border border-gray-200 overflow-x-auto font-mono shadow-inner max-h-96">
+          {document.text ?? <span className="text-gray-500 italic">No s'ha trobat text.</span>}
+        </pre>
       </div>
 
-      {/* Mostrem els tags amb la informació de format detectada */}
-      {renderFormattingTags(formatting)}
+      {/* Secció 2: Taules Detectades (Renderització Bàsica) */}
+      {/* Iterem per cada pàgina buscant taules */}
+      {document.pages?.map((page: any, pageIndex: number) => (
+        // Només mostrem la secció si hi ha taules en aquesta pàgina
+        page.tables && page.tables.length > 0 && (
+          <div key={`page-${pageIndex}-tables`}>
+            <h3 className="text-xl font-semibold mb-4 mt-6 pb-2 border-b border-gray-300 text-gray-800">Taules Detectades - Pàgina {pageIndex + 1}</h3>
+            {/* Iterem per cada taula dins de la pàgina */}
+            {page.tables.map((table: any, tableIndex: number) => (
+              <div key={`page-${pageIndex}-table-${tableIndex}`} className="overflow-x-auto mb-6 shadow-lg border border-gray-300 rounded bg-white">
+                <table className="min-w-full text-xs border-collapse">
+                  {/* Capçalera de la taula (si n'hi ha) */}
+                  {table.headerRows?.map((hRow: any, hrIndex: number) => (
+                    <thead key={`thead-${hrIndex}`} className="bg-gray-100 border-b-2 border-gray-400">
+                      <tr className="divide-x divide-gray-300">
+                        {/* Iterem per cel·les de capçalera */}
+                        {hRow.cells?.map((cell: any, cIndex: number) => (
+                          <th
+                            key={`th-${hrIndex}-${cIndex}`}
+                            className="px-3 py-2 border border-gray-300 text-left font-semibold text-gray-700"
+                            // Respectem si una cel·la ocupa més d'una columna/fila
+                            colSpan={cell.layout?.colspan || 1}
+                            rowSpan={cell.layout?.rowspan || 1}
+                          >
+                             {/* Extraiem el text de la cel·la usant la funció getText */}
+                             {getText(cell.layout?.textAnchor, document.text)}
+                          </th>
+                        ))}
+                      </tr>
+                    </thead>
+                  ))}
+                   {/* Cos de la taula */}
+                   <tbody className="divide-y divide-gray-200">
+                     {/* Iterem per files del cos */}
+                     {table.bodyRows?.map((bRow: any, brIndex: number) => (
+                       <tr key={`brow-${brIndex}`} className="divide-x divide-gray-200 hover:bg-blue-50 transition-colors duration-150">
+                         {/* Iterem per cel·les del cos */}
+                         {bRow.cells?.map((cell: any, cIndex: number) => (
+                           <td
+                             key={`bcell-${brIndex}-${cIndex}`}
+                             className="px-3 py-2 border border-gray-200 align-top"
+                             // Respectem colSpan/rowSpan
+                             colSpan={cell.layout?.colspan || 1}
+                             rowSpan={cell.layout?.rowspan || 1}
+                           >
+                              {/* Extraiem el text de la cel·la */}
+                             {getText(cell.layout?.textAnchor, document.text)}
+                           </td>
+                         ))}
+                       </tr>
+                     ))}
+                   </tbody>
+                </table>
+              </div>
+            ))}
+          </div>
+        )
+      ))}
 
+      {/* Secció 3: JSON Complet (per a Depuració) */}
+      {/* Podem comentar o eliminar aquesta secció quan ja no sigui necessària */}
+      <div>
+         <h3 className="text-xl font-semibold mb-3 mt-6 pb-2 border-b border-gray-300 text-gray-800">Resposta JSON Completa (Debug)</h3>
+         <details className="bg-black rounded shadow-inner border border-gray-700">
+             <summary className="text-sm text-gray-400 p-3 cursor-pointer hover:bg-gray-800 rounded-t">Mostra/Amaga JSON</summary>
+             <pre className="whitespace-pre-wrap text-xs text-green-400 p-4 overflow-x-auto font-mono max-h-96">
+                 {JSON.stringify(document, null, 2)}
+             </pre>
+         </details>
+      </div>
     </div>
   );
 }
-// --- FI COMPONENTS/FUNCIONS HELPER ---
 
 
-// --- COMPONENT PRINCIPAL DE LA PÀGINA ---
+// --- Component Principal de la Pàgina (`Page`) ---
 export default function Page() {
-  const [images, setImages] = useState<string[]>([]);
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState('');
-  const [results, setResults] = useState<any[]>([]);
+  // Estats per gestionar el flux
+  const [images, setImages] = useState<string[]>([]); // URLs de miniatures (opcional)
+  const [pdfUrl, setPdfUrl] = useState<string | null>(null); // URL del PDF original guardat (essencial)
+  const [isLoadingUpload, setIsLoadingUpload] = useState(false); // Indicador de càrrega durant la pujada
+  const [isLoadingAnalysis, setIsLoadingAnalysis] = useState(false); // Indicador durant l'anàlisi amb Google AI
+  const [error, setError] = useState<string | null>(null); // Per mostrar missatges d'error
+  const [analysisResult, setAnalysisResult] = useState<any | null>(null); // Aquí guardarem la resposta de Google Doc AI
 
-  // Gestor de pujada de PDF (sense canvis respecte l'última versió completa)
-  const handleUploadPdf = async (e: React.ChangeEvent<HTMLInputElement>) => { const file = e.target.files?.[0]; if (!file) return; setLoading(true); setError(''); setImages([]); setResults([]); const formData = new FormData(); formData.append('file', file); try { const res = await fetch('/api/upload-pdf', { method: 'POST', body: formData }); if (!res.ok) { let errorData = { error: 'Error generant imatges PDF' }; try { errorData = await res.json(); } catch (e) { console.error("Error no JSON /upload-pdf:", await res.text()); } throw new Error(errorData.error); } const data = await res.json(); setImages(data.pages); } catch (err: any) { setError(err.message); } finally { setLoading(false); } };
+  // Funció que s'executa quan l'usuari selecciona un fitxer PDF
+  const handleUploadPdf = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return; // Si no hi ha fitxer, no fem res
 
-  // Gestor per analitzar les imatges amb IA (sense canvis respecte l'última versió completa)
-  const handleAnalyzeImages = async () => { if (images.length === 0) return; setLoading(true); setError(''); try { const analysisPromises = images.map((image, idx) => fetch('/api/analyze-image', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ image }), }).then(async (res) => { if (!res.ok) { let errorData = { error: `Error analitzant pàgina ${idx + 1}` }; try { errorData = await res.json(); } catch(e) { console.error(`Error no JSON /analyze-image p.${idx+1}:`, await res.text());} throw new Error(errorData.error); } const data = await res.json(); if (!data.result || !Array.isArray(data.result.elements)) { throw new Error(`Estructura JSON invàlida rebuda per pàgina ${idx + 1}`); } return { page: idx + 1, analysis: data.result }; }) ); const allResults = await Promise.all(analysisPromises); allResults.sort((a, b) => a.page - b.page); setResults(allResults); } catch (err: any) { setError('Error durant l’anàlisi: ' + err.message); } finally { setLoading(false); } };
+    // Reiniciem estats abans de començar una nova pujada
+    setIsLoadingUpload(true);
+    setError(null);
+    setImages([]);
+    setPdfUrl(null);
+    setAnalysisResult(null); // Netejar resultats previs
 
-  // Renderització JSX del component
+    // Creem FormData per enviar el fitxer
+    const formData = new FormData();
+    formData.append('file', file);
+
+    try {
+      // Cridem a l'API per pujar el PDF (i opcionalment generar miniatures)
+      const res = await fetch('/api/upload-pdf', { method: 'POST', body: formData });
+
+      // Gestionem si la resposta de l'API no és correcta (status != 2xx)
+      if (!res.ok) {
+        let errorData = { error: `Error ${res.status} processant PDF inicialment` };
+        try { errorData = await res.json(); } catch (jsonError) { console.error("Error no JSON a /upload-pdf:", await res.text()); }
+        throw new Error(errorData.error || `Error ${res.status}`);
+      }
+
+      // Si la resposta és correcta, extraiem les dades JSON
+      const data = await res.json();
+
+      // Validació clau: assegurar-nos que tenim la URL del PDF guardat
+      if (!data.pdfUrl) {
+         throw new Error("La resposta de l'API d'upload no ha retornat la pdfUrl necessària.");
+      }
+
+      // Actualitzem els estats amb les dades rebudes
+      setImages(data.pages ?? []); // Guardem URLs de miniatures (pot ser array buit)
+      setPdfUrl(data.pdfUrl); // Guardem URL del PDF original (essencial)
+
+    } catch (err: any) {
+       // Si hi ha qualsevol error durant la pujada, el capturem i mostrem
+       console.error("Error durant handleUploadPdf:", err);
+       setError(err.message || 'Error desconegut durant la pujada.');
+       setPdfUrl(null); // Assegurem que no quedi una URL antiga si falla
+    } finally {
+       // Quan acaba (tant si va bé com si falla), traiem l'indicador de càrrega
+       setIsLoadingUpload(false);
+    }
+  };
+
+  // Funció que s'executa quan l'usuari clica el botó "Analitzar"
+  const handleAnalyzeDocument = async () => {
+    // Comprovació de seguretat: només procedim si tenim la URL del PDF
+    if (!pdfUrl) {
+        setError("Error intern: No hi ha URL de PDF per analitzar.");
+        console.error("handleAnalyzeDocument cridat sense pdfUrl. Això no hauria de passar.");
+        return;
+    }
+
+    // Iniciem l'estat de càrrega per a l'anàlisi
+    setIsLoadingAnalysis(true);
+    setError(null); // Netegem errors anteriors
+    setAnalysisResult(null); // Netegem resultats anteriors
+
+    try {
+      // Cridem al NOU endpoint d'anàlisi, passant la URL del PDF al cos JSON
+      const res = await fetch('/api/analyze-document-ai', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ pdfUrl }), // Enviem la URL del PDF original
+      });
+
+      // Gestionem si la resposta de l'API d'anàlisi no és correcta
+      if (!res.ok) {
+          let errorData = { error: `Error ${res.status} analitzant amb Document AI` };
+           try { errorData = await res.json(); } catch(jsonError) { console.error("Error no JSON a /analyze-document-ai:", await res.text()); }
+          throw new Error(errorData.error || `Error ${res.status}`);
+      }
+
+      // Si la resposta és correcta, extraiem les dades JSON
+      const data = await res.json();
+
+       // Validació important: comprovem que la resposta té l'estructura esperada
+       if (!data || !data.result || typeof data.result !== 'object') {
+          console.error("Resposta invàlida de /api/analyze-document-ai:", data);
+          throw new Error("La resposta de l'API d'anàlisi no té l'estructura esperada ('result' object).");
+       }
+
+      // Actualitzem l'estat amb els resultats rebuts de Google Document AI
+      setAnalysisResult(data.result); // Guardem tot l'objecte 'document'
+
+    } catch (err: any) {
+        // Si hi ha qualsevol error durant l'anàlisi, el capturem i mostrem
+        console.error("Error durant handleAnalyzeDocument:", err);
+        setError('Error durant l’anàlisi amb Google AI: ' + err.message);
+    } finally {
+        // Quan acaba l'anàlisi (bé o malament), traiem l'indicador de càrrega
+        setIsLoadingAnalysis(false);
+    }
+  };
+
+  // ---- Renderització del component Page ----
   return (
-    <main className="p-4 md:p-8 max-w-5xl mx-auto space-y-8"> {/* Augmentat max-w a 5xl */}
-      <h1 className="text-3xl md:text-4xl font-bold text-center mb-10 text-gray-900 tracking-tight">Anàlisi Visual de PDF</h1>
+    <main className="p-4 md:p-8 max-w-7xl mx-auto space-y-8 bg-gradient-to-b from-gray-50 to-blue-50 min-h-screen">
+      {/* Capçalera */}
+      <header className="text-center pt-8 pb-4">
+          <h1 className="text-3xl md:text-4xl lg:text-5xl font-extrabold text-gray-900 tracking-tight">
+              Analitzador Intel·ligent de PDF
+          </h1>
+          <p className="text-md md:text-lg text-gray-600 mt-3">Puja un document per extreure text i taules usant <span className="font-semibold text-blue-600">Google Document AI</span></p>
+      </header>
 
-      {/* Secció Càrrega */}
-      <section aria-labelledby="upload-section-title" className="p-5 border rounded-lg shadow-md bg-white">
-        {/* ... (sense canvis) ... */}
-         <h2 id="upload-section-title" className="text-lg font-semibold text-gray-700 mb-3">1. Puja el teu document</h2>
-         <label htmlFor="pdf-upload" className="sr-only">Puja un document PDF</label>
-         <input id="pdf-upload" type="file" accept="application/pdf" onChange={handleUploadPdf} className="w-full border p-2 rounded text-sm file:mr-4 file:py-2 file:px-4 file:rounded-md file:border-0 file:text-sm file:font-medium file:bg-violet-100 file:text-violet-700 hover:file:bg-violet-200 disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer focus:outline-none focus:ring-2 focus:ring-violet-500" disabled={loading}/>
-         {loading && !images.length && <p className="text-center text-blue-600 font-medium mt-4">⏳ Carregant i processant PDF...</p>}
-         {error && !loading && <p className="text-center text-red-600 font-semibold mt-4">⚠️ {error}</p>}
+      {/* Secció 1: Pujar Document */}
+      <section aria-labelledby="upload-section-title" className="p-6 border rounded-xl shadow-xl bg-white">
+         <h2 id="upload-section-title" className="text-xl font-semibold text-gray-700 mb-5 flex items-center">
+             <span className="bg-blue-500 text-white rounded-full h-6 w-6 flex items-center justify-center text-sm font-bold mr-3">1</span> Pujar Document
+         </h2>
+         {/* Input per seleccionar fitxer */}
+         <input
+            id="pdf-upload" type="file" accept="application/pdf" onChange={handleUploadPdf}
+            className="block w-full text-sm text-gray-700 file:mr-4 file:py-2.5 file:px-6 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-blue-100 file:text-blue-800 hover:file:bg-blue-200 active:file:bg-blue-300 disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer border border-gray-300 rounded-lg p-2.5 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition duration-150 ease-in-out"
+            disabled={isLoadingUpload || isLoadingAnalysis} // Deshabilitat mentre es carrega o analitza
+          />
+         {/* Zona per a missatges d'estat/error de la pujada */}
+         <div className="mt-4 text-center h-6">
+             {isLoadingUpload && <p className="text-sm text-blue-600 font-medium animate-pulse">⏳ Carregant i processant PDF...</p>}
+             {error && !isLoadingUpload && <p className="text-sm text-red-600 font-semibold">⚠️ Error Pujada: {error}</p>}
+             {pdfUrl && !isLoadingUpload && !error && !analysisResult && <p className="text-sm text-green-700 font-medium">✅ PDF pujat correctament. Preparat per analitzar.</p>}
+         </div>
       </section>
 
-      {/* Secció Miniatures i Botó Analitzar */}
-      {images.length > 0 && !loading && !error && (
-        <section aria-labelledby="preview-section-title" className="mt-6 p-5 border rounded-lg shadow-md bg-white">
-           {/* ... (sense canvis) ... */}
-           <h2 id="preview-section-title" className="text-lg font-semibold text-gray-700 mb-4">2. Pàgines Detectades</h2>
-           <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-4 mb-6">
-             {images.map((src, idx) => ( <div key={`thumb-${idx}`} className="border rounded-lg overflow-hidden shadow-sm hover:shadow-lg transition-shadow duration-200 bg-gray-50"> <img src={src} alt={`Previsualització pàgina ${idx + 1}`} loading="lazy" className="w-full h-auto object-contain" /> <p className="text-center text-xs font-medium p-2 bg-gray-100 border-t">Pàgina {idx + 1}</p> </div> ))}
-           </div>
-           <div className="text-center pt-4 border-t mt-6"> <button onClick={handleAnalyzeImages} className="px-6 py-3 bg-green-600 text-white rounded-md font-semibold hover:bg-green-700 focus:outline-none focus:ring-2 focus:ring-green-500 focus:ring-offset-2 focus:ring-opacity-75 disabled:opacity-50 disabled:cursor-not-allowed transition-colors duration-200" disabled={loading || results.length > 0} > {loading ? 'Analitzant...' : '3. Analitzar Pàgines amb IA'} </button> </div>
-        </section>
-      )}
+       {/* Secció 2: Accions (Previsualització i Botó Analitzar) */}
+       {/* Aquesta secció només apareix si tenim una URL de PDF vàlida i no hi ha error */}
+       {pdfUrl && !isLoadingUpload && !error && (
+         <section aria-labelledby="action-section-title" className="mt-6 p-6 border rounded-xl shadow-xl bg-white">
+            {/* Títol de la secció */}
+            <h2 id="action-section-title" className="text-xl font-semibold text-gray-700 mb-5 flex items-center">
+                <span className="bg-blue-500 text-white rounded-full h-6 w-6 flex items-center justify-center text-sm font-bold mr-3">2</span> Accions
+            </h2>
 
-      {/* Indicador durant anàlisi */}
-      {loading && results.length === 0 && images.length > 0 && ( <p className="text-center text-blue-600 font-medium mt-4">⏳ Analitzant amb IA... Això pot trigar una mica.</p> )}
-
-      {/* ===== SECCIÓ RESULTATS VISUALITZATS (AMB NOU ENFOCAMENT) ===== */}
-      {results.length > 0 && !loading && (
-        <section aria-labelledby="results-section-title" className="mt-10 space-y-8">
-          <h2 id="results-section-title" className="text-2xl font-semibold text-gray-800 border-b pb-3 mb-6">4. Resultats de l'Anàlisi (Estructura i Format Detectat)</h2>
-          {results.map((pageResult) => (
-            // Targeta per a cada pàgina analitzada
-            <article key={`result-${pageResult.page}`} aria-labelledby={`page-title-${pageResult.page}`} className="bg-gray-50 p-5 md:p-8 rounded-lg border border-gray-200 shadow-sm mb-8">
-              <h3 id={`page-title-${pageResult.page}`} className="font-bold text-lg md:text-xl mb-6 text-gray-700 border-b border-gray-300 pb-3">Pàgina {pageResult.page}</h3>
-              {/* Contenidor per als elements renderitzats */}
-              <div className="text-gray-800 text-sm md:text-base"> {/* Mida base del text */}
-                 {/* Iterem sobre els elements del JSON i usem ElementRenderer */}
-                 {pageResult.analysis?.elements?.map((element: Element, index: number) => (
-                   <ElementRenderer key={`element-${pageResult.page}-${index}`} element={element} />
-                 ))}
+            {/* Miniatures (només si n'hi ha) */}
+            {images && images.length > 0 && (
+              <div className="mb-6">
+                <h3 className="text-md font-medium text-gray-600 mb-3">Previsualització (primeres pàgines via CloudConvert):</h3>
+                <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-5 lg:grid-cols-6 gap-4 bg-gray-100 p-4 rounded-lg border">
+                  {images.map((src, idx) => (
+                     <a href={src} target="_blank" rel="noopener noreferrer" key={`thumb-${idx}`} className="block border rounded-md overflow-hidden shadow hover:shadow-lg transition-shadow duration-200 bg-white group">
+                       <img src={src} alt={`Miniatura pàgina ${idx + 1}`} loading="lazy" className="w-full h-auto object-contain p-1 group-hover:opacity-80 transition-opacity" />
+                       <p className="text-center text-xs font-medium py-1 px-2 bg-gray-50 border-t">P. {idx + 1}</p>
+                     </a>
+                   ))}
+                </div>
               </div>
-            </article>
-          ))}
-        </section>
-      )}
-      {/* ===== FI SECCIÓ RESULTATS ===== */}
+            )}
+
+            {/* Botó per iniciar l'anàlisi */}
+            <div className={`text-center ${images && images.length > 0 ? 'pt-6 border-t' : 'pt-2'}`}>
+                 <button
+                    onClick={handleAnalyzeDocument}
+                    className={`px-8 py-3 text-base font-semibold rounded-lg shadow-md focus:outline-none focus:ring-2 focus:ring-offset-2 transition-all duration-300 ease-in-out transform hover:scale-105 disabled:scale-100 ${isLoadingAnalysis || !!analysisResult ? 'bg-gray-400 text-gray-700 cursor-not-allowed' : 'bg-gradient-to-r from-blue-600 to-indigo-700 text-white hover:from-blue-700 hover:to-indigo-800 focus:ring-indigo-500'}`}
+                    disabled={isLoadingAnalysis || isLoadingUpload || !!analysisResult} // Deshabilitat en carregar, analitzar o si ja hi ha resultats
+                  >
+                    {isLoadingAnalysis ? (
+                        <span className="flex items-center justify-center">
+                            <svg className="animate-spin -ml-1 mr-3 h-5 w-5" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg>
+                            Analitzant...
+                        </span>
+                    ) : (analysisResult ? 'Anàlisi Completada' : 'Analitzar Document amb Google AI')}
+                 </button>
+                 {/* Indicador d'anàlisi en curs (es mostra sota el botó) */}
+                 {isLoadingAnalysis && (
+                    <p className="text-sm text-blue-600 font-medium mt-4 flex items-center justify-center space-x-2">
+                        <svg className="animate-spin h-4 w-4 text-blue-600" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg>
+                        <span>Processant amb Google AI... pot trigar una mica...</span>
+                    </p>
+                )}
+            </div>
+         </section>
+       )}
+
+
+       {/* Secció 3: Resultats de l'Anàlisi */}
+       {/* Només es mostra si tenim resultats i no hi ha càrregues en curs */}
+       {analysisResult && !isLoadingUpload && !isLoadingAnalysis && (
+         <section aria-labelledby="results-section-title" className="mt-10 mb-10">
+           <h2 id="results-section-title" className="text-2xl font-semibold text-gray-800 border-b pb-4 mb-6 flex items-center">
+                <span className="bg-blue-500 text-white rounded-full h-6 w-6 flex items-center justify-center text-sm font-bold mr-3">3</span> Resultats de l'Anàlisi
+           </h2>
+           {/* Missatge d'error específic de l'anàlisi (si n'hi ha hagut) */}
+           {error && <p className="text-center text-red-600 font-semibold mb-6">⚠️ Error Anàlisi: {error}</p>}
+           {/* El component que renderitza els resultats */}
+           <article aria-label="Document Analitzat" className="bg-white p-6 md:p-8 rounded-xl border border-gray-200 shadow-xl">
+              <GoogleDocumentRenderer document={analysisResult} />
+           </article>
+         </section>
+       )}
     </main>
   );
 }
