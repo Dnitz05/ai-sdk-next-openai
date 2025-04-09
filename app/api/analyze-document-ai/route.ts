@@ -1,22 +1,21 @@
 import { NextResponse } from 'next/server';
 // Importem el client de Document AI i la llibreria d'autenticació
 import { DocumentProcessorServiceClient } from '@google-cloud/documentai';
-import { GoogleAuth } from 'google-auth-library';
+// NOTA: Ja no necessitem importar GoogleAuth aquí si passem credencials directament
+// import { GoogleAuth } from 'google-auth-library'; // <- Eliminada o comentada
 
 // --- CONFIGURACIÓ IMPORTANT ---
-// Revisa i substitueix aquests valors pels teus propis de Google Cloud!
-// Pots obtenir-los de la consola de Google Cloud o de les captures anteriors.
-// Més endavant, seria millor posar-los també com a variables d'entorn a Vercel.
-const GcpProjectId = '229628951447'; // <-- POSA EL TEU PROJECT ID!
-const GcpLocation = 'eu';           // <-- POSA LA REGIÓ DEL TEU PROCESSADOR (ex: 'eu', 'us')
-const GcpProcessorId = '6444d619f160fbee'; // <-- POSA L'ID DEL TEU PROCESSADOR (el "Informe" o un "Form Parser")
+// RECORDA SUBSTITUIR AQUESTS VALORS PELS TEUS!
+const GcpProjectId = '229628951447'; // <-- **EL TEU PROJECT ID**
+const GcpLocation = 'eu';           // <-- **LA TEVA REGIÓ** (ex: 'eu', 'us')
+const GcpProcessorId = '6444d619f160fbee'; // <-- **L'ID DEL TEU PROCESSADOR**
 // --------------------------------
 
-// Permetem més temps per a l'anàlisi (requereix pla Pro a Vercel)
+// Permetem temps suficient (requereix pla Pro a Vercel si > 60s)
 export const maxDuration = 180; // 3 minuts
 export const dynamic = 'force-dynamic';
 
-// Funció auxiliar per crear el client de Document AI autenticat
+// Funció auxiliar per crear el client de Document AI autenticat (VERSIÓ CORREGIDA)
 async function createDocumentAiClient() {
     console.log("Intentant crear client Document AI...");
     const encodedCredentials = process.env.GOOGLE_CREDENTIALS_BASE64;
@@ -27,32 +26,30 @@ async function createDocumentAiClient() {
     try {
         // Decodifiquem les credencials Base64
         const credentialsJsonString = Buffer.from(encodedCredentials, 'base64').toString('utf-8');
+        // Parsejem el JSON per obtenir l'objecte de credencials
         const credentials = JSON.parse(credentialsJsonString);
         console.log("Credencials Base64 llegides i decodificades.");
 
-        // Creem l'objecte d'autenticació
-        const auth = new GoogleAuth({
-            credentials,
-            scopes: 'https://www.googleapis.com/auth/cloud-platform', // Permís necessari
-        });
-
-        // Configurem les opcions del client, especificant l'endpoint regional
+        // Configurem les opcions del client passant les credencials directament
         const clientOptions = {
-            auth: auth, // Passem l'objecte d'autenticació
-            apiEndpoint: `${GcpLocation}-documentai.googleapis.com`,
+            credentials, // <-- Passem l'objecte credentials directament
+            apiEndpoint: `${GcpLocation}-documentai.googleapis.com`, // L'endpoint regional és correcte
         };
-        console.log(`Opcions del client Document AI: apiEndpoint=${clientOptions.apiEndpoint}`);
+        // Log per verificar (sense mostrar la clau privada!)
+        console.log(`Opcions del client Document AI: apiEndpoint=${clientOptions.apiEndpoint}, credentials project_id=${credentials.project_id}`);
 
-        // Creem i retornem el client
+        // Creem i retornem el client amb les opcions correctes
         const client = new DocumentProcessorServiceClient(clientOptions);
         console.log("Client Document AI creat amb èxit.");
         return client;
+
     } catch (error: any) {
-         console.error("Error inicialitzant Google Auth o Document AI Client:", error);
-         // Dóna un error més específic si falla el parseig del JSON
+         console.error("Error inicialitzant Document AI Client:", error);
          if (error instanceof SyntaxError) {
-            throw new Error(`Error parsejant les credencials JSON: ${error.message}. Verifica la variable GOOGLE_CREDENTIALS_BASE64 a Vercel.`);
+            // Error més específic si falla el parseig del JSON de les credencials
+            throw new Error(`Error parsejant les credencials JSON de GOOGLE_CREDENTIALS_BASE64: ${error.message}. Verifica la variable a Vercel.`);
          }
+         // Propaguem altres errors
          throw new Error(`Error inicialitzant client de Google: ${error.message}`);
     }
 }
@@ -94,6 +91,7 @@ export async function POST(req: Request) {
         const name = `projects/${GcpProjectId}/locations/${GcpLocation}/processors/${GcpProcessorId}`;
         console.log(`Nom del processador a utilitzar: ${name}`);
 
+
         // 6. Preparem la petició per a l'API `processDocument`
         const request = {
             name: name,
@@ -101,22 +99,12 @@ export async function POST(req: Request) {
                 content: encodedPdf,
                 mimeType: 'application/pdf',
             },
-            // Podem afegir 'processOptions' si volem personalitzar l'extracció,
-            // per exemple, per assegurar-nos que extreu taules amb 'Form Parser':
-            // processOptions: {
-            //     from_start: 0, // Processar des del principi
-            //     // Si fas servir Form Parser, podries habilitar opcions extra:
-            //     // schema_override: { ... } // Si tens un esquema específic
-            // }
-             // També podem demanar coses específiques amb `fieldMask` si només volem
-             // una part de la resposta, però de moment agafem-ho tot.
-             // fieldMask: 'text,pages.tables' // Ex: Només text i taules
+            // Podem afegir 'processOptions' o 'fieldMask' si calgués més endavant
         };
         console.log("Petició a Google API preparada (sense mostrar contingut Base64).");
 
         // 7. Cridem a l'API de Google
         console.log(`🤖 Enviant petició a Google Document AI API...`);
-        // La resposta és un array, normalment amb un sol element [result]
         const [result] = await client.processDocument(request);
         console.log(`✅ Resposta rebuda de Google Document AI.`);
 
@@ -133,15 +121,15 @@ export async function POST(req: Request) {
 
     } catch (err: any) {
         console.error('❌ Error durant l\'execució de /api/analyze-document-ai:', err);
+        // Intentem donar un missatge d'error útil al frontend
         const detail = err.details || err.message || 'Error desconegut';
         let status = 500;
          if (detail.includes("permission") || detail.includes("PermissionDenied")) status = 403;
          if (detail.includes("credentials") || detail.includes("authentication")) status = 401;
          if (detail.includes("caller does not have permission")) status = 403;
-         if (detail.includes("processors not found")) status = 404;
+         if (detail.includes("processors not found")) status = 404; // Error comú si l'ID/Location és incorrecte
 
-        // Retornem un error clar al frontend
+        // Retornem l'error en format JSON
         return NextResponse.json({ error: `Error processant amb Document AI: ${detail}` }, { status });
     }
 }
-
