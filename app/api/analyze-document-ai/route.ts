@@ -133,3 +133,4 @@ export async function POST(req: Request) {
         return NextResponse.json({ error: `Error processant amb Document AI: ${detail}` }, { status });
     }
 }
+
