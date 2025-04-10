@@ -5,10 +5,10 @@ import { DocumentProcessorServiceClient } from '@google-cloud/documentai';
 // import { GoogleAuth } from 'google-auth-library'; // <- Eliminada o comentada
 
 // --- CONFIGURACIÓ IMPORTANT ---
-// RECORDA SUBSTITUIR AQUESTS VALORS PELS TEUS!
-const GcpProjectId = '229628951447'; // <-- **EL TEU PROJECT ID**
-const GcpLocation = 'eu';           // <-- **LA TEVA REGIÓ** (ex: 'eu', 'us')
-const GcpProcessorId = '6444d619f160fbee'; // <-- **L'ID DEL TEU PROCESSADOR**
+// Valors correctes per al teu projecte i el processador "Form Parser" ('ailaw')
+const GcpProjectId = '525028991447'; // <-- El teu Project ID correcte
+const GcpLocation = 'eu';           // <-- La teva Regió correcta
+const GcpProcessorId = 'b3b358b89a09b30d'; // <-- L'ID del teu nou processador "Form Parser"
 // --------------------------------
 
 // Permetem temps suficient (requereix pla Pro a Vercel si > 60s)
