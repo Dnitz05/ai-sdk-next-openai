@@ -1,70 +1,63 @@
 import { NextResponse } from 'next/server';
+// Importem el client de Document AI
 import { DocumentProcessorServiceClient } from '@google-cloud/documentai';
-import { GoogleAuth } from 'google-auth-library';
-import OpenAI from 'openai'; // Importem OpenAI
+// NO necessitem importar GoogleAuth si passem credencials directament
 
-// --- CONFIGURACIÓ GOOGLE ---
-const GcpProjectId = '525028991447'; // <-- El teu Project ID
-const GcpLocation = 'eu';           // <-- La teva Regió
-const GcpProcessorId = 'b3b358b89a09b30d'; // <-- L'ID del teu "Form Parser"
-// --------------------------
+// --- CONFIGURACIÓ IMPORTANT ---
+// RECORDA VERIFICAR QUE AQUESTS VALORS SÓN ELS CORRECTES PER AL TEU PROJECTE!
+const GcpProjectId = '525028991447'; // <-- EL TEU PROJECT ID (Ex: ...1447)
+const GcpLocation = 'eu';           // <-- LA TEVA REGIÓ (Ex: 'eu', 'us')
+const GcpProcessorId = 'b3b358b89a09b30d'; // <-- L'ID DEL TEU PROCESSADOR (Ex: el 'Form Parser'/'ailaw')
+// --------------------------------
 
-// --- CONFIGURACIÓ OPENAI ---
-// Assegura't que tens la variable OPENAI_API_KEY configurada a Vercel
-const openai = process.env.OPENAI_API_KEY ? new OpenAI({ apiKey: process.env.OPENAI_API_KEY }) : null;
-const OPENAI_MODEL_FOR_TABLES = "gpt-4o-mini"; // O "gpt-3.5-turbo" - un model eficient per text
-// --------------------------
-
-export const maxDuration = 300; // Augmentem a 5 minuts (Pla Pro!) ja que fem dues crides
+// Permetem temps suficient (requereix pla Pro a Vercel si > 60s)
+export const maxDuration = 180; // 3 minuts
 export const dynamic = 'force-dynamic';
 
-// Funció per crear client Google Document AI (sense canvis)
-async function createDocumentAiClient() { /* ... (codi igual que abans) ... */
-    console.log("Intentant crear client Document AI..."); const encodedCredentials = process.env.GOOGLE_CREDENTIALS_BASE64; if (!encodedCredentials) { console.error('ERROR FATAL: Variable d\'entorn GOOGLE_CREDENTIALS_BASE64 no definida!'); throw new Error('Configuració del servidor incorrecta (Falten credencials de Google).'); } try { const credentialsJsonString = Buffer.from(encodedCredentials, 'base64').toString('utf-8'); const credentials = JSON.parse(credentialsJsonString); const auth = new GoogleAuth({ credentials, scopes: 'https://www.googleapis.com/auth/cloud-platform', }); const clientOptions = { auth: auth, apiEndpoint: `${GcpLocation}-documentai.googleapis.com`, }; console.log(`Opcions del client Document AI: apiEndpoint=${clientOptions.apiEndpoint}, project_id=${credentials.project_id}`); const client = new DocumentProcessorServiceClient(clientOptions); console.log("Client Document AI creat."); return client; } catch (error: any) { console.error("Error inicialitzant Google Auth o Document AI Client:", error); if (error instanceof SyntaxError) { throw new Error(`Error parsejant credencials JSON: ${error.message}.`); } throw new Error(`Error inicialitzant client Google: ${error.message}`); } }
-
-// Funció Helper per extreure text (sense canvis)
-const getText = (textAnchor: any, fullText: string): string => { /* ... (codi igual que abans) ... */
-    if (!textAnchor?.textSegments || !fullText) { return ''; } let extractedText = ''; for (const segment of textAnchor.textSegments) { const startIndex = parseInt(segment?.startIndex || '0', 10); const endIndex = parseInt(segment?.endIndex || '0', 10); if (!isNaN(startIndex) && !isNaN(endIndex) && startIndex >= 0 && endIndex >= startIndex && endIndex <= fullText.length) { extractedText += fullText.substring(startIndex, endIndex); } else { console.warn("Segment índex invàlid:", segment); } } return extractedText; };
-
-// --- NOU: Funció per reformatar una taula amb OpenAI ---
-async function reformatTableWithOpenAI(tableData: string[][]): Promise<string> {
-    if (!openai) { throw new Error("OpenAI API Key no configurada."); }
-    if (!tableData || tableData.length === 0) return '<table></table>'; // Retorna taula buida si no hi ha dades
-
-    // Convertim les dades de la taula a un format simple (ex: Markdown o JSON string) per al prompt
-    // Markdown sol ser entenedor per la IA
-    let tableMarkdown = "";
-    if (tableData[0]) {
-        tableMarkdown += `| ${tableData[0].join(' | ')} |\n`;
-        tableMarkdown += `| ${tableData[0].map(() => '---').join(' | ')} |\n`;
+// Funció auxiliar per crear el client de Document AI autenticat (VERSIÓ CORREGIDA)
+async function createDocumentAiClient() {
+    console.log("Intentant crear client Document AI...");
+    const encodedCredentials = process.env.GOOGLE_CREDENTIALS_BASE64;
+    if (!encodedCredentials) {
+        console.error('ERROR FATAL: Variable d\'entorn GOOGLE_CREDENTIALS_BASE64 no definida a Vercel!');
+        throw new Error('Configuració del servidor incorrecta (Falten credencials de Google).');
     }
-    tableData.slice(1).forEach(row => {
-        tableMarkdown += `| ${row.join(' | ')} |\n`;
-    });
-
-    const prompt = `Donada la següent taula extreta d'un PDF (en format Markdown):\n\n${tableMarkdown}\n\nGenera el codi HTML per a aquesta taula. Utilitza etiquetes HTML estàndard (<table>, <thead>, <tbody>, <tr>, <th> per a la primera fila, <td> per la resta). Aplica classes bàsiques de Tailwind CSS per a un estil net: 'min-w-full text-sm border-collapse border border-slate-400' per a la <table>, 'bg-slate-100' per a <thead>, 'border border-slate-300 px-4 py-2 text-left font-semibold text-slate-700' per a <th>, 'border border-slate-300 px-4 py-2 align-top' per a <td>, i 'hover:bg-slate-50' per a <tr> al tbody. Simplifica l'estructura visual si sembla apropiat per a la claredat, però mantén tot el contingut textual. Retorna NOMÉS el codi HTML de la taula, sense comentaris ni text addicional.`;
-
     try {
-        console.log(`🤖 Enviant dades de taula a OpenAI (${OPENAI_MODEL_FOR_TABLES})...`);
-        const response = await openai.chat.completions.create({
-            model: OPENAI_MODEL_FOR_TABLES,
-            messages: [{ role: "user", content: prompt }],
-            temperature: 0.2,
-            max_tokens: 1500, // Ajustar segons mida esperada de taules
-        });
-        const htmlResult = response.choices[0]?.message?.content?.trim() ?? '<table><tr><td>Error generant HTML</td></tr></table>';
-        console.log(`✅ Taula HTML rebuda d'OpenAI.`);
-        // Simple neteja per si retorna ```html ... ```
-        return htmlResult.replace(/^```html\s*|```\s*$/g, '').trim();
+        // Decodifiquem les credencials Base64
+        const credentialsJsonString = Buffer.from(encodedCredentials, 'base64').toString('utf-8');
+        // Parsejem el JSON per obtenir l'objecte de credencials
+        const credentials = JSON.parse(credentialsJsonString);
+        console.log("Credencials Base64 llegides i decodificades.");
+
+        // Configurem les opcions del client passant les credencials directament
+        const clientOptions = {
+            credentials, // <-- Passem l'objecte credentials directament
+            apiEndpoint: `${GcpLocation}-documentai.googleapis.com`, // L'endpoint regional és correcte
+        };
+        // Log per verificar (sense mostrar la clau privada!)
+        console.log(`Opcions del client Document AI: apiEndpoint=${clientOptions.apiEndpoint}, credentials project_id=${credentials.project_id}`);
+
+        // Creem i retornem el client amb les opcions correctes
+        const client = new DocumentProcessorServiceClient(clientOptions);
+        console.log("Client Document AI creat amb èxit.");
+        return client;
+
     } catch (error: any) {
-        console.error("❌ Error cridant a OpenAI per reformatar taula:", error);
-        return `<table><tr><td>Error al processar la taula amb OpenAI: ${error.message}</td></tr></table>`; // Retorna un error HTML
+         console.error("Error inicialitzant Document AI Client:", error);
+         if (error instanceof SyntaxError) {
+            // Error més específic si falla el parseig del JSON de les credencials
+            throw new Error(`Error parsejant les credencials JSON de GOOGLE_CREDENTIALS_BASE64: ${error.message}. Verifica la variable a Vercel.`);
+         }
+         // Propaguem altres errors
+         throw new Error(`Error inicialitzant client de Google: ${error.message}`);
     }
 }
-// --- FI Funció OpenAI ---
 
-
+// Funció principal de l'endpoint POST (sense canvis respecte l'última versió híbrida)
 export async function POST(req: Request) {
+   // ... (Mantenim tota la lògica POST que ja teníem, amb la crida a Google i la crida a OpenAI per reformatar taules) ...
+   // ... (Assegura't que el codi POST aquí és el de la resposta #175)...
+
     console.log("Rebuda petició a /api/analyze-document-ai (v Híbrida)");
     try {
         const { pdfUrl } = await req.json();
@@ -77,61 +70,46 @@ export async function POST(req: Request) {
         if (!pdfResponse.ok) throw new Error(`No s'ha pogut descarregar PDF (${pdfResponse.status})`);
         const pdfBuffer = Buffer.from(await pdfResponse.arrayBuffer());
         const encodedPdf = pdfBuffer.toString('base64');
-        const client = await createDocumentAiClient();
+        const client = await createDocumentAiClient(); // Usa la funció corregida
         const name = `projects/${GcpProjectId}/locations/${GcpLocation}/processors/${GcpProcessorId}`;
         const request = { name, rawDocument: { content: encodedPdf, mimeType: 'application/pdf' } };
         const [result] = await client.processDocument(request);
         if (!result || !result.document) throw new Error("Resposta invàlida de Google Document AI.");
         console.log(`✅ Anàlisi de Google Document AI completada.`);
-        const googleDocument = result.document; // Guardem la resposta completa de Google
+        const googleDocument = result.document;
         // -------------------------------------------------
 
         // --- PAS 2: Identificar i Reformatar Taules amb OpenAI ---
         const reformattedTables: { pageIndex: number; tableIndexOnPage: number; html: string }[] = [];
-        if (googleDocument?.pages && openai) { // Només si tenim pàgines i client OpenAI
+        if (googleDocument?.pages && openai) {
              console.log("Iniciant reformatació de taules amb OpenAI...");
              let tablePromises: Promise<void>[] = [];
+             const fullText = googleDocument.text || ""; // Pass text for getText helper
 
              googleDocument.pages.forEach((page: any, pageIndex: number) => {
                  if (page.tables) {
                      page.tables.forEach((table: any, tableIndexOnPage: number) => {
-                         // Extreure dades de la taula del JSON de Google
                          const tableData: string[][] = [];
-                         table.headerRows?.forEach((hRow: any) => {
-                             tableData.push(hRow.cells?.map((cell: any) => getText(cell.layout?.textAnchor, googleDocument.text)) ?? []);
-                         });
-                         table.bodyRows?.forEach((bRow: any) => {
-                             tableData.push(bRow.cells?.map((cell: any) => getText(cell.layout?.textAnchor, googleDocument.text)) ?? []);
-                         });
+                         table.headerRows?.forEach((hRow: any) => { tableData.push(hRow.cells?.map((cell: any) => getText(cell.layout?.textAnchor, fullText)) ?? []); });
+                         table.bodyRows?.forEach((bRow: any) => { tableData.push(bRow.cells?.map((cell: any) => getText(cell.layout?.textAnchor, fullText)) ?? []); });
 
-                         // Afegim una promesa per reformatar aquesta taula
                          if (tableData.length > 0) {
-                              tablePromises.push(
-                                 reformatTableWithOpenAI(tableData).then(htmlResult => {
-                                     reformattedTables.push({ pageIndex, tableIndexOnPage, html: htmlResult });
-                                 })
-                              );
+                              tablePromises.push( reformatTableWithOpenAI(tableData).then(htmlResult => { reformattedTables.push({ pageIndex, tableIndexOnPage, html: htmlResult }); }) );
                          }
                      });
                  }
              });
-             // Esperem que totes les crides a OpenAI per a les taules acabin
              await Promise.all(tablePromises);
              console.log(`✅ Reformatació de ${reformattedTables.length} taules completada.`);
-        } else if (!openai) {
-             console.warn("⚠️ OpenAI API Key no configurada, no es reformataran les taules.")
-        }
+        } else if (!openai) { console.warn("⚠️ OpenAI API Key no configurada, no es reformataran les taules.") }
         // -----------------------------------------------------
 
         // --- PAS 3: Retornar Resultats Combinats ---
-        // Enviem la resposta original de Google i les taules HTML reformatades
-        return NextResponse.json({
-             google_document: googleDocument,
-             reformatted_tables: reformattedTables
-            });
+        return NextResponse.json({ google_document: googleDocument, reformatted_tables: reformattedTables });
         // ------------------------------------------
 
     } catch (err: any) {
+        // ... (Gestió d'errors igual que abans) ...
         console.error('❌ Error general a /api/analyze-document-ai (híbrid):', err);
         const detail = err.details || err.message || 'Error desconegut';
         let status = 500;
@@ -140,5 +118,44 @@ export async function POST(req: Request) {
          if (detail.includes("caller does not have permission")) status = 403;
          if (detail.includes("processors not found")) status = 404;
         return NextResponse.json({ error: `Error processant (híbrid): ${detail}` }, { status });
+    }
+}
+
+// Funció Helper per extreure text (necessària dins de POST per accedir a googleDocument.text)
+const getText = (textAnchor: any, fullText: string): string => {
+    if (!textAnchor?.textSegments || !fullText) { return ''; } let extractedText = '';
+    for (const segment of textAnchor.textSegments) {
+      const startIndex = parseInt(segment?.startIndex || '0', 10);
+      const endIndex = parseInt(segment?.endIndex || '0', 10);
+      if (!isNaN(startIndex) && !isNaN(endIndex) && startIndex >= 0 && endIndex >= startIndex && endIndex <= fullText.length) {
+           extractedText += fullText.substring(startIndex, endIndex);
+      } else { console.warn("Segment índex invàlid:", segment); }
+    } return extractedText;
+};
+
+
+// Funció per reformatar taula amb OpenAI (necessita accés al client openai)
+async function reformatTableWithOpenAI(tableData: string[][]): Promise<string> {
+    if (!openai) { throw new Error("OpenAI API Key no configurada."); }
+    if (!tableData || tableData.length === 0) return '<table><tr><td>Taula buida</td></tr></table>';
+
+    let tableMarkdown = "";
+    if (tableData[0]) { tableMarkdown += `| ${tableData[0].join(' | ')} |\n| ${tableData[0].map(() => '---').join(' | ')} |\n`; }
+    tableData.slice(1).forEach(row => { tableMarkdown += `| ${row.join(' | ')} |\n`; });
+
+    const prompt = `Donada la següent taula (format Markdown):\n\n${tableMarkdown}\n\nGenera codi HTML per a aquesta taula. Utilitza <table>, <thead>, <tbody>, <tr>, <th> (per la primera fila), <td>. Aplica classes Tailwind: 'min-w-full text-sm border-collapse border border-slate-400' per <table>, 'bg-slate-100' per <thead>, 'border border-slate-300 px-4 py-2 text-left font-semibold text-slate-700' per <th>, 'border border-slate-300 px-4 py-2 align-top' per <td>, 'hover:bg-slate-50' per <tr> al tbody. Simplifica l'estructura visual si té sentit per claredat, preservant les dades. Retorna NOMÉS l'HTML de la taula.`;
+
+    try {
+        console.log(`🤖 Enviant dades taula a OpenAI (${OPENAI_MODEL_FOR_TABLES})...`);
+        const response = await openai.chat.completions.create({
+            model: OPENAI_MODEL_FOR_TABLES, messages: [{ role: "user", content: prompt }],
+            temperature: 0.2, max_tokens: 1500,
+        });
+        const htmlResult = response.choices[0]?.message?.content?.trim() ?? '<table><tr><td>Error OpenAI</td></tr></table>';
+        console.log(`✅ Taula HTML rebuda d'OpenAI.`);
+        return htmlResult.replace(/^```html\s*|```\s*$/g, '').trim();
+    } catch (error: any) {
+        console.error("❌ Error OpenAI reformatant taula:", error);
+        return `<table><tr><td>Error processant taula: ${error.message}</td></tr></table>`;
     }
 }
