@@ -6,7 +6,7 @@ import React from 'react';
 // --- DEFINICIONS DE TIPUS AMPLIADES ---
 interface StyleInfo { fontWeight?: string; fontStyle?: string; textDecoration?: string; fontSize?: { size: number; unit: string }; fontFamily?: string; foregroundColor?: { color: { red?: number; green?: number; blue?: number } }; backgroundColor?: { color: { red?: number; green?: number; blue?: number } };}
 interface TextAnchor { textSegments: { startIndex?: string; endIndex?: string }[]; content?: string; }
-interface Layout { textAnchor?: TextAnchor; boundingPoly?: any; orientation?: string; colspan?: number; rowspan?: number; } // <--- 'rowspan' en minúscules aquí és correcte per al tipus
+interface Layout { textAnchor?: TextAnchor; boundingPoly?: any; orientation?: string; colspan?: number; rowspan?: number; }
 interface Token { layout?: Layout; detectedBreak?: { type: string }; styleInfo?: StyleInfo; }
 interface Paragraph { layout?: Layout; detectedLanguages?: any[]; }
 interface ListItem { layout?: Layout; detectedLanguages?: any[]; }
@@ -47,9 +47,9 @@ function GoogleDocumentRenderer({ document }: { document: GoogleDocument }) {
   if (!document || !document.pages || !document.text) { return <p className="text-center text-gray-500 italic py-10">No hi ha dades del document.</p>; }
   const fullText = document.text;
 
-  // Funció Millorada per Renderitzar Taules (CORREGIT: rowspan en minúscules)
+  // Funció Millorada per Renderitzar Taules (usa renderRichText per cel·les)
   const renderTable = (table: Table, pageIndex: number, tableIndex: number, pageTokens: Token[]) => {
-      return ( <div key={`page-${pageIndex}-table-${tableIndex}`} className="overflow-x-auto my-6 shadow-lg border border-gray-300 rounded-lg bg-white"> <table className="min-w-full text-sm border-collapse border border-slate-400"> {table.headerRows?.map((hRow: TableRow, hrIndex: number) => ( <thead key={`thead-${hrIndex}`} className="bg-slate-100"> <tr className="border-b-2 border-slate-300"> {hRow.cells?.map((cell: TableCell, cIndex: number) => ( <th key={`th-${hrIndex}-${cIndex}`} className="border border-slate-300 px-4 py-2 text-left font-semibold text-slate-700 whitespace-nowrap" colSpan={cell.layout?.colspan && cell.layout.colspan > 1 ? cell.layout.colspan : undefined} rowSpan={cell.layout?.rowspan && cell.layout.rowspan > 1 ? cell.layout.rowspan : undefined} > {/* Corregit aquí */} {renderRichText(cell.layout?.textAnchor, pageTokens, fullText)} </th> ))} </tr> </thead> ))} <tbody className="divide-y divide-slate-200"> {table.bodyRows?.map((bRow: TableRow, brIndex: number) => ( <tr key={`brow-${brIndex}`} className="hover:bg-slate-50"> {bRow.cells?.map((cell: TableCell, cIndex: number) => ( <td key={`bcell-${brIndex}-${cIndex}`} className="border border-slate-300 px-4 py-2 align-top" colSpan={cell.layout?.colspan && cell.layout.colspan > 1 ? cell.layout.colspan : undefined} rowSpan={cell.layout?.rowspan && cell.layout.rowspan > 1 ? cell.layout.rowspan : undefined} > {/* Corregit aquí */} {renderRichText(cell.layout?.textAnchor, pageTokens, fullText)} </td> ))} </tr> ))} </tbody> </table> </div> );
+      return ( <div key={`page-${pageIndex}-table-${tableIndex}`} className="overflow-x-auto my-6 shadow-lg border border-gray-300 rounded-lg bg-white"> <table className="min-w-full text-sm border-collapse border border-slate-400"> {table.headerRows?.map((hRow: TableRow, hrIndex: number) => ( <thead key={`thead-${hrIndex}`} className="bg-slate-100"> <tr className="border-b-2 border-slate-300"> {hRow.cells?.map((cell: TableCell, cIndex: number) => ( <th key={`th-${hrIndex}-${cIndex}`} className="border border-slate-300 px-4 py-2 text-left font-semibold text-slate-700 whitespace-nowrap" colSpan={cell.layout?.colspan && cell.layout.colspan > 1 ? cell.layout.colspan : undefined} rowSpan={cell.layout?.rowspan && cell.layout.rowspan > 1 ? cell.layout.rowspan : undefined} > {renderRichText(cell.layout?.textAnchor, pageTokens, fullText)} </th> ))} </tr> </thead> ))} <tbody className="divide-y divide-slate-200"> {table.bodyRows?.map((bRow: TableRow, brIndex: number) => ( <tr key={`brow-${brIndex}`} className="hover:bg-slate-50"> {bRow.cells?.map((cell: TableCell, cIndex: number) => ( <td key={`bcell-${brIndex}-${cIndex}`} className="border border-slate-300 px-4 py-2 align-top" colSpan={cell.layout?.colspan && cell.layout.colspan > 1 ? cell.layout.colspan : undefined} rowSpan={cell.layout?.rowspan && cell.layout.rowspan > 1 ? cell.layout.rowspan : undefined} > {renderRichText(cell.layout?.textAnchor, pageTokens, fullText)} </td> ))} </tr> ))} </tbody> </table> </div> );
   }; // Fi de renderTable
 
   // --- Renderització Principal ---
@@ -76,8 +76,8 @@ function GoogleDocumentRenderer({ document }: { document: GoogleDocument }) {
 
         </div>
       ))}
-       {/* JSON de Debug (Comentat per defecte) */}
-       {/* <div className="mt-12 pt-6 border-t border-gray-300"> <div className="flex justify-between items-center mb-3"> <h3 className="text-lg font-semibold text-gray-700">Resposta JSON Completa (Debug)</h3> <button onClick={() => { ... }} disabled={!document}> Descarregar JSON </button> </div> <details> <summary>Mostra/Amaga JSON</summary> <pre>{JSON.stringify(document, null, 2)}</pre> </details> </div> */}
+       {/* JSON de Debug (opcional, pots comentar-lo/eliminar-lo quan no el necessitis) */}
+       <div className="mt-12 pt-6 border-t border-gray-300"> <div className="flex justify-between items-center mb-3"> <h3 className="text-lg font-semibold text-gray-700">Resposta JSON Completa (Debug)</h3> <button onClick={() => { if (!document) return; try { const jsonString = JSON.stringify(document, null, 2); const blob = new Blob([jsonString], { type: 'application/json' }); const url = URL.createObjectURL(blob); const a = window.document.createElement('a'); a.href = url; a.download = 'google-doc-ai-full-response.json'; window.document.body.appendChild(a); a.click(); setTimeout(() => { window.document.body.removeChild(a); URL.revokeObjectURL(url); }, 100); } catch (error) { console.error("Error descarregant JSON:", error); alert("Error descarregant JSON."); } }} className="text-xs bg-blue-600 hover:bg-blue-700 text-white px-3 py-1 rounded-md transition-colors duration-150 disabled:opacity-50" disabled={!document} > Descarregar JSON </button> </div> <details className="bg-gray-800 text-white rounded-lg shadow-inner border border-gray-600"> <summary className="text-sm text-gray-400 p-3 cursor-pointer hover:bg-gray-700 rounded-t-lg">Mostra/Amaga JSON</summary> <pre className="whitespace-pre-wrap text-xs text-green-400 p-4 overflow-x-auto font-mono max-h-[600px]"> {JSON.stringify(document, null, 2)} </pre> </details> </div>
     </div>
   );
 }
@@ -85,47 +85,51 @@ function GoogleDocumentRenderer({ document }: { document: GoogleDocument }) {
 
 // --- Component Principal de la Pàgina (`Page`) ---
 export default function Page() {
-  // Estats (igual que abans, sense reformattedTables)
+  // Estats
   const [images, setImages] = useState<string[]>([]);
   const [pdfUrl, setPdfUrl] = useState<string | null>(null);
   const [isLoadingUpload, setIsLoadingUpload] = useState(false);
   const [isLoadingAnalysis, setIsLoadingAnalysis] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  // Tipus més específic per analysisResult
   const [analysisResult, setAnalysisResult] = useState<GoogleDocument | null>(null);
+  // Ja no necessitem reformattedTables
+  // const [reformattedTables, setReformattedTables] = useState<any[]>([]);
 
-  // Funció handleApiResponse (igual)
-  async function handleApiResponse(res: Response, context: string): Promise<any> { /* ... */ }
-  // Gestor de pujada PDF (igual)
-  const handleUploadPdf = async (e: React.ChangeEvent<HTMLInputElement>) => { /* ... */ };
-  // Gestor d'anàlisi (igual, espera { result: googleDocument })
+  // Funció handleApiResponse (sense canvis)
+  async function handleApiResponse(res: Response, context: string): Promise<any> { if (res.ok) { try { return await res.json(); } catch (jsonError: any) { throw new Error(`Resposta invàlida (${context}, no JSON).`); } } else { let errorMessage = `Error ${res.status} (${context})`; try { const errorText = await res.text(); try { const errorJson = JSON.parse(errorText); errorMessage = errorJson.error || errorText || errorMessage; } catch (parseError) { errorMessage = errorText || errorMessage; console.warn(`Resp err no JSON (${context}):`, errorText); } } catch (readError: any) { errorMessage = `Error ${res.status} (${context}, resp no llegible)`; } throw new Error(errorMessage); } }
+  // Gestor de pujada PDF (sense canvis)
+  const handleUploadPdf = async (e: React.ChangeEvent<HTMLInputElement>) => { const file = e.target.files?.[0]; if (!file) return; setIsLoadingUpload(true); setError(null); setImages([]); setPdfUrl(null); setAnalysisResult(null); /*setReformattedTables([]);*/ const formData = new FormData(); formData.append('file', file); try { const res = await fetch('/api/upload-pdf', { method: 'POST', body: formData }); const data = await handleApiResponse(res, "/api/upload-pdf"); if (!data.pdfUrl) { throw new Error("L'API d'upload no va retornar la pdfUrl."); } setImages(data.pages ?? []); setPdfUrl(data.pdfUrl); } catch (err: any) { setError(err.message || 'Error durant la pujada.'); setPdfUrl(null); } finally { setIsLoadingUpload(false); } };
+
+  // Gestor d'anàlisi (ara espera només { result: googleDocument })
   const handleAnalyzeDocument = async () => {
-      if (!pdfUrl) { setError("Error intern: No hi ha URL de PDF."); return; }
-      setIsLoadingAnalysis(true); setError(null);
-      setAnalysisResult(null);
+    if (!pdfUrl) { setError("Error intern: No hi ha URL de PDF."); return; }
+    setIsLoadingAnalysis(true); setError(null);
+    setAnalysisResult(null);
 
-      try {
-        const res = await fetch('/api/analyze-document-ai', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ pdfUrl }), });
-        const data = await handleApiResponse(res, "/api/analyze-document-ai");
+    try {
+      const res = await fetch('/api/analyze-document-ai', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ pdfUrl }), });
+      const data = await handleApiResponse(res, "/api/analyze-document-ai");
 
-        // Validació backend simplificat
-        if (!data || !data.result || !Array.isArray(data.result.pages)) {
-             console.error("Frontend: Resposta invàlida del backend:", data);
-             throw new Error("La resposta de l'API d'anàlisi no té l'estructura esperada ('result' amb 'pages').");
-         }
-        setAnalysisResult(data.result); // Guardem l'objecte 'document' de Google
+      // Validació backend simplificat
+      if (!data || !data.result || !Array.isArray(data.result.pages)) {
+           console.error("Frontend: Resposta invàlida del backend:", data);
+           throw new Error("La resposta de l'API d'anàlisi no té l'estructura esperada ('result' amb 'pages').");
+       }
+      setAnalysisResult(data.result); // Guardem l'objecte 'document' de Google
 
-      } catch (err: any) {
-          setError('Error durant l’anàlisi: ' + err.message);
-      } finally {
-          setIsLoadingAnalysis(false);
-      }
-    };
+    } catch (err: any) {
+        setError('Error durant l’anàlisi: ' + err.message);
+    } finally {
+        setIsLoadingAnalysis(false);
+    }
+  };
 
-  // Renderització JSX (igual)
+  // Renderització JSX
   return (
      <main className="p-4 md:p-8 max-w-5xl mx-auto space-y-8 bg-gradient-to-b from-gray-100 to-blue-100 min-h-screen">
        {/* ... Header ... */}
-       <header className="text-center pt-8 pb-4"> <h1 className="text-3xl md:text-4xl lg:text-5xl font-extrabold text-gray-900 tracking-tight"> Analitzador Intel·ligent de PDF </h1> <p className="text-md md:text-lg text-gray-600 mt-3">Puja un document per extreure text, estructura i format usant <span className="font-semibold text-blue-600">Google Document AI</span></p> </header>
+        <header className="text-center pt-8 pb-4"> <h1 className="text-3xl md:text-4xl lg:text-5xl font-extrabold text-gray-900 tracking-tight"> Analitzador Intel·ligent de PDF </h1> <p className="text-md md:text-lg text-gray-600 mt-3">Puja un document per extreure text, estructura i format usant <span className="font-semibold text-blue-600">Google Document AI</span></p> </header>
 
        {/* ... Secció Càrrega ... */}
        <section aria-labelledby="upload-section-title" className="p-6 border rounded-xl shadow-lg bg-white"> <h2 id="upload-section-title" className="text-xl font-semibold text-gray-700 mb-4 flex items-center"> <span className="bg-blue-600 text-white rounded-full h-6 w-6 flex items-center justify-center text-sm font-bold mr-3">1</span> Pujar Document </h2> <input id="pdf-upload" type="file" accept="application/pdf" onChange={handleUploadPdf} className="block w-full text-sm text-gray-500 file:mr-4 file:py-2.5 file:px-6 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-blue-100 file:text-blue-700 hover:file:bg-blue-200 active:file:bg-blue-300 disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer border border-gray-300 rounded-lg p-2.5 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition duration-150 ease-in-out" disabled={isLoadingUpload || isLoadingAnalysis} /> <div className="mt-4 text-center h-6"> {isLoadingUpload && <p className="text-sm text-blue-600 font-medium animate-pulse">⏳ Carregant...</p>} {error && !isLoadingUpload && !isLoadingAnalysis && <p className="text-sm text-red-600 font-semibold">⚠️ Error: {error}</p>} {pdfUrl && !isLoadingUpload && !error && !analysisResult && <p className="text-sm text-green-700 font-medium">✅ PDF pujat.</p>} </div> </section>
@@ -139,10 +143,11 @@ export default function Page() {
            <h2 id="results-section-title" className="text-2xl font-semibold text-gray-800 border-b border-gray-300 pb-4 mb-6 flex items-center"> <span className="bg-blue-600 text-white rounded-full h-6 w-6 flex items-center justify-center text-sm font-bold mr-3">3</span> Resultats de l'Anàlisi </h2>
            {error && <p className="text-center text-red-600 font-semibold mb-6">⚠️ Error Anàlisi: {error}</p>}
            <article aria-label="Document Analitzat" className="bg-white p-6 md:p-10 rounded-xl border border-gray-200 shadow-2xl">
+              {/* Passem només el document de Google al renderer avançat */}
               <GoogleDocumentRenderer document={analysisResult} />
            </article>
          </section>
        )}
-    </main>
+     </main>
   );
 }
