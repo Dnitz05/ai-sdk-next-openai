@@ -36,6 +36,12 @@ export async function POST(request: NextRequest) {
     const html = result.value; // El HTML generat
     const messages = result.messages; // Mammoth pot retornar missatges (avisos, errors lleus)
 
+    // ---- LÍNIA AFEGIDA PER DEPURAR ----
+    console.log("===== HTML Generat (Primers 1000 caràcters) =====");
+    console.log(html.substring(0, 1000)); // Mostrem un tros per inspeccionar
+    console.log("================================================");
+    // ------------------------------------
+
     if (messages && messages.length > 0) {
         console.warn("Missatges de Mammoth durant la conversió:", messages);
     }
