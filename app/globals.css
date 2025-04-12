@@ -1,3 +1,9 @@
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
+/* Fix per eliminar marges de paràgrafs dins cel·les de taula amb prose */
+.prose td > p {
+    margin-top: 0;
+    margin-bottom: 0;
+  }
+  /* Pots ajustar si necessites eliminar més estils del paràgraf dins la cel·la */
