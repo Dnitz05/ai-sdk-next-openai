@@ -1,5 +1,7 @@
+// tailwind.config.js (o .ts / .mjs)
+
 /** @type {import('tailwindcss').Config} */
-module.exports = {
+module.exports = { // O 'import type { Config } ... export default {' si és .ts
   content: [
     './pages/**/*.{js,ts,jsx,tsx,mdx}',
     './components/**/*.{js,ts,jsx,tsx,mdx}',
@@ -14,5 +16,9 @@ module.exports = {
       },
     },
   },
-  plugins: [],
+  // ---- CORRECCIÓ AQUÍ ----
+  plugins: [
+    require('@tailwindcss/typography') // Afegim el plugin necessari
+  ],
+  // -----------------------
 };
