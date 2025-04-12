@@ -50,7 +50,14 @@ export default function Home() {
       // Gestió de resposta correcta
       if (contentType && contentType.includes("application/json")) {
           const data = await response.json();
-          setConvertedHtml(data.html);
+
+          // ---- LÍNIA AFEGIDA PER DEPURAR AL NAVEGADOR ----
+          console.log("==== Snippet HTML Rebut del Backend ====");
+          console.log(data.htmlSnippet || "No s'ha rebut cap snippet."); // Mostra el fragment d'HTML a la consola del NAVEGADOR
+          console.log("=======================================");
+          // -----------------------------------------------
+
+          setConvertedHtml(data.html); // Seguim guardant l'HTML complet per renderitzar
           setMammothMessages(data.messages || []);
       } else {
           // Si la resposta és OK però no JSON (inesperat)
@@ -88,24 +95,24 @@ export default function Home() {
     } else {
       // L'usuari ha cancel·lat la selecció
       setSelectedFileName(null);
-      // Opcional: esborrar altres estats si es vol
     }
 
-    // Important: Reseteja el valor de l'input per permetre seleccionar el mateix fitxer una altra vegada
+    // Reseteja el valor de l'input per permetre seleccionar el mateix fitxer una altra vegada
     event.target.value = '';
   };
 
+  // JSX per renderitzar la pàgina
   return (
     <main className="flex min-h-screen flex-col items-center p-6 md:p-12 lg:p-24 bg-gray-100">
-      <div className="w-full max-w-4xl bg-white shadow-xl rounded-lg p-8">
+      <div className="w-full max-w-3xl bg-white shadow-lg rounded-sm p-8 md:p-12 lg:p-16 my-8"> {/* Ajustat max-width i padding per aspecte A4 */}
+
         <h1 className="text-3xl font-bold text-center text-gray-800 mb-8">
-          Visor de Documents (.docx)
+           Visor de Documents (.docx)
         </h1>
 
         {/* Àrea de càrrega simplificada */}
         <div className="mb-8 p-6 border border-gray-200 rounded-md bg-gray-50">
           <div className="mb-4">
-            {/* Fem que el label sigui clicable i amaguem l'input per defecte */}
             <label htmlFor="fileInput" className="block text-sm font-medium text-gray-700 mb-1 cursor-pointer hover:text-blue-600 transition-colors duration-200">
               {selectedFileName ? `Fitxer carregat: ${selectedFileName}` : 'Clica aquí per seleccionar un fitxer .docx'}
             </label>
@@ -114,14 +121,9 @@ export default function Home() {
               id="fileInput"
               onChange={handleFileChange}
               accept=".docx,application/vnd.openxmlformats-officedocument.wordprocessingml.document"
-              className="hidden" // Amaguem l'input visualment (opcional, es pot deixar visible)
+              className="hidden" // Amaguem visualment
             />
-            {/* Mostrem el nom aquí si es vol */}
-            {/* {selectedFileName && <p className="text-xs text-gray-500 mt-1">{selectedFileName}</p>} */}
           </div>
-
-          {/* Botó eliminat */}
-
           {error && <p className="mt-4 text-sm text-red-600 text-center">{error}</p>}
         </div>
 
@@ -129,15 +131,14 @@ export default function Home() {
         {isLoading && (
           <div className="text-center my-6">
             <p className="text-blue-600 animate-pulse">Processant: {selectedFileName}...</p>
-            {/* Es podria afegir un spinner aquí */}
           </div>
         )}
 
         {/* Àrea de resultats */}
-        <div className="mt-6 border-t border-gray-200 pt-6">
+        <div className="mt-6">
           {convertedHtml ? (
             <div
-              className="prose prose-sm sm:prose lg:prose-lg xl:prose-xl max-w-none"
+              className="prose prose-sm max-w-none" // Simplificat classes prose, ajusta si cal
               dangerouslySetInnerHTML={{ __html: convertedHtml }}
             />
           ) : (

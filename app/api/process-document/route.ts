@@ -1,10 +1,9 @@
 // app/api/process-document/route.ts
-
 import { NextRequest, NextResponse } from 'next/server';
-import mammoth from 'mammoth'; // Importem la biblioteca instal·lada
+import mammoth from 'mammoth';
 
 export async function POST(request: NextRequest) {
-  console.log("API /api/process-document rebuda petició POST");
+  console.log("API /api/process-document rebuda petició POST"); // Mantenim aquest log bàsic
 
   try {
     const formData = await request.formData();
@@ -15,60 +14,51 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'No s\'ha pujat cap fitxer' }, { status: 400 });
     }
 
-    if (file.type !== 'application/vnd.openxmlformats-officedocument.wordprocessingml.document') {
-         console.warn(`Tipus de fitxer rebut no esperat: ${file.type}`);
-         // Podries afegir validació més estricta aquí si cal
-    }
-
+    // Ometem validació de tipus per simplicitat ara, però pots mantenir-la
     console.log(`Fitxer rebut: ${file.name}, Mida: ${file.size} bytes, Tipus: ${file.type}`);
 
     const arrayBuffer = await file.arrayBuffer();
     const buffer = Buffer.from(arrayBuffer);
 
-    // ---- CONFIGURACIÓ PER A TÍTOLS (H1-H4) ----
-    // Definim un mapeig d'estils. Busca paràgrafs (<p>) que tinguin aplicat
-    // l'estil de Word anomenat "Heading 1" (o "Títol 1", etc.) i els converteix a <h1>.
-    // ":fresh" assegura que es crea una nova etiqueta cada cop, ":separator" podria usar-se per llistes.
+    // Configurem Mammoth (mantenim el styleMap)
     const styleMap = [
-        "p[style-name='Heading 1'] => h1:fresh", // Anglès
-        "p[style-name='Heading 2'] => h2:fresh",
-        "p[style-name='Heading 3'] => h3:fresh",
-        "p[style-name='Heading 4'] => h4:fresh",
-        "p[style-name='Títol 1'] => h1:fresh",    // Català (Nom comú)
-        "p[style-name='Títol 2'] => h2:fresh",
-        "p[style-name='Títol 3'] => h3:fresh",
-        "p[style-name='Títol 4'] => h4:fresh",
-        "p[style-name='Título 1'] => h1:fresh",    // Castellà (Nom comú)
-        "p[style-name='Título 2'] => h2:fresh",
-        "p[style-name='Título 3'] => h3:fresh",
-        "p[style-name='Título 4'] => h4:fresh",
-        // Afegeix aquí altres noms d'estil si els teus documents utilitzen noms personalitzats per als títols
+        "p[style-name='Heading 1'] => h1:fresh", "p[style-name='Heading 2'] => h2:fresh",
+        "p[style-name='Heading 3'] => h3:fresh", "p[style-name='Heading 4'] => h4:fresh",
+        "p[style-name='Títol 1'] => h1:fresh", "p[style-name='Títol 2'] => h2:fresh",
+        "p[style-name='Títol 3'] => h3:fresh", "p[style-name='Títol 4'] => h4:fresh",
+        "p[style-name='Título 1'] => h1:fresh", "p[style-name='Título 2'] => h2:fresh",
+        "p[style-name='Título 3'] => h3:fresh", "p[style-name='Título 4'] => h4:fresh",
+        // Mantenim els mapejos per a estils de paràgraf si els vols provar després
+        "p[style-name='Body Text 2'] => p:fresh",
+        "p[style-name='Textoindependiente'] => p:fresh",
+        "p[style-name='Sangradetextonormal'] => p:fresh",
     ];
-
-    const mammothOptions = {
-         styleMap: styleMap
-         // Aquí es podrien afegir altres opcions de Mammoth si fossin necessàries
-    };
-    // ------------------------------------------
+    const mammothOptions = { styleMap: styleMap };
 
     console.log("Iniciant conversió amb Mammoth amb styleMap...");
-    // Passem les opcions a la funció de conversió
     const result = await mammoth.convertToHtml({ buffer }, mammothOptions);
-    const html = result.value;
+    const html = result.value; // HTML complet
     const messages = result.messages;
 
-    // Mantenim el log per verificar el resultat
-    console.log("===== HTML Generat amb StyleMap (Primers 1000 caràcters) =====");
-    console.log(html.substring(0, 1000));
-    console.log("============================================================");
+    // Eliminem el console.log de l'HTML d'aquí
 
     if (messages && messages.length > 0) {
+        // Mantenim l'avís per als missatges de Mammoth
         console.warn("Missatges de Mammoth durant la conversió:", messages);
     }
+    console.log("Conversió amb Mammoth completada."); // Mantenim aquest log
 
-    console.log("Conversió amb Mammoth completada.");
+    // ---- MODIFICACIÓ AQUÍ ----
+    // Creem un snippet per enviar al frontend per depurar
+    const htmlSnippet = html.substring(0, 1500); // Enviem els primers 1500 caràcters
 
-    return NextResponse.json({ html: html, messages: messages });
+    // Retornem l'HTML complet, el snippet i els missatges
+    return NextResponse.json({
+        html: html, // L'HTML complet per renderitzar
+        htmlSnippet: htmlSnippet, // El fragment per depurar a la consola del navegador
+        messages: messages
+    });
+    // -------------------------
 
   } catch (error) {
     console.error("Error processant el document:", error);
