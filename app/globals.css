@@ -1,9 +1,43 @@
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
-/* Fix per eliminar marges de paràgrafs dins cel·les de taula amb prose */
-.prose td > p {
+/* === Estils Millorats per a Taules amb Prose === */
+
+/* Control general de la taula: vores, amplada, scroll */
+.prose table {
+    border-collapse: collapse; /* Vores netes */
+    width: 100%; /* Intenta ocupar amplada disponible (però limitat per max-width) */
+    margin-top: 1.25em; /* Espai vertical abans/després de la taula */
+    margin-bottom: 1.25em;
+    border: 1px solid #e5e7eb; /* Vora exterior */
+  
+    /* Control d'amplada màxima i scroll horitzontal */
+    max-width: 100%;
+    display: block; /* Important per max-width/overflow en <table> */
+    overflow-x: auto;
+  }
+  
+  /* Estils per a TOTES les cel·les (capçalera i cos) */
+  .prose th,
+  .prose td {
+    border: 1px solid #e5e7eb;  /* VORA a totes les cel·les (inclou verticals) */
+    padding: 0.5em 0.75em;     /* Padding intern (vertical / horitzontal) */
+    vertical-align: top;       /* Alineació vertical per defecte */
+    /* Gestió de text llarg dins cel·les */
+    overflow-wrap: break-word;
+  }
+  
+  /* Estils específics per a cel·les de capçalera (si en tinguessis, <th>) */
+  .prose th {
+    text-align: left;          /* Alineació esquerra per capçaleres */
+    background-color: #f9fafb; /* Un fons lleugerament diferent per capçaleres */
+    font-weight: 600;          /* Negreta per capçaleres */
+  }
+  
+  /* >>> REGLA CLAU per espaiat vertical <<< */
+  /* Assegura't que aquesta regla hi és o afegeix-la: */
+  .prose td > p {
     margin-top: 0;
     margin-bottom: 0;
   }
-  /* Pots ajustar si necessites eliminar més estils del paràgraf dins la cel·la */
+  /* ============================================ */
