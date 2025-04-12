@@ -1,50 +1,26 @@
 // app/page.tsx
 'use client';
 
-import React, { useState, ChangeEvent } from 'react'; // Eliminat FormEvent
+import React, { useState, ChangeEvent } from 'react';
 
 export default function Home() {
-  const [selectedFile, setSelectedFile] = useState<File | null>(null);
+  // Estats
+  const [selectedFileName, setSelectedFileName] = useState<string | null>(null); // Només per mostrar el nom
   const [convertedHtml, setConvertedHtml] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState<boolean>(false);
   const [error, setError] = useState<string | null>(null);
   const [mammothMessages, setMammothMessages] = useState<any[]>([]);
 
-  const handleFileChange = (event: ChangeEvent<HTMLInputElement>) => {
-     if (event.target.files && event.target.files[0]) {
-       const file = event.target.files[0];
-       if (file.type === 'application/vnd.openxmlformats-officedocument.wordprocessingml.document') {
-          setSelectedFile(file);
-          setError(null);
-          setConvertedHtml(null);
-          setMammothMessages([]);
-       } else {
-          setSelectedFile(null);
-          setError('Si us plau, selecciona un fitxer .docx');
-          setConvertedHtml(null);
-          setMammothMessages([]);
-       }
-     } else {
-       setSelectedFile(null);
-     }
-  };
-
-  // Canviem el nom de la funció per claredat, ja no és un 'submit' de formulari
-  const handleUpload = async () => {
-    // event.preventDefault(); // Ja no és necessari perquè no hi ha formulari
-
-    if (!selectedFile) {
-      setError('Primer has de seleccionar un fitxer .docx');
-      return;
-    }
-
+  // Funció separada per gestionar la càrrega i conversió asíncrona
+  const triggerUpload = async (file: File) => {
+    // Inicia estat de càrrega (abans d'enviar)
     setIsLoading(true);
     setError(null);
-    setConvertedHtml(null);
+    setConvertedHtml(null); // Esborra resultat anterior
     setMammothMessages([]);
 
     const formData = new FormData();
-    formData.append('file', selectedFile);
+    formData.append('file', file);
 
     try {
       const response = await fetch('/api/process-document', {
@@ -54,23 +30,30 @@ export default function Home() {
 
       const contentType = response.headers.get("content-type");
 
+      // Gestió d'errors millorada
       if (!response.ok) {
-          let errorPayload: any = { error: `Error del servidor: ${response.status} ${response.statusText}`};
-          if (contentType && contentType.includes("application/json")) {
-               errorPayload = await response.json();
-          } else {
-              const rawErrorText = await response.text();
-              console.error("Resposta d'error no JSON rebuda del backend:", rawErrorText);
-              errorPayload.details = "Resposta d'error inesperada rebuda del servidor. Revisa la consola del navegador i els logs del backend.";
-          }
-          throw new Error(errorPayload.error || JSON.stringify(errorPayload));
+        let errorPayload: any = { error: `Error del servidor: ${response.status} ${response.statusText}` };
+        if (contentType && contentType.includes("application/json")) {
+          try {
+            errorPayload = await response.json();
+          } catch (e) { console.error("Error llegint error JSON", e); }
+        } else {
+          try {
+             const rawErrorText = await response.text();
+             console.error("Resposta d'error no JSON rebuda del backend:", rawErrorText);
+             errorPayload.details = "Resposta d'error inesperada rebuda del servidor.";
+          } catch (e) { console.error("Error llegint error Text", e); }
+        }
+        throw new Error(errorPayload.error || JSON.stringify(errorPayload));
       }
 
+      // Gestió de resposta correcta
       if (contentType && contentType.includes("application/json")) {
           const data = await response.json();
           setConvertedHtml(data.html);
           setMammothMessages(data.messages || []);
       } else {
+          // Si la resposta és OK però no JSON (inesperat)
           const rawText = await response.text();
           console.warn("Resposta OK però no és JSON:", rawText);
           throw new Error("Format de resposta inesperat rebut del servidor (no era JSON).");
@@ -79,10 +62,37 @@ export default function Home() {
     } catch (err) {
       console.error("Error durant el processament:", err);
       setError(err instanceof Error ? err.message : 'Error desconegut durant la càrrega');
-      setConvertedHtml(null);
+      setConvertedHtml(null); // Assegura esborrar en cas d'error
     } finally {
-      setIsLoading(false);
+      setIsLoading(false); // Finalitza estat de càrrega
     }
+  };
+
+  // Gestor de canvi de l'input de fitxer (ara inicia la càrrega)
+  const handleFileChange = (event: ChangeEvent<HTMLInputElement>) => {
+    if (event.target.files && event.target.files[0]) {
+      const file = event.target.files[0];
+      setSelectedFileName(file.name); // Mostra el nom del fitxer
+
+      // Validació del tipus
+      if (file.type === 'application/vnd.openxmlformats-officedocument.wordprocessingml.document') {
+        setError(null); // Esborra errors anteriors
+        triggerUpload(file); // <-- AQUÍ INICIEM LA CÀRREGA DIRECTAMENT
+      } else {
+        // Fitxer invàlid
+        setError('Si us plau, selecciona un fitxer .docx');
+        setConvertedHtml(null);
+        setMammothMessages([]);
+        setSelectedFileName('Cap fitxer seleccionat');
+      }
+    } else {
+      // L'usuari ha cancel·lat la selecció
+      setSelectedFileName(null);
+      // Opcional: esborrar altres estats si es vol
+    }
+
+    // Important: Reseteja el valor de l'input per permetre seleccionar el mateix fitxer una altra vegada
+    event.target.value = '';
   };
 
   return (
@@ -92,62 +102,61 @@ export default function Home() {
           Visor de Documents (.docx)
         </h1>
 
-        {/* Eliminem l'etiqueta <form> i utilitzem un div simple */}
+        {/* Àrea de càrrega simplificada */}
         <div className="mb-8 p-6 border border-gray-200 rounded-md bg-gray-50">
           <div className="mb-4">
-            <label htmlFor="fileInput" className="block text-sm font-medium text-gray-700 mb-2">
-              Selecciona un fitxer .docx:
+            {/* Fem que el label sigui clicable i amaguem l'input per defecte */}
+            <label htmlFor="fileInput" className="block text-sm font-medium text-gray-700 mb-1 cursor-pointer hover:text-blue-600 transition-colors duration-200">
+              {selectedFileName ? `Fitxer carregat: ${selectedFileName}` : 'Clica aquí per seleccionar un fitxer .docx'}
             </label>
             <input
               type="file"
               id="fileInput"
               onChange={handleFileChange}
               accept=".docx,application/vnd.openxmlformats-officedocument.wordprocessingml.document"
-              className="block w-full text-sm text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100 cursor-pointer"
-              // required ja no aplica directament sense formulari, la validació es fa a handleUpload
+              className="hidden" // Amaguem l'input visualment (opcional, es pot deixar visible)
             />
+            {/* Mostrem el nom aquí si es vol */}
+            {/* {selectedFileName && <p className="text-xs text-gray-500 mt-1">{selectedFileName}</p>} */}
           </div>
 
-          {/* Canviem a un botó normal amb onClick */}
-          <button
-            type="button" // Important: canviar de 'submit' a 'button'
-            onClick={handleUpload} // Cridem la funció directament amb onClick
-            disabled={isLoading || !selectedFile}
-            className="w-full px-4 py-2 bg-blue-600 text-white font-semibold rounded-md shadow-sm hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition duration-150 ease-in-out"
-          >
-            {isLoading ? 'Processant...' : 'Converteix i Mostra'}
-          </button>
+          {/* Botó eliminat */}
 
           {error && <p className="mt-4 text-sm text-red-600 text-center">{error}</p>}
         </div>
-        {/* ... resta del component (indicador de càrrega, àrea de resultats, missatges de mammoth) ... */}
-         {/* Indicador de càrrega */}
-         {isLoading && <p className="text-center text-blue-600 my-4">Processant el document, si us plau espera...</p>}
 
-         {/* Àrea per mostrar l'HTML convertit */}
-         <div className="mt-6 border-t border-gray-200 pt-6">
-            <h2 className="text-xl font-semibold text-gray-700 mb-4">Resultat de la Conversió:</h2>
-            {convertedHtml ? (
-                <div
-                    className="prose prose-sm sm:prose lg:prose-lg xl:prose-xl max-w-none"
-                    dangerouslySetInnerHTML={{ __html: convertedHtml }}
-                />
-            ) : (
-                !isLoading && <p className="text-gray-500 italic">Aquí es mostrarà el contingut del document convertit.</p>
-            )}
-         </div>
-
-         {/* Mostra missatges de Mammoth si n'hi ha */}
-         {mammothMessages && mammothMessages.length > 0 && (
-            <div className="mt-6 border-t border-gray-200 pt-6">
-                <h3 className="text-lg font-semibold text-orange-600 mb-2">Missatges de la Conversió (Mammoth):</h3>
-                <ul className="list-disc list-inside text-sm text-orange-700 bg-orange-50 p-4 rounded-md">
-                    {mammothMessages.map((msg, index) => (
-                        <li key={index}><strong>{msg.type}:</strong> {msg.message}</li>
-                    ))}
-                </ul>
-            </div>
+        {/* Indicador de càrrega */}
+        {isLoading && (
+          <div className="text-center my-6">
+            <p className="text-blue-600 animate-pulse">Processant: {selectedFileName}...</p>
+            {/* Es podria afegir un spinner aquí */}
+          </div>
         )}
+
+        {/* Àrea de resultats */}
+        <div className="mt-6 border-t border-gray-200 pt-6">
+          {convertedHtml ? (
+            <div
+              className="prose prose-sm sm:prose lg:prose-lg xl:prose-xl max-w-none"
+              dangerouslySetInnerHTML={{ __html: convertedHtml }}
+            />
+          ) : (
+            !isLoading && <p className="text-gray-500 italic text-center">Selecciona un fitxer .docx per visualitzar-ne el contingut.</p>
+          )}
+        </div>
+
+        {/* Àrea de missatges de Mammoth */}
+        {mammothMessages && mammothMessages.length > 0 && (
+          <div className="mt-6 border-t border-gray-200 pt-6">
+            <h3 className="text-lg font-semibold text-orange-600 mb-2">Missatges de la Conversió:</h3>
+            <ul className="list-disc list-inside text-sm text-orange-700 bg-orange-50 p-4 rounded-md">
+              {mammothMessages.map((msg, index) => (
+                <li key={index}><strong>{msg.type}:</strong> {msg.message}</li>
+              ))}
+            </ul>
+          </div>
+        )}
+
       </div>
     </main>
   );
