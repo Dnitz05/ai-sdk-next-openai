@@ -4,14 +4,14 @@
 import React, { useState, ChangeEvent } from 'react';
 
 export default function Home() {
-  // Estats (sense canvis)
+  // Estats
   const [selectedFileName, setSelectedFileName] = useState<string | null>(null);
   const [convertedHtml, setConvertedHtml] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState<boolean>(false);
   const [error, setError] = useState<string | null>(null);
   const [mammothMessages, setMammothMessages] = useState<any[]>([]);
 
-  // Funció triggerUpload (sense canvis)
+  // Funció triggerUpload
   const triggerUpload = async (file: File) => {
     setIsLoading(true);
     setError(null);
@@ -29,15 +29,15 @@ export default function Home() {
       }
       if (contentType && contentType.includes("application/json")) {
           const data = await response.json();
-          // Recorda treure aquest log si ja no el necessites per depurar
-          console.log("==== Snippet HTML Rebut del Backend ===="); console.log(data.htmlSnippet || "No snippet."); console.log("=======================================");
+          // Treiem el log del snippet si ja no cal
+          // console.log("==== Snippet HTML Rebut del Backend ===="); console.log(data.htmlSnippet || "No snippet."); console.log("=======================================");
           setConvertedHtml(data.html); setMammothMessages(data.messages || []);
       } else { const rawText = await response.text(); console.warn("Resposta OK però no és JSON:", rawText); throw new Error("Format de resposta inesperat."); }
     } catch (err) { console.error("Error processant:", err); setError(err instanceof Error ? err.message : 'Error desconegut'); setConvertedHtml(null);
     } finally { setIsLoading(false); }
   };
 
-  // Funció handleFileChange (sense canvis interns)
+  // Funció handleFileChange
   const handleFileChange = (event: ChangeEvent<HTMLInputElement>) => {
     if (event.target.files && event.target.files[0]) {
       const file = event.target.files[0];
@@ -47,19 +47,15 @@ export default function Home() {
     event.target.value = '';
   };
 
-  // --- JSX AMB CAPÇALERA SEPARADA ---
+  // JSX
   return (
     <main className="flex min-h-screen w-full flex-col items-center p-4 sm:p-8 bg-gray-200"> {/* Fons gris */}
 
-      {/* ===== INICI Capçalera Superior ===== */}
-      <div className="w-full max-w-2xl mx-auto flex items-center justify-between mb-4 sm:mb-6 px-1"> {/* Alineat amb el 'foli', espai entre títol i botó */}
-
-        {/* Títol actualitzat i més petit */}
+      {/* Capçalera WEB (oculta en imprimir) */}
+      <div className="web-header w-full max-w-xl mx-auto flex items-center justify-between mb-4 sm:mb-6 px-1"> {/* Alineat amb el nou max-w-xl */}
         <h2 className="text-base sm:text-lg font-semibold text-gray-600">
-          Nova Plantilla des de DOCX {/* TÍTOL ACTUALITZAT */}
+          Nova Plantilla des de DOCX
         </h2>
-
-        {/* Trigger de càrrega (botó/label més petit) */}
         <div>
           <label htmlFor="fileInput" className={`inline-flex items-center px-3 py-1.5 border border-transparent text-xs sm:text-sm font-medium rounded shadow-sm text-white ${isLoading ? 'bg-gray-400' : 'bg-blue-600 hover:bg-blue-700'} focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 transition ease-in-out duration-150 ${isLoading ? 'cursor-not-allowed' : 'cursor-pointer'}`}>
             {isLoading ? 'Processant...' : (selectedFileName ? 'Canvia Fitxer' : 'Selecciona Fitxer')}
@@ -74,22 +70,34 @@ export default function Home() {
           />
         </div>
       </div>
-      {/* ===== FINAL Capçalera Superior ===== */}
 
-      {/* Error (opcionalment fora del foli) */}
-       {error && <p className="w-full max-w-2xl mx-auto text-sm text-red-600 text-center mb-4 -mt-2">{error}</p>}
+      {/* Capçalera/Peu per a Impressió (ocults per defecte) */}
+      <div id="print-header" className="hidden print:block w-full max-w-xl mx-auto mb-4 text-center text-xs text-gray-500">
+         Informe Generat - {new Date().toLocaleDateString()}
+      </div>
+      <div id="print-footer" className="hidden print:block w-full max-w-xl mx-auto mt-8 text-center text-xs text-gray-500">
+         {/* Número de pàgina és complex, posem text estàtic */}
+         Document Intern
+      </div>
 
-      {/* ===== INICI "Foli" Blanc ===== */}
-      <div className="w-full max-w-2xl bg-white shadow-lg rounded-sm p-8 md:p-12 lg:p-16 my-4"> {/* Contingut principal */}
+      {/* Error (ocult en imprimir) */}
+       {error && <p className="web-error w-full max-w-xl mx-auto text-sm text-red-600 text-center mb-4 -mt-2">{error}</p>}
 
-        {/* Indicador de càrrega (opcional) */}
-        {/* {isLoading && ( <div className="text-center my-6"><p className="text-blue-600 animate-pulse">Processant...</p></div> )} */}
+      {/* "Foli" Blanc */}
+      <div className="print-content w-full max-w-xl bg-white shadow-lg rounded-sm p-8 md:p-12 lg:p-16 my-4"> {/* <<< CANVIAT a max-w-xl >>> */}
+
+        {/* Indicador de càrrega */}
+        {isLoading && (
+          <div className="text-center my-6">
+            <p className="text-blue-600 animate-pulse">Processant: {selectedFileName}...</p>
+          </div>
+        )}
 
         {/* Àrea de Resultats */}
         <div className="mt-1">
           {convertedHtml ? (
             <div
-              className="prose prose-sm max-w-none" // Revisa aquestes classes per ajustar l'estil del contingut
+              className="prose prose-sm max-w-none" // Mantenim prose-sm (base 12px per defecte), però sobreescrivim mides a globals.css
               dangerouslySetInnerHTML={{ __html: convertedHtml }}
             />
           ) : (
@@ -99,7 +107,7 @@ export default function Home() {
 
         {/* Àrea de Missatges de Mammoth */}
         {mammothMessages && mammothMessages.length > 0 && (
-           <div className="mt-6 border-t border-gray-200 pt-6">
+           <div className="mt-6 border-t border-gray-200 pt-6"> {/* Aquest div es podria ocultar en imprimir si no vols els missatges */}
              <h3 className="text-lg font-semibold text-orange-600 mb-2">Missatges de la Conversió:</h3>
              <ul className="list-disc list-inside text-sm text-orange-700 bg-orange-50 p-4 rounded-md">
                {mammothMessages.map((msg, index) => (
@@ -108,7 +116,7 @@ export default function Home() {
              </ul>
            </div>
         )}
-      </div> {/* ===== FINAL "Foli" Blanc ===== */}
+      </div> {/* Fi del "Foli" Blanc */}
     </main>
   );
 }
