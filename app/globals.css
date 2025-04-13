@@ -20,7 +20,7 @@
   /* Estils per a TOTES les cel·les (capçalera i cos) */
   .prose th,
   .prose td {
-    border: 1px solid #e5e7eb;  /* VORA a totes les cel·les (inclou verticals) */
+    border: 1px solid #6b7280;  /* VORA a totes les cel·les (inclou verticals) */
     padding: 0.5em 0.75em;     /* Padding intern (vertical / horitzontal) */
     vertical-align: top;       /* Alineació vertical per defecte */
     /* Gestió de text llarg dins cel·les */
