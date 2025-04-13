@@ -13,10 +13,9 @@ export default function Home() {
 
   // Funció separada per gestionar la càrrega i conversió asíncrona
   const triggerUpload = async (file: File) => {
-    // Inicia estat de càrrega (abans d'enviar)
     setIsLoading(true);
     setError(null);
-    setConvertedHtml(null); // Esborra resultat anterior
+    setConvertedHtml(null);
     setMammothMessages([]);
 
     const formData = new FormData();
@@ -30,13 +29,10 @@ export default function Home() {
 
       const contentType = response.headers.get("content-type");
 
-      // Gestió d'errors millorada
       if (!response.ok) {
         let errorPayload: any = { error: `Error del servidor: ${response.status} ${response.statusText}` };
         if (contentType && contentType.includes("application/json")) {
-          try {
-            errorPayload = await response.json();
-          } catch (e) { console.error("Error llegint error JSON", e); }
+          try { errorPayload = await response.json(); } catch (e) { console.error("Error llegint error JSON", e); }
         } else {
           try {
              const rawErrorText = await response.text();
@@ -47,20 +43,15 @@ export default function Home() {
         throw new Error(errorPayload.error || JSON.stringify(errorPayload));
       }
 
-      // Gestió de resposta correcta
       if (contentType && contentType.includes("application/json")) {
           const data = await response.json();
-
-          // ---- LÍNIA AFEGIDA PER DEPURAR AL NAVEGADOR ----
+          // Log per depurar l'HTML rebut al navegador
           console.log("==== Snippet HTML Rebut del Backend ====");
-          console.log(data.htmlSnippet || "No s'ha rebut cap snippet."); // Mostra el fragment d'HTML a la consola del NAVEGADOR
+          console.log(data.htmlSnippet || "No s'ha rebut cap snippet.");
           console.log("=======================================");
-          // -----------------------------------------------
-
-          setConvertedHtml(data.html); // Seguim guardant l'HTML complet per renderitzar
+          setConvertedHtml(data.html);
           setMammothMessages(data.messages || []);
       } else {
-          // Si la resposta és OK però no JSON (inesperat)
           const rawText = await response.text();
           console.warn("Resposta OK però no és JSON:", rawText);
           throw new Error("Format de resposta inesperat rebut del servidor (no era JSON).");
@@ -69,48 +60,44 @@ export default function Home() {
     } catch (err) {
       console.error("Error durant el processament:", err);
       setError(err instanceof Error ? err.message : 'Error desconegut durant la càrrega');
-      setConvertedHtml(null); // Assegura esborrar en cas d'error
+      setConvertedHtml(null);
     } finally {
-      setIsLoading(false); // Finalitza estat de càrrega
+      setIsLoading(false);
     }
   };
 
-  // Gestor de canvi de l'input de fitxer (ara inicia la càrrega)
+  // Gestor de canvi de l'input de fitxer
   const handleFileChange = (event: ChangeEvent<HTMLInputElement>) => {
     if (event.target.files && event.target.files[0]) {
       const file = event.target.files[0];
-      setSelectedFileName(file.name); // Mostra el nom del fitxer
+      setSelectedFileName(file.name);
 
-      // Validació del tipus
       if (file.type === 'application/vnd.openxmlformats-officedocument.wordprocessingml.document') {
-        setError(null); // Esborra errors anteriors
-        triggerUpload(file); // <-- AQUÍ INICIEM LA CÀRREGA DIRECTAMENT
+        setError(null);
+        triggerUpload(file);
       } else {
-        // Fitxer invàlid
         setError('Si us plau, selecciona un fitxer .docx');
         setConvertedHtml(null);
         setMammothMessages([]);
         setSelectedFileName('Cap fitxer seleccionat');
       }
     } else {
-      // L'usuari ha cancel·lat la selecció
       setSelectedFileName(null);
     }
-
-    // Reseteja el valor de l'input per permetre seleccionar el mateix fitxer una altra vegada
     event.target.value = '';
   };
 
-  // JSX per renderitzar la pàgina
+  // JSX
   return (
-    <main className="flex min-h-screen flex-col items-center p-6 md:p-12 lg:p-24 bg-gray-100">
-      <div className="w-full max-w-3xl bg-white shadow-lg rounded-sm p-8 md:p-12 lg:p-16 my-8"> {/* Ajustat max-width i padding per aspecte A4 */}
+    <main className="flex min-h-screen flex-col items-center p-4 sm:p-8 md:p-12 lg:p-16 bg-gray-200"> {/* Fons gris */}
+      {/* Contenidor blanc central, més estret per simular marges A4 */}
+      <div className="w-full max-w-2xl bg-white shadow-lg rounded-sm p-8 md:p-12 lg:p-16 my-8"> {/* Canviat a max-w-2xl */}
 
         <h1 className="text-3xl font-bold text-center text-gray-800 mb-8">
            Visor de Documents (.docx)
         </h1>
 
-        {/* Àrea de càrrega simplificada */}
+        {/* Àrea de càrrega */}
         <div className="mb-8 p-6 border border-gray-200 rounded-md bg-gray-50">
           <div className="mb-4">
             <label htmlFor="fileInput" className="block text-sm font-medium text-gray-700 mb-1 cursor-pointer hover:text-blue-600 transition-colors duration-200">
@@ -121,7 +108,7 @@ export default function Home() {
               id="fileInput"
               onChange={handleFileChange}
               accept=".docx,application/vnd.openxmlformats-officedocument.wordprocessingml.document"
-              className="hidden" // Amaguem visualment
+              className="hidden"
             />
           </div>
           {error && <p className="mt-4 text-sm text-red-600 text-center">{error}</p>}
@@ -138,7 +125,7 @@ export default function Home() {
         <div className="mt-6">
           {convertedHtml ? (
             <div
-              className="prose prose-sm max-w-none" // Simplificat classes prose, ajusta si cal
+              className="prose prose-sm max-w-none" // Mantenim prose-sm i max-w-none per ara, ajusta si cal
               dangerouslySetInnerHTML={{ __html: convertedHtml }}
             />
           ) : (
