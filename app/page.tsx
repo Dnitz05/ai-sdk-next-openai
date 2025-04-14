@@ -17,7 +17,7 @@ export default function Home() {
   // <<< useEffect per canviar l'estat només al client >>>
   useEffect(() => {
     setIsMounted(true); // Aquesta línia només s'executa al navegador, no al servidor
-  }, []); // L'array buit fa que s'executi només un cop després del muntatge inicial
+  }, []); // L'array buit fa que s'executi només un cop després del muntatge inicial, si
 
   // Funció triggerUpload (sense canvis interns, però traiem el log de snippet si ja no cal)
   const triggerUpload = async (file: File) => {
