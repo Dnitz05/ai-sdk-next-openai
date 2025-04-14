@@ -25,12 +25,13 @@
 
 .prose th,
 .prose td {
-   /* <<< VORES INTERNES AMB PUNTS MÉS GRANS/FORTS >>> */
-  border: 3px dotted #9ca3af;  /* 3px (més gruixut), DE PUNTS, gris mig (Tailwind gray-400) */
-  /* ------------------------------------------------ */
-  padding: 0.25em 0.3em;     /* Padding reduït */
-  vertical-align: top;
-  overflow-wrap: break-word;
+ /* <<< TORNA A L'ESTIL ANTERIOR (DISCONTINU/CLAR) >>> */
+ border: 2px dotted #d1d5db;  /* 2px, DISCONTÍNUA, gris clar (Tailwind gray-300) */
+ /* ------------------------------------------------- */
+ /* Assegura't que la resta (padding, etc.) és correcte */
+ padding: 0.25em 0.3em;
+ vertical-align: top;
+ overflow-wrap: break-word;
 }
 
 .prose th {
