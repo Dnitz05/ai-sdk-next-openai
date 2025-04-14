@@ -5,87 +5,117 @@
 
 /* === INICI Estils Personalitzats per a Visor DOCX === */
 
-/* --- Ajustos Mida Font i Interlineat Base --- */
+/* --- Ajustos Mida Font --- */
 .prose {
-  font-size: 11px;    /* Mida text normal sol·licitada */
-  line-height: 1.5;   /* Interlineat base (pots provar 1.4 si vols menys espai amb <br>) */
-  max-width: none;    /* Permet que .prose ocupi l'amplada del contenidor pare */
+  font-size: 11px; /* Mida text normal */
+  line-height: 1.6; /* Interlineat base */
 }
-
-/* Mides específiques per a títols dins de .prose */
-/* Funciona perquè ara sabem que Mammoth genera <h1>, <h2>, etc. */
+/* Recordatori: Això NOMÉS funciona si Mammoth genera <h1>, <h2>, etc. */
 .prose h1 {
-  font-size: 14px;    /* Mida H1 sol·licitada */
-  font-weight: 700;   /* Més negreta */
+  font-size: 14px; /* Mida H1 */
+  font-weight: 700; /* Més negreta per H1 */
   margin-top: 0;
-  margin-bottom: 1em; /* Espai després H1 */
+  margin-bottom: 1em;
   line-height: 1.3;
 }
 .prose h2 {
-  font-size: 12px;    /* Mida H2 sol·licitada */
+  font-size: 12px; /* Mida H2 */
   font-weight: 600;
-  margin-top: 1.8em;  /* Espai abans H2 */
-  margin-bottom: 0.8em; /* Espai després H2 */
+  margin-top: 1.6em; /* Adjusted spacing */
+  margin-bottom: 0.8em;
   line-height: 1.3;
 }
 .prose h3 {
-  font-size: 11px;    /* Mida H3 sol·licitada */
+  font-size: 11px; /* Mida H3 */
   font-weight: 600;
-   margin-top: 1.6em;
+  margin-top: 1.5em; /* Adjusted spacing */
   margin-bottom: 0.6em;
   line-height: 1.3;
 }
 .prose h4 {
-  font-size: 10px;    /* Mida H4 sol·licitada */
+  font-size: 10px; /* Mida H4 */
   font-weight: 600;
-   margin-top: 1.5em;
+  margin-top: 1.4em; /* Adjusted spacing */
   margin-bottom: 0.5em;
   line-height: 1.3;
 }
 
-/* --- Estils Millorats per a Taules amb Prose --- */
+/* --- Estils per a Taules (Aspecte "No Acabat") --- */
 .prose table {
-  border-collapse: collapse;
-  width: 100%;
+  border-collapse: collapse; /* Per a vores netes */
+  width: 100%; /* Ocupa amplada disponible (però limitat per max-width) */
   margin-top: 1.25em;
   margin-bottom: 1.25em;
-  border: 1px solid #4b5563; /* Vora exterior taula gris fosc */
+  /* border: none; */ /* <<-- Assegura't que NO hi ha vora a la taula exterior */
   max-width: 100%;
-  display: block;
+  display: block;  /* Important per max-width/overflow en <table> */
   overflow-x: auto; /* Scroll horitzontal si taula és massa ampla */
 }
+
 .prose th,
 .prose td {
-  border: 1px solid #4b5563;  /* Vora cel·les gris fosc */
+  /* <<< VORES INTERNES MODIFICADES >>> */
+  border: 2px dashed #d1d5db;  /* 2px (més gruixut), discontínua, gris clar (Tailwind gray-300) */
+  /* --------------------------------- */
   padding: 0.25em 0.3em;     /* Padding vertical i horitzontal REDUÏTS */
-  vertical-align: top;
-  overflow-wrap: break-word;
+  vertical-align: top;       /* Alineació vertical */
+  overflow-wrap: break-word; /* Trenca paraules llargues */
 }
-.prose th { /* Estils específics capçalera taula */
+
+/* Estils específics per a cel·les de capçalera (si en tinguessis, <th>) */
+.prose th {
   text-align: left;
-  background-color: #f9fafb;
+  background-color: #f9fafb; /* Fons clar per capçaleres */
   font-weight: 600;
+   /* La vora definida a dalt també s'aplica aquí */
 }
-.prose td > p { /* Elimina marges de paràgrafs DINS de cel·les */
+
+/* Fix per eliminar marges de paràgrafs dins cel·les de taula */
+.prose td > p {
   margin-top: 0;
   margin-bottom: 0;
-  line-height: 1.3; /* Interlineat més ajustat dins de cel·les */
+  line-height: 1.3; /* Interlineat més ajustat dins de taules */
 }
+/* === FINAL Estils Taules === */
 
 /* === FINAL Estils Personalitzats === */
 
 
 /* === INICI Estils Impressió === */
 @media print {
+  /* Oculta elements web */
   .web-header, .web-error { display: none !important; }
+
+  /* Mostra capçalera/peu d'impressió */
   #print-header, #print-footer { display: block; }
-  #print-header { position: fixed; top: 0; left: 0; right: 0; padding: 0.5cm 1.5cm; border-bottom: 1px solid #ccc; background-color: white; font-size: 9pt; }
-  #print-footer { position: fixed; bottom: 0; left: 0; right: 0; padding: 0.5cm 1.5cm; border-top: 1px solid #ccc; background-color: white; font-size: 9pt; }
+
+  #print-header {
+    position: fixed; top: 0; left: 0; right: 0;
+    padding: 0.5cm 1.5cm; border-bottom: 1px solid #ccc; background-color: white; font-size: 9pt;
+  }
+  #print-footer {
+    position: fixed; bottom: 0; left: 0; right: 0;
+    padding: 0.5cm 1.5cm; border-top: 1px solid #ccc; background-color: white; font-size: 9pt;
+  }
+
+  /* Ajusta marges del body per deixar espai */
   body { margin-top: 2cm; margin-bottom: 2cm; }
-  .print-content { box-shadow: none; border: none; margin: 0; padding: 0; max-width: none; border-radius: 0; background-color: transparent; }
-  .prose { font-size: 10pt; line-height: 1.4; } /* Mida/interlineat diferent per imprimir */
-  .prose table { display: table; overflow-x: visible; width: auto; max-width: 100%; break-inside: avoid; } /* Evitar tallar taules en imprimir */
-  .prose + .border-t { display: none; } /* Amaga missatges Mammoth */
+
+  /* Ajusta estil del contenidor principal del contingut */
+  .print-content {
+    box-shadow: none; border: none; margin: 0; padding: 0; max-width: none; border-radius: 0; background-color: transparent;
+  }
+
+  /* Ajusta estils de prose per imprimir si cal */
+  .prose { font-size: 10pt; line-height: 1.5; }
+  .prose table { display: table; overflow-x: visible; width: auto; max-width: 100%; border: 1px solid #ccc; /* Potser vora sòlida fina per imprimir? */ }
+  .prose th, .prose td { border: 1px solid #ccc; padding: 0.25em 0.4em; } /* Vora sòlida fina? */
+  .prose h1 { font-size: 13pt; margin-bottom: 0.8em; }
+  .prose h2 { font-size: 11pt; margin-top: 1.5em; margin-bottom: 0.6em; }
+
+  /* Amaga missatges de Mammoth */
+  .prose + .border-t { display: none; }
+
   @page { margin: 1.5cm; }
 }
 /* === FINAL Estils Impressió === */
