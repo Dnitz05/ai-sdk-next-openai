@@ -31,9 +31,9 @@
 .prose th,
 .prose td {
   border: 2px dotted #d1d5db;  /* 2px, DE PUNTS, gris clar (Tailwind gray-300) */
-  padding: 0.25em 0.3em;     /* Padding vertical i horitzontal REDUÏTS */
+  padding: 0.25em 0.3em;    /* Padding vertical i horitzontal REDUÏTS */
   /* <<< ALINEACIÓ VERTICAL CORREGIDA >>> */
-  vertical-align: middle;     /* Utilitza 'middle' per centrar en cel·les de taula */
+  vertical-align: middle;    /* Utilitza 'middle' per centrar en cel·les de taula */
   /* ---------------------------------- */
   overflow-wrap: break-word; /* Trenca paraules llargues */
 }
@@ -43,7 +43,7 @@
   text-align: left;
   background-color: #f9fafb; /* Fons clar per capçaleres */
   font-weight: 600;
-   /* La vora i alineació vertical definida a dalt també s'aplica aquí */
+    /* La vora i alineació vertical definida a dalt també s'aplica aquí */
 }
 
 /* Fix per eliminar marges de paràgrafs dins cel·les de taula */
@@ -53,6 +53,29 @@
   line-height: 1.3; /* Interlineat més ajustat dins de taules */
 }
 /* === FINAL Estils Taules === */
+
+/* === INICI Estils per Placeholders Vinculats === */
+/* Estil per als placeholders vinculats mitjançant selecció */
+.linked-placeholder {
+  background-color: #fff2a8; /* Un groc pàlid */
+  border: 1px dashed #e6bf00; /* Vora discontínua groguenca */
+  padding: 0.05em 0.1em;
+  border-radius: 3px;
+  cursor: default; /* O un altre cursor si vols indicar acció */
+  /* Important per evitar problemes amb seleccions posteriors */
+  user-select: none; /* Evita que el propi placeholder sigui fàcilment seleccionable */
+  -webkit-user-select: none;
+  -moz-user-select: none;
+  -ms-user-select: none;
+}
+
+/* Opcional: estil per quan es passa el ratolí per sobre */
+.linked-placeholder:hover {
+  background-color: #ffe97a;
+  border-color: #cca300;
+}
+/* === FINAL Estils Placeholders === */
+
 
 /* === FINAL Estils Personalitzats === */
 
@@ -74,7 +97,8 @@
   .prose th, .prose td { border: 1px solid #ccc; padding: 0.25em 0.4em; vertical-align: middle; } /* Vora sòlida fina per impressió i centrat */
   .prose h1 { font-size: 13pt; margin-bottom: 0.8em; }
   .prose h2 { font-size: 11pt; margin-top: 1.5em; margin-bottom: 0.6em; }
-  .prose + .border-t { display: none; }
+  .prose + .border-t { display: none; } /* Oculta línies separadores si n'hi ha */
+  .linked-placeholder { background-color: transparent !important; border: none !important; padding: 0 !important; user-select: text !important; } /* Simplifica placeholders en imprimir */
   @page { margin: 1.5cm; }
 }
 /* === FINAL Estils Impressió === */
