@@ -30,7 +30,7 @@
  /* ------------------------------------------------- */
  /* Assegura't que la resta (padding, etc.) és correcte */
  padding: 0.25em 0.3em;
- vertical-align: top;
+ vertical-align: center;
  overflow-wrap: break-word;
 }
 
