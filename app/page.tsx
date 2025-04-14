@@ -4,6 +4,8 @@
 import React, { useState, ChangeEvent, useEffect, useRef, MouseEvent, useMemo } from 'react';
 import * as XLSX from 'xlsx';
 
+// Recorda comprovar que no hi hagi comentaris '//' perduts dins del JSX retornat!
+
 export default function Home() {
     // --- Estats DOCX ---
     const [selectedFileName, setSelectedFileName] = useState<string | null>(null);
@@ -14,7 +16,7 @@ export default function Home() {
 
     // --- Estats EXCEL ---
     const [selectedExcelFileName, setSelectedExcelFileName] = useState<string | null>(null);
-    const [excelData, setExcelData] = useState<any[] | null>(null);
+    const [excelData, setExcelData] = useState<any[] | null>(null); // Encara pot ser útil per al context
     const [isParsingExcel, setIsParsingExcel] = useState<boolean>(false);
     const [excelError, setExcelError] = useState<string | null>(null);
 
@@ -23,15 +25,15 @@ export default function Home() {
 
     // --- Estats per Vinculació Excel ---
     const [excelHeaders, setExcelHeaders] = useState<string[]>([]);
-    const [selectedExcelHeader, setSelectedExcelHeader] = useState<string | null>(null);
-    const [links, setLinks] = useState<{ id: string; excelHeader: string; selectedText: string }[]>([]);
+    const [selectedExcelHeader, setSelectedExcelHeader] = useState<string | null>(null); // Capçalera seleccionada per VINCULAR
+    const [links, setLinks] = useState<{ id: string; excelHeader: string; selectedText: string }[]>([]); // Vincles creats
 
     // --- Estats per IA ---
-    const [aiSelectedText, setAiSelectedText] = useState<string | null>(null);
-    const [aiSelectedRangeId, setAiSelectedRangeId] = useState<string | null>(null);
-    const [aiUserPrompt, setAiUserPrompt] = useState<string>('');
-    const [aiResult, setAiResult] = useState<string | null>(null);
-    const [isLoadingAI, setIsLoadingAI] = useState<boolean>(false);
+    const [aiSelectedText, setAiSelectedText] = useState<string | null>(null); // Text seleccionat per enviar a IA
+    const [aiSelectedRangeId, setAiSelectedRangeId] = useState<string | null>(null); // ID de l'span temporal per reemplaçar amb IA
+    const [aiUserPrompt, setAiUserPrompt] = useState<string>(''); // Prompt de l'usuari per IA
+    const [aiResult, setAiResult] = useState<string | null>(null); // Resultat de la IA
+    const [isLoadingAI, setIsLoadingAI] = useState<boolean>(false); // Estat de càrrega per IA
 
     // --- Estat per Guardar Configuració ---
     type SaveStatus = 'idle' | 'saving' | 'success' | 'error';
@@ -56,6 +58,12 @@ export default function Home() {
             setSaveStatus('idle'); setSaveMessage(null);
         }
     }, [convertedHtml, isLoadingDocx, docxError, isMounted]);
+
+    // === NOU useEffect per depurar l'estat aiSelectedText ===
+    useEffect(() => {
+        console.log("DEBUG AI STATE: aiSelectedText ha canviat a:", aiSelectedText);
+    }, [aiSelectedText]);
+    // ======================================================
 
     // Càlcul dels recomptes de vincles
     const linkCounts = useMemo(() => {
@@ -116,11 +124,10 @@ export default function Home() {
             setSelectedExcelFileName(file.name);
             setExcelError(null);
             setExcelData(null);
-            // Quan es (re)carrega excel dins el sidebar, reseteja vinculació i IA
             setSelectedExcelHeader(null);
             setExcelHeaders([]);
             setAiSelectedText(null); setAiSelectedRangeId(null); setAiUserPrompt(''); setAiResult(null);
-            setSaveStatus('idle'); setSaveMessage(null); // Reseteja estat guardat també
+            setSaveStatus('idle'); setSaveMessage(null);
 
             const validMimeTypes = ['application/vnd.ms-excel', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'];
             const isValidType = validMimeTypes.includes(file.type) || file.name.toLowerCase().endsWith('.xlsx') || file.name.toLowerCase().endsWith('.xls');
@@ -176,49 +183,29 @@ export default function Home() {
 
     // --- Funcions per Vinculació Excel i Selecció IA ---
     const handleSelectHeader = (header: string) => {
-        // Si seleccionem capçalera, netegem selecció IA
-        setAiSelectedText(null);
-        setAiSelectedRangeId(null);
-        setAiUserPrompt('');
-        setAiResult(null);
-        setSelectedExcelHeader(header); // Marquem per VINCULAR
+        setAiSelectedText(null); setAiSelectedRangeId(null); setAiUserPrompt(''); setAiResult(null); // Neteja IA
+        setSelectedExcelHeader(header); // Activa per vincular
     };
 
     const handleTextSelection = () => {
-        if (!isLinkerSidebarOpen) return;
+        console.log("DEBUG HANDLER: handleTextSelection iniciat."); // <<< LOG 1
+        if (!isLinkerSidebarOpen) {
+            console.log("DEBUG HANDLER: Sidebar tancat, sortint.");
+            return;
+        }
         const selection = window.getSelection();
 
-        // Cas 1: Vincular (Capçalera seleccionada)
+        // <<< LOG 2: Comprova el valor de la capçalera abans de decidir
+        console.log("DEBUG HANDLER: Valor de selectedExcelHeader =", selectedExcelHeader);
+
+        // Cas 1: Vincular
         if (selectedExcelHeader && selection && !selection.isCollapsed && selection.rangeCount > 0 && contentRef.current) {
-            const originalSelectedText = selection.toString();
-            if (!originalSelectedText.trim()) { selection.removeAllRanges(); return; }
-            const range = selection.getRangeAt(0);
-            const linkId = `link-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`;
-            if (!contentRef.current.contains(range.commonAncestorContainer)) {
-                console.warn("Ignorant selecció (link): Fora de l'àrea de contingut.");
-                selection.removeAllRanges(); setSelectedExcelHeader(null); return;
-            }
-            const span = document.createElement('span');
-            span.className = 'linked-placeholder';
-            span.dataset.excelHeader = selectedExcelHeader;
-            span.dataset.linkId = linkId;
-            span.textContent = selectedExcelHeader;
-            try {
-                range.deleteContents();
-                range.insertNode(span);
-                const updatedHtml = contentRef.current.innerHTML;
-                setConvertedHtml(updatedHtml);
-                setLinks(prevLinks => [...prevLinks, { id: linkId, excelHeader: selectedExcelHeader!, selectedText: selectedExcelHeader! }]);
-            } catch (error) {
-                console.error("Error modificant DOM (link):", error);
-                alert("Error: La selecció no es pot vincular. Intenta seleccionar text dins d'un mateix paràgraf.");
-            } finally {
-                selection.removeAllRanges();
-                setSelectedExcelHeader(null); // Reseteja capçalera
-            }
+            console.log("DEBUG HANDLER: Entrant a lògica de VINCULACIÓ.");
+            const originalSelectedText = selection.toString(); if (!originalSelectedText.trim()) { selection.removeAllRanges(); return; } const range = selection.getRangeAt(0); const linkId = `link-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`; if (!contentRef.current.contains(range.commonAncestorContainer)) { console.warn("Ignorant selecció (link): Fora de l'àrea de contingut."); selection.removeAllRanges(); setSelectedExcelHeader(null); return; } const span = document.createElement('span'); span.className = 'linked-placeholder'; span.dataset.excelHeader = selectedExcelHeader; span.dataset.linkId = linkId; span.textContent = selectedExcelHeader; try { range.deleteContents(); range.insertNode(span); const updatedHtml = contentRef.current.innerHTML; setConvertedHtml(updatedHtml); setLinks(prevLinks => [...prevLinks, { id: linkId, excelHeader: selectedExcelHeader!, selectedText: selectedExcelHeader! }]); } catch (error) { console.error("Error modificant DOM (link):", error); alert("Error: La selecció no es pot vincular. Intenta seleccionar text dins d'un mateix paràgraf."); } finally { selection.removeAllRanges(); setSelectedExcelHeader(null); }
         }
-        // Cas 2: Preparar per IA (Capçalera NO seleccionada)
+        // Cas 2: Preparar per IA
         else if (!selectedExcelHeader && selection && !selection.isCollapsed && selection.rangeCount > 0 && contentRef.current) {
+            console.log("DEBUG HANDLER: Entrant a lògica de PREPARACIÓ IA."); // <<< LOG 3a
             const currentSelectedText = selection.toString();
             if (!currentSelectedText.trim()) { selection.removeAllRanges(); return; }
             const range = selection.getRangeAt(0);
@@ -226,52 +213,35 @@ export default function Home() {
                 console.warn("Ignorant selecció (IA): Fora de l'àrea de contingut.");
                 selection.removeAllRanges(); return;
             }
-
-            // Neteja marca IA anterior (si existeix)
-            if (aiSelectedRangeId) {
-                const previousSpan = contentRef.current.querySelector(`span[data-ai-id="${aiSelectedRangeId}"]`);
-                if (previousSpan) {
-                    previousSpan.removeAttribute("data-ai-id");
-                    // Potser caldria actualitzar HTML aquí si trèiem atributs/classes
-                }
-            }
+            // Neteja marca IA anterior
+            if (aiSelectedRangeId) { const previousSpan = contentRef.current.querySelector(`span[data-ai-id="${aiSelectedRangeId}"]`); if (previousSpan) { previousSpan.removeAttribute("data-ai-id"); } }
 
             const tempId = `temp-ai-${Date.now()}`;
             const tempSpan = document.createElement('span');
             tempSpan.dataset.aiId = tempId;
-
             try {
-                range.surroundContents(tempSpan); // Embolcalla preservant text original
+                range.surroundContents(tempSpan);
                 const updatedHtmlWithTempSpan = contentRef.current.innerHTML;
-                setConvertedHtml(updatedHtmlWithTempSpan); // Actualitza HTML amb marcador
+                setConvertedHtml(updatedHtmlWithTempSpan);
 
-                console.log("DEBUG: Setting AI state -> Text:", currentSelectedText, "ID:", tempId);
-                setAiSelectedText(currentSelectedText);
+                // <<< LOG 3b: Comprova si s'intenta actualitzar l'estat
+                console.log("DEBUG HANDLER: Setting AI state -> Text:", currentSelectedText, "ID:", tempId);
+                setAiSelectedText(currentSelectedText); // <-- Actualitza estat
                 setAiSelectedRangeId(tempId);
                 setAiUserPrompt('');
                 setAiResult(null);
                 setIsLoadingAI(false);
 
-            } catch (error) {
-                console.error("Error embolcallant text per IA:", error);
-                // No fem alert, ignorem si falla l'embolcall
-            } finally {
-                selection.removeAllRanges(); // Desselecciona text al navegador
-            }
+            } catch (error) { console.error("Error embolcallant text per IA:", error);
+            } finally { selection.removeAllRanges(); }
+        } else {
+             console.log("DEBUG HANDLER: No s'ha entrat ni a vincular ni a preparar IA (Selecció buida, header actiu, o fora de rang?)."); // <<< LOG 3c
         }
     };
 
     // Funció per tancar el sidebar
     const handleCloseSidebar = () => {
-        if (aiSelectedRangeId && contentRef.current) {
-            const previousSpan = contentRef.current.querySelector(`span[data-ai-id="${aiSelectedRangeId}"]`);
-            if (previousSpan) { previousSpan.removeAttribute("data-ai-id"); }
-        }
-        setIsLinkerSidebarOpen(false);
-        setSelectedExcelHeader(null);
-        setAiSelectedText(null);
-        setAiSelectedRangeId(null);
-        setSaveStatus('idle'); setSaveMessage(null);
+        if (aiSelectedRangeId && contentRef.current) { const previousSpan = contentRef.current.querySelector(`span[data-ai-id="${aiSelectedRangeId}"]`); if (previousSpan) { previousSpan.removeAttribute("data-ai-id"); } } setIsLinkerSidebarOpen(false); setSelectedExcelHeader(null); setAiSelectedText(null); setAiSelectedRangeId(null); setSaveStatus('idle'); setSaveMessage(null);
     };
 
     // --- Funcions per Eines IA (Esquelets) ---
@@ -294,13 +264,12 @@ export default function Home() {
         const configuration = { baseDocxName: selectedFileName, excelInfo: { fileName: selectedExcelFileName, headers: excelHeaders, }, linkMappings: links, finalHtml: finalHtml };
         console.log("Configuració a desar:", configuration);
         try {
-            // const response = await fetch('/api/save-configuration', { method: 'POST', ... });
-            // if (!response.ok) throw new Error('Error al guardar');
-            await new Promise(resolve => setTimeout(resolve, 1000)); // Simulació
+            // Simulació API
+            await new Promise(resolve => setTimeout(resolve, 1000));
             console.log("Configuració guardada (simulat).");
             setSaveMessage("Configuració guardada amb èxit!");
             setSaveStatus('success');
-            // NO tanquem el sidebar handleCloseSidebar();
+            // NO tanquem sidebar: // handleCloseSidebar();
         } catch (error) {
             console.error("Error desant configuració:", error);
             setSaveMessage(`Error al guardar: ${error instanceof Error ? error.message : 'Error desconegut'}`);
@@ -310,6 +279,16 @@ export default function Home() {
 
 
     // --- JSX ---
+    // <<< LOG 4: Comprova valors just abans de renderitzar
+    if (isMounted) {
+        console.log("DEBUG RENDER CHECK:", {
+            isSidebarOpen: isLinkerSidebarOpen,
+            hasHeaders: excelHeaders.length > 0,
+            hasAiText: !!aiSelectedText, // Converteix a booleà
+            aiSelectedTextValue: aiSelectedText // Mostra el valor real
+        });
+    }
+
     return (
         <main className="flex min-h-screen w-full flex-col items-center p-4 sm:p-8 bg-gray-100">
 
@@ -419,16 +398,14 @@ export default function Home() {
                                             })}
                                         </div>
                                         {selectedExcelHeader && (<p className="text-xs text-gray-600 mb-1 bg-blue-50 p-2 rounded border border-blue-200"> <strong className="text-blue-700 block mb-1">PAS 2 (cont.):</strong> Ara, selecciona el text al document (a l'esquerra) que vols <strong className='text-red-600'>REEMPLAÇAR</strong> per:<br /> <span className="font-semibold italic">{selectedExcelHeader}</span> </p>)}
-                                        {!selectedExcelHeader && (<p className="text-xs text-gray-500 mb-1 p-2"> <strong className="block mb-1">PAS 2 (cont.):</strong> Esperant selecció de text per vincular... </p>)}
+                                        {!selectedExcelHeader && (<p className="text-xs text-gray-500 mb-1 p-2"> <strong className="block mb-1">PAS 2 (cont.):</strong> Esperant selecció de text per vincular... (O selecciona text per a la IA) </p>)}
                                         <div className="mt-4 text-center border-t pt-3"> <label htmlFor="excelInputSidebarChange" className="text-xs text-blue-600 hover:text-blue-800 underline cursor-pointer"> Canviar fitxer Excel ({selectedExcelFileName || 'cap seleccionat'}) </label> <input type="file" id="excelInputSidebarChange" onChange={handleExcelFileChange} accept=".xlsx, .xls" className="hidden" disabled={isParsingExcel} /> </div>
                                     </div>
                                 )}
 
                                 {/* Pas 3: Eines IA (Visible si hi ha text seleccionat PER A IA) */}
-                                {/* La condició és que hi hagi text seleccionat per IA (aiSelectedText != null) */}
-                                {/* I idealment, que també hi hagi excel carregat per mantenir consistència */}
-                                {excelHeaders.length > 0 && aiSelectedText && (
-                                    <div className="mt-4 pt-4 border-t">
+                                {excelHeaders.length > 0 && aiSelectedText && ( // Només si hi ha excel carregat I text per IA seleccionat
+                                    <div className="mt-4 pt-4 border-t border-indigo-200">
                                         <h4 className="text-sm font-medium text-gray-700 mb-2">Pas 3: Eines IA</h4>
                                         <div className='p-3 border rounded bg-indigo-50 space-y-3 border-indigo-200'>
                                             <div>
@@ -436,7 +413,6 @@ export default function Home() {
                                                 <p className="text-xs text-gray-800 bg-white p-2 border rounded max-h-20 overflow-y-auto">
                                                     {aiSelectedText}
                                                 </p>
-                                                {/* <input type="hidden" value={aiSelectedRangeId || ''} /> */}
                                             </div>
                                             <div>
                                                 <label htmlFor="aiPrompt" className='block text-xs font-medium text-gray-600 mb-1'>
@@ -459,9 +435,7 @@ export default function Home() {
                                             >
                                                 {isLoadingAI ? 'Processant IA...' : 'Processar amb IA'}
                                             </button>
-
-                                            {/* Resultat IA */}
-                                            {isLoadingAI && ( <p className="text-center text-xs text-indigo-600 animate-pulse">Esperant resposta de la IA...</p> )}
+                                            {isLoadingAI && (<p className="text-center text-xs text-indigo-600 animate-pulse">Esperant resposta de la IA...</p>)}
                                             {aiResult && !isLoadingAI && (
                                                 <div className='mt-3 p-3 border rounded bg-white space-y-2'>
                                                     <p className='text-xs font-medium text-gray-700'>Resultat IA:</p>
@@ -478,9 +452,8 @@ export default function Home() {
                                 )}
                                 {/* Missatge si no hi ha Excel carregat però es selecciona text */}
                                 {excelHeaders.length === 0 && aiSelectedText && (
-                                    <p className="text-xs text-orange-500 text-center p-2 border-t mt-4 pt-4">Has seleccionat text, però necessites carregar un fitxer Excel per poder utilitzar les Eines IA en aquest flux.</p>
+                                     <p className="text-xs text-orange-500 text-center p-2 border-t mt-4 pt-4">Has seleccionat text, però necessites carregar un fitxer Excel primer.</p>
                                 )}
-
 
                             </div> {/* Fi Contingut Principal Sidebar */}
 
@@ -488,7 +461,7 @@ export default function Home() {
                             <div className="mt-auto pt-4 border-t flex-shrink-0 space-y-2">
                                 <button
                                     onClick={handleSaveConfiguration}
-                                    disabled={saveStatus === 'saving'} // Deshabilita només mentre guarda
+                                    disabled={saveStatus === 'saving'}
                                     className={`w-full px-4 py-2 text-sm font-medium rounded shadow-sm transition ease-in-out duration-150 ${saveStatus === 'saving' ? 'bg-gray-400 text-gray-600 cursor-wait' : 'bg-purple-600 text-white hover:bg-purple-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-purple-500'}`}
                                 >
                                     {saveStatus === 'saving' ? 'Guardant...' : 'Guardar Configuració'}
