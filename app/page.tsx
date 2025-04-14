@@ -14,12 +14,12 @@ export default function Home() {
 
   // --- Estats EXCEL ---
   const [selectedExcelFileName, setSelectedExcelFileName] = useState<string | null>(null);
-  const [excelData, setExcelData] = useState<any[] | null>(null);
+  const [excelData, setExcelData] = useState<any[] | null>(null); // Ara només s'usa per obtenir capçaleres? O el guardem igual? Guardem-lo.
   const [isParsingExcel, setIsParsingExcel] = useState<boolean>(false);
   const [excelError, setExcelError] = useState<string | null>(null);
 
   // --- Estat del Sidebar de Vinculació ---
-  const [isLinkerSidebarOpen, setIsLinkerSidebarOpen] = useState(false);
+  const [isLinkerSidebarOpen, setIsLinkerSidebarOpen] = useState(false); // Estat per al sidebar
 
   // --- Estats per Vinculació ---
   const [excelHeaders, setExcelHeaders] = useState<string[]>([]);
@@ -36,14 +36,27 @@ export default function Home() {
     setIsMounted(true);
   }, []);
 
+  // --- useEffect per obrir el sidebar automàticament ---
+  useEffect(() => {
+    // Obre el sidebar quan el DOCX està llest
+    if (isMounted && convertedHtml && !isLoadingDocx && !docxError) {
+      console.log("DOCX processat, obrint sidebar...");
+      setIsLinkerSidebarOpen(true);
+      // Mantenim l'estat anterior de l'excel/vinculació per si es tanca/obre
+    }
+     // Si es carrega un nou DOCX, triggerUpload ja s'encarrega de tancar i resetejar
+  }, [convertedHtml, isLoadingDocx, docxError, isMounted]); // Dependències clau
+
   // --- Funcions DOCX ---
   const triggerUpload = async (file: File) => {
     setIsLoadingDocx(true); setDocxError(null); setConvertedHtml(null); setMammothMessages([]);
+    // Reset complet Excel i Sidebar/Vinculació
     setSelectedExcelFileName(null); setExcelData(null); setExcelError(null);
     setExcelHeaders([]); setSelectedExcelHeader(null); setIsLinkerSidebarOpen(false); setLinks([]);
     const formData = new FormData(); formData.append('file', file);
     try {
       const response = await fetch('/api/process-document', { method: 'POST', body: formData });
+      // ... (fetch i gestió errors API) ...
       const contentType = response.headers.get("content-type");
       if (!response.ok) {
         let errorPayload: any = { error: `Error del servidor: ${response.status} ${response.statusText}` };
@@ -52,7 +65,7 @@ export default function Home() {
       }
       if (contentType && contentType.includes("application/json")) {
           const data = await response.json();
-          setConvertedHtml(data.html);
+          setConvertedHtml(data.html); // <-- Dispararà l'useEffect per obrir sidebar
           setMammothMessages(data.messages || []);
       } else { const rawText = await response.text(); console.warn("Resposta OK però no és JSON:", rawText); throw new Error("Format de resposta inesperat."); }
     } catch (err) { console.error("Error processant DOCX:", err); setDocxError(err instanceof Error ? err.message : 'Error desconegut'); setConvertedHtml(null);
@@ -67,6 +80,7 @@ export default function Home() {
         setDocxError(null); triggerUpload(file);
       } else {
         setDocxError('Si us plau, selecciona un fitxer .docx'); setConvertedHtml(null); setMammothMessages([]); setSelectedFileName('Cap fitxer seleccionat');
+        // Reset complet Excel i Sidebar/Vinculació
         setSelectedExcelFileName(null); setExcelData(null); setExcelError(null);
         setExcelHeaders([]); setSelectedExcelHeader(null); setIsLinkerSidebarOpen(false); setLinks([]);
       }
@@ -74,16 +88,17 @@ export default function Home() {
     event.target.value = '';
   };
 
-  // --- Funcions EXCEL ---
+  // --- Funcions EXCEL (ara cridada des del sidebar) ---
   const handleExcelFileChange = (event: ChangeEvent<HTMLInputElement>) => {
     if (event.target.files && event.target.files[0]) {
       const file = event.target.files[0];
       setSelectedExcelFileName(file.name);
       setExcelError(null);
       setExcelData(null);
-      setIsLinkerSidebarOpen(false);
+      // Quan es (re)carrega excel dins el sidebar, reseteja vinculació
       setSelectedExcelHeader(null);
       setExcelHeaders([]);
+      // No resetejem 'links' aquí
 
       const validMimeTypes = [ 'application/vnd.ms-excel', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' ];
       const isValidType = validMimeTypes.includes(file.type) || file.name.toLowerCase().endsWith('.xlsx') || file.name.toLowerCase().endsWith('.xls');
@@ -103,14 +118,17 @@ export default function Home() {
                   const firstRow = jsonData[0];
                   if (firstRow && typeof firstRow === 'object') {
                       const headers = Object.keys(firstRow);
-                      setExcelHeaders(headers);
+                      setExcelHeaders(headers); // <-- Guardem capçaleres
                   } else {
                       console.warn("Excel: Primera fila no és un objecte.");
                       setExcelHeaders([]);
                       setExcelError("Format de fila inesperat a l'Excel.");
                   }
-              } else { setExcelHeaders([]); }
-              setExcelData(jsonData);
+              } else {
+                   setExcelHeaders([]);
+                   setExcelError("L'Excel sembla buit o no té dades a la primera fulla.");
+              }
+              setExcelData(jsonData); // Guardem dades (per si calen més tard)
             } else { throw new Error("No s'ha pogut llegir el contingut del fitxer."); }
           } catch (err) {
             console.error("Error parsejant Excel:", err);
@@ -129,12 +147,16 @@ export default function Home() {
         setSelectedExcelFileName(null); setExcelData(null); setExcelHeaders([]);
       }
     } else {
-      setSelectedExcelFileName(null); setExcelData(null); setExcelHeaders([]);
+      // Si l'usuari cancel·la la selecció de fitxer
+      // No fem res aquí per no perdre l'estat anterior si ja hi havia un excel carregat
     }
-    event.target.value = '';
+     // Important: Resetejar el valor de l'input per permetre tornar a seleccionar EL MATEIX fitxer
+     if (event.target) {
+        event.target.value = '';
+     }
   };
 
-  // --- Funcions per Vinculació ---
+  // --- Funcions per Vinculació (sense canvis interns) ---
   const handleSelectHeader = (header: string) => {
     setSelectedExcelHeader(header);
     console.log("Capçalera seleccionada per vincular:", header);
@@ -143,44 +165,41 @@ export default function Home() {
   const handleTextSelection = () => {
     if (!isLinkerSidebarOpen || !selectedExcelHeader) { return; }
     const selection = window.getSelection();
-
     if (selection && !selection.isCollapsed && selection.rangeCount > 0 && contentRef.current) {
       const originalSelectedText = selection.toString();
       if (!originalSelectedText.trim()) { return; }
       const range = selection.getRangeAt(0);
       const linkId = `link-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`;
-
       if (!contentRef.current.contains(range.commonAncestorContainer)) {
           console.warn("Ignorant selecció: Fora de l'àrea de contingut permesa.");
           selection.removeAllRanges(); return;
       }
-      console.log(`Intentant REEMPLAÇAR "${originalSelectedText}" amb placeholder per "${selectedExcelHeader}" (ID: ${linkId})`);
       const span = document.createElement('span');
       span.className = 'linked-placeholder';
       span.dataset.excelHeader = selectedExcelHeader;
       span.dataset.linkId = linkId;
-      span.textContent = selectedExcelHeader;
-
+      span.textContent = selectedExcelHeader; // Reemplaça amb la capçalera
       try {
         range.deleteContents();
         range.insertNode(span);
         const updatedHtml = contentRef.current.innerHTML;
-        setConvertedHtml(updatedHtml);
+        setConvertedHtml(updatedHtml); // <-- Actualitza estat React
         setLinks(prevLinks => [...prevLinks, { id: linkId, excelHeader: selectedExcelHeader!, selectedText: selectedExcelHeader! }]);
         console.log("Placeholder inserit amb èxit.");
       } catch (error) {
-        console.error("Error modificant el DOM per inserir placeholder:", error);
-        alert("Error: No s'ha pogut inserir el placeholder a la selecció. Intenta seleccionar text dins d'un mateix paràgraf.");
+        console.error("Error modificant el DOM:", error);
+        alert("Error: La selecció no es pot vincular. Intenta seleccionar text dins d'un mateix paràgraf.");
       } finally {
         selection.removeAllRanges();
-        setSelectedExcelHeader(null);
+        setSelectedExcelHeader(null); // Reseteja capçalera seleccionada
       }
     }
   };
 
+  // Funció per tancar el sidebar
   const handleCloseSidebar = () => {
       setIsLinkerSidebarOpen(false);
-      setSelectedExcelHeader(null);
+      setSelectedExcelHeader(null); // Reseteja selecció en tancar
   };
 
   // --- JSX ---
@@ -193,6 +212,7 @@ export default function Home() {
           Visor DOCX / Processador Excel
         </h2>
         <div className="flex w-full sm:w-auto">
+          {/* Només botó DOCX */}
           <div>
             <label htmlFor="fileInput" className={`inline-flex items-center justify-center px-3 py-1.5 border border-transparent text-xs sm:text-sm font-medium rounded shadow-sm text-white whitespace-nowrap ${isLoadingDocx ? 'bg-gray-400' : 'bg-blue-600 hover:bg-blue-700'} focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 transition ease-in-out duration-150 ${isLoadingDocx || isParsingExcel ? 'cursor-not-allowed' : 'cursor-pointer'}`}>
               {isLoadingDocx ? 'Processant DOCX...' : (selectedFileName ? 'Canvia DOCX' : 'Selecciona DOCX')}
@@ -236,34 +256,8 @@ export default function Home() {
                   </div>
               )}
 
-              {/* Input Simple per Carregar Excel */}
-              {isMounted && convertedHtml && !isLoadingDocx && !docxError && (
-                  <div className="mt-8 pt-6 border-t border-gray-200">
-                      <h3 className="text-md font-semibold text-gray-700 mb-3">Pas 2: Carregar Dades des d'Excel (Opcional)</h3>
-                      <div className="flex flex-col sm:flex-row items-center gap-3 p-4 border rounded bg-gray-50">
-                          <label htmlFor="excelInputSimple" className={`inline-flex items-center justify-center px-3 py-1.5 border border-transparent text-xs sm:text-sm font-medium rounded shadow-sm text-white whitespace-nowrap ${isParsingExcel ? 'bg-gray-400' : 'bg-green-600 hover:bg-green-700'} focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-green-500 transition ease-in-out duration-150 ${isParsingExcel ? 'cursor-not-allowed' : 'cursor-pointer'}`}>
-                              {isParsingExcel ? 'Processant...' : (selectedExcelFileName ? 'Canvia Excel' : 'Selecciona Excel')}
-                          </label>
-                          <input type="file" id="excelInputSimple" onChange={handleExcelFileChange} accept=".xlsx, .xls" className="hidden" disabled={isParsingExcel} />
-                          {selectedExcelFileName && !isParsingExcel && (<span className="text-sm text-gray-600 italic">({selectedExcelFileName})</span>)}
-                          {isParsingExcel && (<div className="text-center"><p className="text-green-600 animate-pulse text-sm">Processant...</p></div>)}
-                      </div>
-                      {excelError && (<p className="text-sm text-red-600 mt-2">{excelError}</p>)}
-                  </div>
-              )}
-
-               {/* Botó per Obrir Sidebar de Vinculació */}
-               {isMounted && convertedHtml && excelHeaders.length > 0 && !isLoadingDocx && !isParsingExcel && !docxError && !excelError && (
-                 <div className="mt-6 pt-6 border-t border-gray-200 text-center">
-                    <button
-                      onClick={() => setIsLinkerSidebarOpen(true)}
-                      className="px-4 py-2 bg-blue-600 text-white text-sm font-medium rounded shadow-sm hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 transition ease-in-out duration-150"
-                      disabled={isLinkerSidebarOpen}
-                    >
-                        Pas 3: Vincular Dades Excel amb Text
-                    </button>
-                 </div>
-               )}
+              {/* === Eliminat l'input simple d'Excel d'aquí === */}
+              {/* === Eliminat el botó "Vincular" d'aquí === */}
 
               {/* Visualització Vincles (Debug) */}
               {links && links.length > 0 && (
@@ -276,25 +270,60 @@ export default function Home() {
               )}
           </div> {/* Fi Columna Esquerra (Foli) */}
 
-          {/* Columna Dreta: Sidebar de Vinculació */}
-          {isMounted && isLinkerSidebarOpen && (
-              <aside className="w-72 flex-shrink-0 my-4 relative">
-                 <div className="sticky top-4 p-4 bg-white rounded shadow-lg border max-h-[calc(100vh-2rem)] overflow-y-auto">
-                      <div className="flex justify-between items-center mb-3 pb-2 border-b">
-                          <h3 className="text-md font-semibold text-blue-700">Vincular Capçaleres</h3>
+
+          {/* --- Columna Dreta: Sidebar de Vinculació (Ara s'obre automàticament) --- */}
+          {isMounted && isLinkerSidebarOpen && ( // La condició d'obertura ara depèn de l'useEffect
+              <aside className="w-80 flex-shrink-0 my-4 relative"> {/* Amplada lleugerament més gran */}
+                 <div className="sticky top-4 p-4 bg-white rounded shadow-lg border max-h-[calc(100vh-2rem)] overflow-y-auto flex flex-col"> {/* flex col */}
+                      {/* Capçalera Sidebar */}
+                      <div className="flex justify-between items-center mb-3 pb-2 border-b flex-shrink-0">
+                          <h3 className="text-md font-semibold text-blue-700">Vincular Dades Excel</h3>
                           <button onClick={handleCloseSidebar} className="text-gray-400 hover:text-gray-600 text-xl font-bold" aria-label="Tancar panell">&times;</button>
                       </div>
-                      <p className="text-xs text-gray-600 mb-2">1. Clica una capçalera d'Excel:</p>
-                      <div className="flex flex-col gap-1 mb-4 max-h-48 overflow-y-auto pr-1">
-                          {excelHeaders.map(header => (
-                              <button key={header} onClick={() => handleSelectHeader(header)} className={`w-full text-left px-2 py-1 border rounded text-xs font-medium transition-colors break-words ${selectedExcelHeader === header ? 'bg-blue-500 text-white border-blue-600 ring-2 ring-blue-300' : 'bg-white text-blue-700 border-blue-300 hover:bg-blue-100'}`} > {header} </button>
-                          ))}
-                      </div>
-                      {/* === LÍNIA CORREGIDA === */}
-                      {selectedExcelHeader && ( <p className="text-xs text-gray-600 mb-1 bg-blue-50 p-2 rounded border border-blue-200"> <strong className="text-blue-700 block mb-1">PAS 2:</strong> Ara, selecciona el text al document (a l'esquerra) que vols <strong className='text-red-600'>REEMPLAÇAR</strong> per:<br/> <span className="font-semibold italic">{selectedExcelHeader}</span> </p> )}
-                      {/* ======================= */}
-                      {!selectedExcelHeader && excelHeaders.length > 0 && ( <p className="text-xs text-gray-500 mb-1 p-2"> <strong className="block mb-1">PAS 2:</strong> Esperant selecció de text... </p> )}
-                      {excelHeaders.length === 0 && ( <p className="text-xs text-red-500 mb-1 p-2">No s'han trobat capçaleres a l'Excel.</p> )}
+
+                      {/* Contingut principal del Sidebar (amb scroll si cal) */}
+                      <div className="flex-grow overflow-y-auto space-y-4 pr-1">
+
+                          {/* === Pas 1: Carregar Excel (si no hi ha capçaleres) === */}
+                          {excelHeaders.length === 0 && (
+                              <div className="p-3 border border-dashed border-gray-300 rounded">
+                                  <p className="text-sm font-medium text-gray-700 mb-2">Pas 1: Carregar Excel</p>
+                                  <div className="flex flex-col items-start gap-2">
+                                      <label htmlFor="excelInputSidebar" className={`inline-flex items-center justify-center px-3 py-1.5 border border-transparent text-xs sm:text-sm font-medium rounded shadow-sm text-white whitespace-nowrap ${isParsingExcel ? 'bg-gray-400' : 'bg-green-600 hover:bg-green-700'} focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-green-500 transition ease-in-out duration-150 ${isParsingExcel ? 'cursor-not-allowed' : 'cursor-pointer'}`}>
+                                          {isParsingExcel ? 'Processant...' : (selectedExcelFileName ? 'Canvia Fitxer' : 'Selecciona Excel')}
+                                      </label>
+                                      <input type="file" id="excelInputSidebar" onChange={handleExcelFileChange} accept=".xlsx, .xls" className="hidden" disabled={isParsingExcel} />
+                                      {selectedExcelFileName && !isParsingExcel && (<span className="text-xs text-gray-500 italic">({selectedExcelFileName})</span>)}
+                                  </div>
+                                  {isParsingExcel && (<div className="text-center mt-2"><p className="text-green-600 animate-pulse text-xs">Processant...</p></div>)}
+                                  {excelError && (<p className="text-xs text-red-600 mt-2">{excelError}</p>)}
+                                  {!selectedExcelFileName && !isParsingExcel && !excelError && (<p className="text-xs text-gray-400 mt-2 italic">Puja un fitxer per veure les capçaleres.</p>)}
+                              </div>
+                          )}
+
+                          {/* === Pas 2: Vincular (si hi ha capçaleres) === */}
+                          {excelHeaders.length > 0 && (
+                              <div>
+                                  <p className="text-sm font-medium text-gray-700 mb-1">Pas 2: Vincular</p>
+                                  <p className="text-xs text-gray-600 mb-2">1. Clica una capçalera d'Excel:</p>
+                                  <div className="flex flex-col gap-1 mb-4 max-h-48 overflow-y-auto pr-1 border rounded p-2 bg-gray-50">
+                                      {excelHeaders.map(header => (
+                                          <button key={header} onClick={() => handleSelectHeader(header)} className={`w-full text-left px-2 py-1 border rounded text-xs font-medium transition-colors break-words ${selectedExcelHeader === header ? 'bg-blue-500 text-white border-blue-600 ring-2 ring-blue-300' : 'bg-white text-blue-700 border-blue-300 hover:bg-blue-100'}`} > {header} </button>
+                                      ))}
+                                  </div>
+                                  {selectedExcelHeader && ( <p className="text-xs text-gray-600 mb-1 bg-blue-50 p-2 rounded border border-blue-200"> <strong className="text-blue-700 block mb-1">PAS 2 (cont.):</strong> Ara, selecciona el text al document (a l'esquerra) que vols <strong className='text-red-600'>REEMPLAÇAR</strong> per:<br/> <span className="font-semibold italic">{selectedExcelHeader}</span> </p> )}
+                                  {!selectedExcelHeader && ( <p className="text-xs text-gray-500 mb-1 p-2"> <strong className="block mb-1">PAS 2 (cont.):</strong> Esperant selecció de text... </p> )}
+
+                                  {/* Opció per canviar l'Excel carregat */}
+                                  <div className="mt-4 text-center border-t pt-3">
+                                       <label htmlFor="excelInputSidebarChange" className="text-xs text-blue-600 hover:text-blue-800 underline cursor-pointer">
+                                            Canviar fitxer Excel ({selectedExcelFileName || 'cap seleccionat'})
+                                       </label>
+                                       <input type="file" id="excelInputSidebarChange" onChange={handleExcelFileChange} accept=".xlsx, .xls" className="hidden" disabled={isParsingExcel}/>
+                                  </div>
+                              </div>
+                          )}
+                      </div> {/* Fi Contingut Principal Sidebar */}
                  </div>
               </aside>
           )} {/* Fi Sidebar */}
