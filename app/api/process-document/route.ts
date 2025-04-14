@@ -9,22 +9,37 @@ export async function POST(request: NextRequest) {
 
   try {
     const formData = await request.formData();
-    // Obtenim el valor, podria ser File, string o null
+    // Obtenim el valor associat a la clau 'file'
     const file = formData.get('file');
 
-    // ---- COMPROVACIÓ MILLORADA ----
-    // Comprovem si realment és un objecte File i no és null o un string
-    if (!(file instanceof File)) {
-      console.error("No s'ha trobat un fitxer vàlid (File object) a la petició.");
-      return NextResponse.json({ error: 'No s\'ha pujat un fitxer vàlid' }, { status: 400 });
+    // ---- COMPROVACIÓ CORREGIDA (DUCK TYPING) ----
+    // Comprovem si 'file' és un objecte i té les propietats/mètodes essencials
+    // Aquesta comprovació és segura en l'entorn Node.js
+    if (
+        !file ||
+        typeof file !== 'object' ||
+        !('arrayBuffer' in file) ||
+        !('name' in file) ||
+        !('size' in file) ||
+        !('type' in file) ||
+        typeof file.arrayBuffer !== 'function' // Assegura que arrayBuffer és una funció
+       ) {
+         console.error("L'element 'file' rebut no sembla un objecte File vàlid (format inesperat).");
+         // Opcional: Log per depurar què s'ha rebut realment
+         console.log("Tipus rebut:", typeof file);
+         if (file && typeof file === 'object') console.log("Propietats rebudes:", Object.keys(file));
+         return NextResponse.json({ error: 'No s\'ha pujat un fitxer vàlid (format inesperat)' }, { status: 400 });
     }
-    // Si passem d'aquí, TypeScript sap que 'file' ÉS un objecte File i no pot ser null
-    // ------------------------------
+    // Si passem d'aquí, sabem que 'file' té l'aparença d'un fitxer
+    // Ajudem TypeScript definint la forma esperada (sense usar 'File' del navegador)
+    const fileObject = file as { name: string; size: number; type: string; arrayBuffer: () => Promise<ArrayBuffer> };
+    // ---------------------------------------------
 
-    // Ara podem accedir a les propietats de 'file' amb seguretat
-    console.log(`Fitxer rebut: ${file.name}, Mida: ${file.size} bytes, Tipus: ${file.type}`);
+    // Ara utilitzem fileObject per accedir a les propietats/mètodes amb seguretat
+    console.log(`Fitxer rebut: ${fileObject.name}, Mida: ${fileObject.size} bytes, Tipus: ${fileObject.type}`);
 
-    const arrayBuffer = await file.arrayBuffer();
+    // Obtenim l'ArrayBuffer i el convertim a Buffer de Node.js
+    const arrayBuffer = await fileObject.arrayBuffer(); // Utilitzem fileObject
     const buffer = Buffer.from(arrayBuffer);
 
     // --- Opcions i StyleMap de Mammoth (sense canvis) ---
@@ -33,13 +48,14 @@ export async function POST(request: NextRequest) {
         "p[style-name='Títol 1'] => h1:fresh", "p[style-name='Títol 2'] => h2:fresh", "p[style-name='Títol 3'] => h3:fresh", "p[style-name='Títol 4'] => h4:fresh",
         "p[style-name='Título 1'] => h1:fresh", "p[style-name='Título 2'] => h2:fresh", "p[style-name='Título 3'] => h3:fresh", "p[style-name='Título 4'] => h4:fresh",
         "p[style-name='Body Text'] => p:fresh", "p[style-name='Body Text Indent'] => p:fresh", "p[style-name='Body Text 2'] => p:fresh",
-         // "p[style-name='Título 4'] => p.signature-line:fresh", // Mapeig H4 a signatura si s'escull
+        // "p[style-name='Título 4'] => p.signature-line:fresh", // Mapeig H4 a signatura si s'escull
     ];
     const mammothOptions = { styleMap: styleMap };
     // ----------------------------------------------------
 
     console.log("Iniciant conversió amb Mammoth amb styleMap actualitzat...");
-    const result = await mammoth.convertToHtml({ buffer }, mammothOptions);
+    // Passem el buffer a Mammoth
+    const result = await mammoth.convertToHtml({ buffer: buffer }, mammothOptions);
     const rawHtml = result.value;
     const messages = result.messages;
 
@@ -54,11 +70,19 @@ export async function POST(request: NextRequest) {
     console.log("Neteja d'HTML completada.");
     // ---------------------------------------------
 
-    // Retornem l'HTML netejat
+    // Retornem l'HTML netejat i els missatges
+    console.log("Retornant resposta JSON amb HTML i missatges.");
     return NextResponse.json({ html: cleanedHtml, messages: messages });
 
   } catch (error) {
-    console.error("Error processant el document:", error);
-    return NextResponse.json({ error: 'Error intern processant el document', details: error instanceof Error ? error.message : String(error) }, { status: 500 });
+    console.error("Error CRÍTIC processant el document:", error); // Log més detallat de l'error
+    // Retornem un error 500 amb detalls si és possible
+    return NextResponse.json({
+        error: 'Error intern processant el document',
+        details: error instanceof Error ? error.message : String(error),
+        // Opcional: Incloure stack trace en desenvolupament
+        // stack: process.env.NODE_ENV === 'development' && error instanceof Error ? error.stack : undefined
+        },
+        { status: 500 });
   }
 }
