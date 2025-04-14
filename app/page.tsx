@@ -24,7 +24,7 @@ export default function Home() {
   // --- Estats per Vinculació ---
   const [excelHeaders, setExcelHeaders] = useState<string[]>([]);
   const [selectedExcelHeader, setSelectedExcelHeader] = useState<string | null>(null);
-  const [links, setLinks] = useState<{ id: string; excelHeader: string; selectedText: string }[]>([]); // selectedText ara guardarà el nom de la capçalera
+  const [links, setLinks] = useState<{ id: string; excelHeader: string; selectedText: string }[]>([]);
 
   // --- Refs ---
   const contentRef = useRef<HTMLDivElement>(null);
@@ -35,9 +35,6 @@ export default function Home() {
   useEffect(() => {
     setIsMounted(true);
   }, []);
-
-  // useEffect per obrir sidebar (canviat de modal a sidebar)
-  // No, aquest useEffect ja no és necessari, l'obrim amb botó
 
   // --- Funcions DOCX ---
   const triggerUpload = async (file: File) => {
@@ -84,7 +81,7 @@ export default function Home() {
       setSelectedExcelFileName(file.name);
       setExcelError(null);
       setExcelData(null);
-      setIsLinkerSidebarOpen(false); // Tanquem sidebar si es carrega nou excel
+      setIsLinkerSidebarOpen(false);
       setSelectedExcelHeader(null);
       setExcelHeaders([]);
 
@@ -143,17 +140,13 @@ export default function Home() {
     console.log("Capçalera seleccionada per vincular:", header);
   };
 
-  // ===== Funció handleTextSelection MODIFICADA =====
   const handleTextSelection = () => {
-    if (!isLinkerSidebarOpen || !selectedExcelHeader) {
-      return;
-    }
+    if (!isLinkerSidebarOpen || !selectedExcelHeader) { return; }
     const selection = window.getSelection();
 
     if (selection && !selection.isCollapsed && selection.rangeCount > 0 && contentRef.current) {
-      const originalSelectedText = selection.toString(); // Guardem l'original per si de cas
+      const originalSelectedText = selection.toString();
       if (!originalSelectedText.trim()) { return; }
-
       const range = selection.getRangeAt(0);
       const linkId = `link-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`;
 
@@ -161,48 +154,36 @@ export default function Home() {
           console.warn("Ignorant selecció: Fora de l'àrea de contingut permesa.");
           selection.removeAllRanges(); return;
       }
-
       console.log(`Intentant REEMPLAÇAR "${originalSelectedText}" amb placeholder per "${selectedExcelHeader}" (ID: ${linkId})`);
-
-      // Crea l'element span per al placeholder
       const span = document.createElement('span');
       span.className = 'linked-placeholder';
       span.dataset.excelHeader = selectedExcelHeader;
       span.dataset.linkId = linkId;
-      // *** CANVI CLAU: Assignem el NOM de la capçalera com a text ***
       span.textContent = selectedExcelHeader;
 
       try {
-        // *** CANVI CLAU: Esborrem contingut i inserim el nou span ***
-        range.deleteContents(); // Esborra el text original seleccionat
-        range.insertNode(span); // Insereix el nou span amb el nom de la capçalera
-
-        // CRÍTIC: Llegeix l'HTML modificat i actualitza l'estat de React
+        range.deleteContents();
+        range.insertNode(span);
         const updatedHtml = contentRef.current.innerHTML;
-        setConvertedHtml(updatedHtml); // Fa persistent el canvi
-
-        // Guarda la informació del vincle (guardem el nom de la capçalera com a text ara)
+        setConvertedHtml(updatedHtml);
         setLinks(prevLinks => [...prevLinks, { id: linkId, excelHeader: selectedExcelHeader!, selectedText: selectedExcelHeader! }]);
-
         console.log("Placeholder inserit amb èxit.");
-
       } catch (error) {
         console.error("Error modificant el DOM per inserir placeholder:", error);
         alert("Error: No s'ha pogut inserir el placeholder a la selecció. Intenta seleccionar text dins d'un mateix paràgraf.");
       } finally {
         selection.removeAllRanges();
-        setSelectedExcelHeader(null); // Reseteja capçalera seleccionada
+        setSelectedExcelHeader(null);
       }
     }
   };
 
-  // Funció per tancar el sidebar
   const handleCloseSidebar = () => {
       setIsLinkerSidebarOpen(false);
       setSelectedExcelHeader(null);
   };
 
-  // --- JSX (Sense canvis estructurals, només la lògica de handleTextSelection canvia) ---
+  // --- JSX ---
   return (
     <main className="flex min-h-screen w-full flex-col items-center p-4 sm:p-8 bg-gray-100">
 
@@ -309,7 +290,9 @@ export default function Home() {
                               <button key={header} onClick={() => handleSelectHeader(header)} className={`w-full text-left px-2 py-1 border rounded text-xs font-medium transition-colors break-words ${selectedExcelHeader === header ? 'bg-blue-500 text-white border-blue-600 ring-2 ring-blue-300' : 'bg-white text-blue-700 border-blue-300 hover:bg-blue-100'}`} > {header} </button>
                           ))}
                       </div>
-                      {selectedExcelHeader && ( <p className="text-xs text-gray-600 mb-1 bg-blue-50 p-2 rounded border border-blue-200"> <strong className="text-blue-700 block mb-1">PAS 2:</strong> Ara, selecciona el text al document (a l'esquerra) que vols <strong class='text-red-600'>REEMPLAÇAR</strong> per:<br/> <span className="font-semibold italic">{selectedExcelHeader}</span> </p> )}
+                      {/* === LÍNIA CORREGIDA === */}
+                      {selectedExcelHeader && ( <p className="text-xs text-gray-600 mb-1 bg-blue-50 p-2 rounded border border-blue-200"> <strong className="text-blue-700 block mb-1">PAS 2:</strong> Ara, selecciona el text al document (a l'esquerra) que vols <strong className='text-red-600'>REEMPLAÇAR</strong> per:<br/> <span className="font-semibold italic">{selectedExcelHeader}</span> </p> )}
+                      {/* ======================= */}
                       {!selectedExcelHeader && excelHeaders.length > 0 && ( <p className="text-xs text-gray-500 mb-1 p-2"> <strong className="block mb-1">PAS 2:</strong> Esperant selecció de text... </p> )}
                       {excelHeaders.length === 0 && ( <p className="text-xs text-red-500 mb-1 p-2">No s'han trobat capçaleres a l'Excel.</p> )}
                  </div>
