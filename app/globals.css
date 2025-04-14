@@ -18,28 +18,39 @@
 
 /* --- Estils per a Taules (Aspecte "No Acabat" amb PUNTS) --- */
 .prose table {
-  border-collapse: collapse; width: 100%; margin-top: 1.25em; margin-bottom: 1.25em;
+  border-collapse: collapse; /* Per a vores netes */
+  width: 100%; /* Ocupa amplada disponible (però limitat per max-width) */
+  margin-top: 1.25em;
+  margin-bottom: 1.25em;
   /* border: none; */ /* Vora exterior eliminada */
-  max-width: 100%; display: block; overflow-x: auto;
+  max-width: 100%;
+  display: block;  /* Important per max-width/overflow en <table> */
+  overflow-x: auto; /* Scroll horitzontal si taula és massa ampla */
 }
 
 .prose th,
 .prose td {
- /* <<< TORNA A L'ESTIL ANTERIOR (DISCONTINU/CLAR) >>> */
- border: 2px dotted #d1d5db;  /* 2px, DISCONTÍNUA, gris clar (Tailwind gray-300) */
- /* ------------------------------------------------- */
- /* Assegura't que la resta (padding, etc.) és correcte */
- padding: 0.25em 0.3em;
- vertical-align: center;
- overflow-wrap: break-word;
+  border: 2px dotted #d1d5db;  /* 2px, DE PUNTS, gris clar (Tailwind gray-300) */
+  padding: 0.25em 0.3em;     /* Padding vertical i horitzontal REDUÏTS */
+  /* <<< ALINEACIÓ VERTICAL CORREGIDA >>> */
+  vertical-align: middle;     /* Utilitza 'middle' per centrar en cel·les de taula */
+  /* ---------------------------------- */
+  overflow-wrap: break-word; /* Trenca paraules llargues */
 }
 
+/* Estils específics per a cel·les de capçalera */
 .prose th {
-  text-align: left; background-color: #f9fafb; font-weight: 600;
+  text-align: left;
+  background-color: #f9fafb; /* Fons clar per capçaleres */
+  font-weight: 600;
+   /* La vora i alineació vertical definida a dalt també s'aplica aquí */
 }
 
-.prose td > p { /* Fix per paràgrafs dins cel·les */
-  margin-top: 0; margin-bottom: 0; line-height: 1.3;
+/* Fix per eliminar marges de paràgrafs dins cel·les de taula */
+.prose td > p {
+  margin-top: 0;
+  margin-bottom: 0;
+  line-height: 1.3; /* Interlineat més ajustat dins de taules */
 }
 /* === FINAL Estils Taules === */
 
@@ -48,15 +59,19 @@
 
 /* === INICI Estils Impressió === */
 @media print {
+  /* Oculta elements web */
   .web-header, .web-error { display: none !important; }
+
+  /* Mostra capçalera/peu d'impressió */
   #print-header, #print-footer { display: block; }
+
   #print-header { position: fixed; top: 0; left: 0; right: 0; padding: 0.5cm 1.5cm; border-bottom: 1px solid #ccc; background-color: white; font-size: 9pt; }
   #print-footer { position: fixed; bottom: 0; left: 0; right: 0; padding: 0.5cm 1.5cm; border-top: 1px solid #ccc; background-color: white; font-size: 9pt; }
   body { margin-top: 2cm; margin-bottom: 2cm; }
   .print-content { box-shadow: none; border: none; margin: 0; padding: 0; max-width: none; border-radius: 0; background-color: transparent; }
   .prose { font-size: 10pt; line-height: 1.5; }
   .prose table { display: table; overflow-x: visible; width: auto; max-width: 100%; border: 1px solid #ccc; }
-  .prose th, .prose td { border: 1px solid #ccc; padding: 0.25em 0.4em; } /* Vora sòlida fina per impressió */
+  .prose th, .prose td { border: 1px solid #ccc; padding: 0.25em 0.4em; vertical-align: middle; } /* Vora sòlida fina per impressió i centrat */
   .prose h1 { font-size: 13pt; margin-bottom: 0.8em; }
   .prose h2 { font-size: 11pt; margin-top: 1.5em; margin-bottom: 0.6em; }
   .prose + .border-t { display: none; }
