@@ -11,70 +11,34 @@
   line-height: 1.6; /* Interlineat base */
 }
 /* Recordatori: Això NOMÉS funciona si Mammoth genera <h1>, <h2>, etc. */
-.prose h1 {
-  font-size: 14px; /* Mida H1 */
-  font-weight: 700; /* Més negreta per H1 */
-  margin-top: 0;
-  margin-bottom: 1em;
-  line-height: 1.3;
-}
-.prose h2 {
-  font-size: 12px; /* Mida H2 */
-  font-weight: 600;
-  margin-top: 1.6em; /* Adjusted spacing */
-  margin-bottom: 0.8em;
-  line-height: 1.3;
-}
-.prose h3 {
-  font-size: 11px; /* Mida H3 */
-  font-weight: 600;
-  margin-top: 1.5em; /* Adjusted spacing */
-  margin-bottom: 0.6em;
-  line-height: 1.3;
-}
-.prose h4 {
-  font-size: 10px; /* Mida H4 */
-  font-weight: 600;
-  margin-top: 1.4em; /* Adjusted spacing */
-  margin-bottom: 0.5em;
-  line-height: 1.3;
-}
+.prose h1 { font-size: 14px; font-weight: 700; margin-top: 0; margin-bottom: 1em; line-height: 1.3; }
+.prose h2 { font-size: 12px; font-weight: 600; margin-top: 1.6em; margin-bottom: 0.8em; line-height: 1.3; }
+.prose h3 { font-size: 11px; font-weight: 600; margin-top: 1.5em; margin-bottom: 0.6em; line-height: 1.3; }
+.prose h4 { font-size: 10px; font-weight: 600; margin-top: 1.4em; margin-bottom: 0.5em; line-height: 1.3; }
 
 /* --- Estils per a Taules (Aspecte "No Acabat" amb PUNTS) --- */
 .prose table {
-  border-collapse: collapse; /* Per a vores netes */
-  width: 100%; /* Ocupa amplada disponible (però limitat per max-width) */
-  margin-top: 1.25em;
-  margin-bottom: 1.25em;
+  border-collapse: collapse; width: 100%; margin-top: 1.25em; margin-bottom: 1.25em;
   /* border: none; */ /* Vora exterior eliminada */
-  max-width: 100%;
-  display: block;  /* Important per max-width/overflow en <table> */
-  overflow-x: auto; /* Scroll horitzontal si taula és massa ampla */
+  max-width: 100%; display: block; overflow-x: auto;
 }
 
 .prose th,
 .prose td {
-   /* <<< VORES INTERNES AMB PUNTS >>> */
-  border: 2px dotted #d1d5db;  /* 2px (gruixut), DE PUNTS, gris clar (Tailwind gray-300) */
-  /* ----------------------------- */
-  padding: 0.25em 0.3em;     /* Padding vertical i horitzontal REDUÏTS */
-  vertical-align: top;       /* Alineació vertical */
-  overflow-wrap: break-word; /* Trenca paraules llargues */
+   /* <<< VORES INTERNES AMB PUNTS MÉS GRANS/FORTS >>> */
+  border: 3px dotted #9ca3af;  /* 3px (més gruixut), DE PUNTS, gris mig (Tailwind gray-400) */
+  /* ------------------------------------------------ */
+  padding: 0.25em 0.3em;     /* Padding reduït */
+  vertical-align: top;
+  overflow-wrap: break-word;
 }
 
-/* Estils específics per a cel·les de capçalera */
 .prose th {
-  text-align: left;
-  background-color: #f9fafb; /* Fons clar per capçaleres */
-  font-weight: 600;
-   /* La vora definida a dalt també s'aplica aquí */
+  text-align: left; background-color: #f9fafb; font-weight: 600;
 }
 
-/* Fix per eliminar marges de paràgrafs dins cel·les de taula */
-.prose td > p {
-  margin-top: 0;
-  margin-bottom: 0;
-  line-height: 1.3; /* Interlineat més ajustat dins de taules */
+.prose td > p { /* Fix per paràgrafs dins cel·les */
+  margin-top: 0; margin-bottom: 0; line-height: 1.3;
 }
 /* === FINAL Estils Taules === */
 
@@ -83,12 +47,8 @@
 
 /* === INICI Estils Impressió === */
 @media print {
-  /* Oculta elements web */
   .web-header, .web-error { display: none !important; }
-
-  /* Mostra capçalera/peu d'impressió */
   #print-header, #print-footer { display: block; }
-
   #print-header { position: fixed; top: 0; left: 0; right: 0; padding: 0.5cm 1.5cm; border-bottom: 1px solid #ccc; background-color: white; font-size: 9pt; }
   #print-footer { position: fixed; bottom: 0; left: 0; right: 0; padding: 0.5cm 1.5cm; border-top: 1px solid #ccc; background-color: white; font-size: 9pt; }
   body { margin-top: 2cm; margin-bottom: 2cm; }
@@ -98,7 +58,7 @@
   .prose th, .prose td { border: 1px solid #ccc; padding: 0.25em 0.4em; } /* Vora sòlida fina per impressió */
   .prose h1 { font-size: 13pt; margin-bottom: 0.8em; }
   .prose h2 { font-size: 11pt; margin-top: 1.5em; margin-bottom: 0.6em; }
-  .prose + .border-t { display: none; } /* Amaga missatges Mammoth */
+  .prose + .border-t { display: none; }
   @page { margin: 1.5cm; }
 }
 /* === FINAL Estils Impressió === */
