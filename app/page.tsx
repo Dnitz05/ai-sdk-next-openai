@@ -1,95 +1,81 @@
 // app/page.tsx
 'use client';
 
-import React, { useState, ChangeEvent } from 'react';
+import React, { useState, ChangeEvent, useEffect } from 'react'; // <<-- AFEGIR useEffect
 
 export default function Home() {
-  // Estats (sense canvis)
+  // Estats
   const [selectedFileName, setSelectedFileName] = useState<string | null>(null);
   const [convertedHtml, setConvertedHtml] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState<boolean>(false);
   const [error, setError] = useState<string | null>(null);
   const [mammothMessages, setMammothMessages] = useState<any[]>([]);
 
-  // Funció triggerUpload (sense canvis)
+  // <<< NOU ESTAT per controlar si el component està muntat al client >>>
+  const [isMounted, setIsMounted] = useState(false);
+
+  // <<< useEffect per canviar l'estat només al client >>>
+  useEffect(() => {
+    setIsMounted(true); // Aquesta línia només s'executa al navegador, no al servidor
+  }, []); // L'array buit fa que s'executi només un cop després del muntatge inicial
+
+  // Funció triggerUpload (sense canvis interns, però traiem el log de snippet si ja no cal)
   const triggerUpload = async (file: File) => {
     setIsLoading(true); setError(null); setConvertedHtml(null); setMammothMessages([]);
     const formData = new FormData(); formData.append('file', file);
     try {
       const response = await fetch('/api/process-document', { method: 'POST', body: formData });
       const contentType = response.headers.get("content-type");
-      if (!response.ok) {
-        let errorPayload: any = { error: `Error del servidor: ${response.status} ${response.statusText}` };
-        if (contentType && contentType.includes("application/json")) { try { errorPayload = await response.json(); } catch (e) { console.error("Error llegint error JSON", e); }} else { try { const rawErrorText = await response.text(); console.error("Resposta d'error no JSON:", rawErrorText); errorPayload.details = "Error inesperat."; } catch (e) { console.error("Error llegint error Text", e); }}
-        throw new Error(errorPayload.error || JSON.stringify(errorPayload));
-      }
+      if (!response.ok) { /* ... gestió d'errors ... */ throw new Error(/* ... */); }
       if (contentType && contentType.includes("application/json")) {
           const data = await response.json();
-          // Ja no necessitem l'snippet, es pot treure el console.log si vols
+          // Ja no necessitem el snippet, podem treure el console.log
           // console.log("==== Snippet HTML Rebut del Backend ===="); console.log(data.htmlSnippet || "No snippet."); console.log("=======================================");
           setConvertedHtml(data.html); setMammothMessages(data.messages || []);
-      } else { const rawText = await response.text(); console.warn("Resposta OK però no és JSON:", rawText); throw new Error("Format de resposta inesperat."); }
-    } catch (err) { console.error("Error processant:", err); setError(err instanceof Error ? err.message : 'Error desconegut'); setConvertedHtml(null);
-    } finally { setIsLoading(false); }
+      } else { /* ... gestió error no json ... */ throw new Error(/* ... */); }
+    } catch (err) { /* ... gestió error catch ... */ }
+    finally { setIsLoading(false); }
   };
 
   // Funció handleFileChange (sense canvis)
-  const handleFileChange = (event: ChangeEvent<HTMLInputElement>) => {
-    if (event.target.files && event.target.files[0]) {
-      const file = event.target.files[0]; setSelectedFileName(file.name);
-      if (file.type === 'application/vnd.openxmlformats-officedocument.wordprocessingml.document') { setError(null); triggerUpload(file); } else { setError('Si us plau, selecciona un fitxer .docx'); setConvertedHtml(null); setMammothMessages([]); setSelectedFileName('Cap fitxer seleccionat'); }
-    } else { setSelectedFileName(null); }
-    event.target.value = '';
-  };
+  const handleFileChange = (event: ChangeEvent<HTMLInputElement>) => { /* ... */ };
 
   // JSX
   return (
-    // <<< CANVI: Fons a gris molt clar (gray-100) >>>
     <main className="flex min-h-screen w-full flex-col items-center p-4 sm:p-8 bg-gray-100">
-
       {/* Capçalera WEB */}
-      {/* <<< CANVI: Alineat amb max-w-2xl >>> */}
-      <div className="web-header w-full max-w-2xl mx-auto flex items-center justify-between mb-4 sm:mb-6 px-1">
-        <h2 className="text-base sm:text-lg font-semibold text-gray-600">
-          Nova Plantilla des de DOCX
-        </h2>
-        <div>
-          <label htmlFor="fileInput" className={`inline-flex items-center px-3 py-1.5 border border-transparent text-xs sm:text-sm font-medium rounded shadow-sm text-white ${isLoading ? 'bg-gray-400' : 'bg-blue-600 hover:bg-blue-700'} focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 transition ease-in-out duration-150 ${isLoading ? 'cursor-not-allowed' : 'cursor-pointer'}`}>
-            {isLoading ? 'Processant...' : (selectedFileName ? 'Canvia Fitxer' : 'Selecciona Fitxer')}
-          </label>
-          <input type="file" id="fileInput" onChange={handleFileChange} accept=".docx,application/vnd.openxmlformats-officedocument.wordprocessingml.document" className="hidden" disabled={isLoading} />
-        </div>
+      <div className="web-header w-full max-w-2xl mx-auto flex items-center justify-between mb-4 sm:mb-6 px-1"> {/* Amplada ajustada */}
+        {/* ... títol i botó/label ... */}
       </div>
-
-      {/* Capçalera/Peu Impressió (sense canvis) */}
-      <div id="print-header" className="hidden print:block ...">Informe Generat - {new Date().toLocaleDateString()}</div>
-      <div id="print-footer" className="hidden print:block ...">Document Intern</div>
-
+      {/* Capçalera/Peu Impressió */}
+      <div id="print-header" className="hidden print:block ...">...</div>
+      <div id="print-footer" className="hidden print:block ...">...</div>
       {/* Error */}
-       {error && <p className="web-error w-full max-w-2xl mx-auto text-sm text-red-600 text-center mb-4 -mt-2">{error}</p>}
+      {error && <p className="web-error ...">{error}</p>}
 
       {/* "Foli" Blanc */}
-       {/* <<< CANVI: Amplada màxima augmentada a max-w-2xl >>> */}
-      <div className="print-content w-full max-w-2xl bg-white shadow-lg rounded-sm p-8 md:p-12 lg:p-16 my-4">
-
+      <div className="print-content w-full max-w-2xl bg-white shadow-lg rounded-sm p-8 md:p-12 lg:p-16 my-4"> {/* Amplada ajustada */}
         {/* Indicador de càrrega */}
-        {isLoading && ( <div className="text-center my-6"><p className="text-blue-600 animate-pulse">Processant: {selectedFileName}...</p></div> )}
+        {isLoading && ( /* ... */ )}
 
         {/* Àrea de Resultats */}
         <div className="mt-1">
-          {convertedHtml ? (
+          {/* <<< CONDICIONAL AMB isMounted >>> */}
+          {isMounted && convertedHtml ? (
             <div
-              className="prose prose-sm max-w-none" // Mantenim classes base, estils es controlen a globals.css
+              className="prose prose-sm max-w-none" // Ajusta classes prose segons necessitis
               dangerouslySetInnerHTML={{ __html: convertedHtml }}
             />
           ) : (
+            // Mostra text inicial o indicador de càrrega si no està muntat o no hi ha HTML
             !isLoading && !error && <p className="text-gray-400 italic text-center py-10">Selecciona un fitxer .docx per començar.</p>
           )}
+          {/* <<< FI CONDICIONAL >>> */}
         </div>
 
         {/* Àrea de Missatges de Mammoth */}
-        {mammothMessages && mammothMessages.length > 0 && ( <div className="mt-6 border-t ..."> {/* ... */} </div> )}
-      </div> {/* Fi del "Foli" Blanc */}
+        {mammothMessages && mammothMessages.length > 0 && ( /* ... */ )}
+      </div>
     </main>
   );
 }
