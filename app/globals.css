@@ -6,75 +6,90 @@
 /* === INICI Estils Personalitzats per a Visor DOCX === */
 
 /* --- Ajustos Mida Font --- */
+/* Ajusta aquests valors segons la mida desitjada */
 .prose {
-  font-size: 11px; /* Mida text normal */
+  font-size: 11px; /* Mida text normal (approx 8pt) - Pots provar 12px (9pt) o 14px (10.5pt) */
   line-height: 1.6; /* Interlineat base */
 }
-/* Recordatori: Això NOMÉS funciona si Mammoth genera <h1>, <h2>, etc. */
 .prose h1 { font-size: 14px; font-weight: 700; margin-top: 0; margin-bottom: 1em; line-height: 1.3; }
 .prose h2 { font-size: 12px; font-weight: 600; margin-top: 1.6em; margin-bottom: 0.8em; line-height: 1.3; }
 .prose h3 { font-size: 11px; font-weight: 600; margin-top: 1.5em; margin-bottom: 0.6em; line-height: 1.3; }
 .prose h4 { font-size: 10px; font-weight: 600; margin-top: 1.4em; margin-bottom: 0.5em; line-height: 1.3; }
 
-/* --- Estils per a Taules (Aspecte "No Acabat" amb PUNTS) --- */
+/* --- Estils per a Taules --- */
 .prose table {
-  border-collapse: collapse; /* Per a vores netes */
-  width: 100%; /* Ocupa amplada disponible (però limitat per max-width) */
+  border-collapse: collapse;
+  width: 100%;
   margin-top: 1.25em;
   margin-bottom: 1.25em;
-  /* border: none; */ /* Vora exterior eliminada */
   max-width: 100%;
-  display: block;  /* Important per max-width/overflow en <table> */
-  overflow-x: auto; /* Scroll horitzontal si taula és massa ampla */
+  display: block;
+  overflow-x: auto;
 }
-
 .prose th,
 .prose td {
-  border: 2px dotted #d1d5db;  /* 2px, DE PUNTS, gris clar (Tailwind gray-300) */
-  padding: 0.25em 0.3em;    /* Padding vertical i horitzontal REDUÏTS */
-  /* <<< ALINEACIÓ VERTICAL CORREGIDA >>> */
-  vertical-align: middle;    /* Utilitza 'middle' per centrar en cel·les de taula */
-  /* ---------------------------------- */
-  overflow-wrap: break-word; /* Trenca paraules llargues */
+  border: 2px dotted #d1d5db; /* Vores puntejades */
+  padding: 0.25em 0.3em;
+  vertical-align: middle;
+  overflow-wrap: break-word;
 }
-
-/* Estils específics per a cel·les de capçalera */
 .prose th {
   text-align: left;
-  background-color: #f9fafb; /* Fons clar per capçaleres */
+  background-color: #f9fafb;
   font-weight: 600;
-    /* La vora i alineació vertical definida a dalt també s'aplica aquí */
 }
-
-/* Fix per eliminar marges de paràgrafs dins cel·les de taula */
-.prose td > p {
+.prose td > p { /* Elimina marge paràgrafs dins cel·les */
   margin-top: 0;
   margin-bottom: 0;
-  line-height: 1.3; /* Interlineat més ajustat dins de taules */
+  line-height: 1.3;
 }
 /* === FINAL Estils Taules === */
 
-/* === INICI Estils per Placeholders Vinculats === */
-/* Estil per als placeholders vinculats mitjançant selecció */
+/* === Estils per Placeholders Vinculats a Excel === */
 .linked-placeholder {
-  background-color: #fff2a8; /* Un groc pàlid */
-  border: 1px dashed #e6bf00; /* Vora discontínua groguenca */
+  background-color: #fff2a8; /* Groc pàlid */
+  border: 1px dashed #e6bf00; /* Vora groguenca */
   padding: 0.05em 0.1em;
   border-radius: 3px;
-  cursor: default; /* O un altre cursor si vols indicar acció */
-  /* Important per evitar problemes amb seleccions posteriors */
-  user-select: none; /* Evita que el propi placeholder sigui fàcilment seleccionable */
+  cursor: default; /* Cursor normal per defecte */
+  user-select: none;
+  -webkit-user-select: none;
+  -moz-user-select: none;
+  -ms-user-select: none;
+  transition: background-color 0.2s ease;
+}
+.linked-placeholder:hover {
+   background-color: #ffe97a;
+   border-color: #cca300;
+}
+/* ============================================= */
+
+/* === Estil per al text marcat amb instrucció IA === */
+.ai-prompt-target {
+  background-color: #e0f2fe; /* Blau cel pàlid */
+  border-bottom: 1px dashed #0ea5e9; /* Línia blava */
+  /* cursor: help; */ /* Podríem posar-lo, però potser millor el cursor general del mode */
+  user-select: none;
   -webkit-user-select: none;
   -moz-user-select: none;
   -ms-user-select: none;
 }
-
-/* Opcional: estil per quan es passa el ratolí per sobre */
-.linked-placeholder:hover {
-  background-color: #ffe97a;
-  border-color: #cca300;
+.ai-prompt-target:hover {
+    background-color: #bae6fd;
 }
-/* === FINAL Estils Placeholders === */
+/* ============================================= */
+
+
+/* === Estils per Cursors Indicatius === */
+/* Apliquem cursor només sobre l'àrea del document (.prose) quan el body té la classe */
+body.excel-linking-mode .prose {
+  cursor: crosshair !important; /* Cursor per indicar vinculació Excel */
+}
+body.ai-prompting-mode .prose {
+  cursor: text !important; /* Cursor per indicar selecció de text per IA */
+  /* Pots provar altres: 'copy', 'alias', 'grab' */
+}
+/* =================================== */
 
 
 /* === FINAL Estils Personalitzats === */
@@ -83,22 +98,50 @@
 /* === INICI Estils Impressió === */
 @media print {
   /* Oculta elements web */
-  .web-header, .web-error { display: none !important; }
+  .web-header, .web-errors, aside { display: none !important; } /* Ocultem sidebar en imprimir */
 
   /* Mostra capçalera/peu d'impressió */
   #print-header, #print-footer { display: block; }
 
   #print-header { position: fixed; top: 0; left: 0; right: 0; padding: 0.5cm 1.5cm; border-bottom: 1px solid #ccc; background-color: white; font-size: 9pt; }
   #print-footer { position: fixed; bottom: 0; left: 0; right: 0; padding: 0.5cm 1.5cm; border-top: 1px solid #ccc; background-color: white; font-size: 9pt; }
-  body { margin-top: 2cm; margin-bottom: 2cm; }
-  .print-content { box-shadow: none; border: none; margin: 0; padding: 0; max-width: none; border-radius: 0; background-color: transparent; }
-  .prose { font-size: 10pt; line-height: 1.5; }
-  .prose table { display: table; overflow-x: visible; width: auto; max-width: 100%; border: 1px solid #ccc; }
-  .prose th, .prose td { border: 1px solid #ccc; padding: 0.25em 0.4em; vertical-align: middle; } /* Vora sòlida fina per impressió i centrat */
+
+  /* Ajustos generals impressió */
+  body { margin-top: 2cm; margin-bottom: 2cm; background-color: white !important; } /* Assegura fons blanc */
+  main { padding: 0 !important; background-color: transparent !important; } /* Treu padding/fons del main */
+  .print-content { /* Ajustos per al contingut principal */
+      box-shadow: none !important;
+      border: none !important;
+      margin: 0 !important;
+      padding: 0 !important;
+      max-width: none !important; /* Ocupa tot l'ample */
+      border-radius: 0 !important;
+      background-color: transparent !important;
+      width: 100% !important;
+  }
+  /* Ajustos tipografia impressió */
+  .prose { font-size: 10pt; line-height: 1.5; color: black !important; }
   .prose h1 { font-size: 13pt; margin-bottom: 0.8em; }
   .prose h2 { font-size: 11pt; margin-top: 1.5em; margin-bottom: 0.6em; }
-  .prose + .border-t { display: none; } /* Oculta línies separadores si n'hi ha */
-  .linked-placeholder { background-color: transparent !important; border: none !important; padding: 0 !important; user-select: text !important; } /* Simplifica placeholders en imprimir */
-  @page { margin: 1.5cm; }
+  /* Ajustos taules impressió */
+  .prose table { display: table !important; overflow-x: visible !important; width: auto !important; max-width: 100% !important; border: 1px solid #ccc !important; }
+  .prose th, .prose td { border: 1px solid #ccc !important; padding: 0.25em 0.4em !important; vertical-align: middle !important; }
+  .prose th { background-color: #eee !important; } /* Fons gris molt clar per capçaleres */
+  /* Reset marcadors */
+  .linked-placeholder, .ai-prompt-target {
+        background-color: transparent !important;
+        border: none !important;
+        padding: 0 !important;
+        user-select: text !important; /* Permet seleccionar text en imprimir/PDF */
+        cursor: default !important;
+        color: inherit !important; /* Hereda color text normal */
+  }
+  /* Oculta elements no desitjats */
+  .debug-links-section, .debug-ai-section { display: none !important; } /* Si tenim seccions de debug */
+
+  /* Marges de pàgina */
+  @page {
+      margin: 1.5cm; /* Marges estàndard */
+  }
 }
 /* === FINAL Estils Impressió === */
