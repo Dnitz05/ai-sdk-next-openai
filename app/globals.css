@@ -5,18 +5,49 @@
 
 /* === INICI Estils Personalitzats per a Visor DOCX === */
 
-/* --- Ajustos Mida Font --- */
-/* Ajusta aquests valors segons la mida desitjada */
+/* --- Ajustos Mida Font (NOVA VERSIÓ) --- */
 .prose {
-  font-size: 11px; /* Mida text normal (approx 8pt) - Pots provar 12px (9pt) o 14px (10.5pt) */
-  line-height: 1.6; /* Interlineat base */
+  font-size: 14px; /* Augmentem mida base a 14px (aprox 10.5pt) */
+  line-height: 1.7; /* Augmentem interlineat lleugerament */
+  max-width: none; /* Treiem max-width de prose per defecte, ho controlem al contenidor */
 }
-.prose h1 { font-size: 14px; font-weight: 700; margin-top: 0; margin-bottom: 1em; line-height: 1.3; }
-.prose h2 { font-size: 12px; font-weight: 600; margin-top: 1.6em; margin-bottom: 0.8em; line-height: 1.3; }
-.prose h3 { font-size: 11px; font-weight: 600; margin-top: 1.5em; margin-bottom: 0.6em; line-height: 1.3; }
-.prose h4 { font-size: 10px; font-weight: 600; margin-top: 1.4em; margin-bottom: 0.5em; line-height: 1.3; }
+/* Mides relatives a 14px, ajusta valors 'em' si cal */
+.prose h1 {
+    font-size: 1.6em; /* ~22px */
+    font-weight: 700;
+    margin-top: 0; /* Primer H1 sense marge superior */
+    margin-bottom: 1em; /* Marge inferior estàndard */
+    line-height: 1.3;
+}
+.prose h2 {
+    font-size: 1.4em; /* ~20px */
+    font-weight: 600;
+    margin-top: 2em; /* Més espai abans H2 */
+    margin-bottom: 0.8em;
+    line-height: 1.3;
+}
+.prose h3 {
+    font-size: 1.2em; /* ~17px */
+    font-weight: 600;
+    margin-top: 1.8em; /* Més espai abans H3 */
+    margin-bottom: 0.6em;
+    line-height: 1.3;
+}
+.prose h4 {
+    font-size: 1.1em; /* ~15px */
+    font-weight: 600;
+    margin-top: 1.6em; /* Més espai abans H4 */
+    margin-bottom: 0.5em;
+    line-height: 1.3;
+}
+/* Ajust per paràgrafs */
+.prose p {
+    margin-top: 0.8em; /* Espai abans de paràgraf */
+    margin-bottom: 0.8em; /* Espai després de paràgraf */
+}
 
-/* --- Estils per a Taules --- */
+
+/* --- Estils per a Taules (Sense canvis) --- */
 .prose table {
   border-collapse: collapse;
   width: 100%;
@@ -28,7 +59,7 @@
 }
 .prose th,
 .prose td {
-  border: 2px dotted #d1d5db; /* Vores puntejades */
+  border: 2px dotted #d1d5db;
   padding: 0.25em 0.3em;
   vertical-align: middle;
   overflow-wrap: break-word;
@@ -38,120 +69,57 @@
   background-color: #f9fafb;
   font-weight: 600;
 }
-.prose td > p { /* Elimina marge paràgrafs dins cel·les */
+.prose td > p {
   margin-top: 0;
   margin-bottom: 0;
   line-height: 1.3;
 }
 /* === FINAL Estils Taules === */
 
-/* Estil per als placeholders vinculats a Excel (groc) */
+/* Estil per als placeholders vinculats a Excel */
 .linked-placeholder {
-  background-color: #fff2a8; /* Groc pàlid */
-  border: 1px dashed #e6bf00; /* Vora groguenca */
+  background-color: #fff2a8;
+  border: 1px dashed #e6bf00;
   padding: 0.05em 0.1em;
   border-radius: 3px;
-  cursor: default; /* Ja no és clicable per IA directament */
-  user-select: none;
-  -webkit-user-select: none;
-  -moz-user-select: none;
-  -ms-user-select: none;
+  cursor: default;
+  user-select: none; -webkit-user-select: none; -moz-user-select: none; -ms-user-select: none;
   transition: background-color 0.2s ease;
-  /* Important: Evita que hereti estils estranys */
-  display: inline; /* O inline-block si cal, però inline sol ser millor per text */
-  line-height: inherit; /* Hereda interlineat */
-  font-size: inherit; /* Hereda mida font */
-  color: inherit; /* Hereda color text */
+  display: inline; line-height: inherit; font-size: inherit; color: inherit;
 }
-.linked-placeholder:hover {
-   background-color: #ffe97a;
-   border-color: #cca300;
-}
+.linked-placeholder:hover { background-color: #ffe97a; border-color: #cca300; }
 
-/* Estil per al text marcat amb instrucció IA (blau cel) */
-/* Ara aplicat a <span> */
-.ai-prompt-target {
-  background-color: #e0f2fe; /* Blau cel pàlid */
-  border-bottom: 1px dashed #0ea5e9; /* Línia blava */
-  padding: 0.05em 0.1em;
-  border-radius: 3px;
-  cursor: help; /* Opcional: indica info extra */
-  user-select: none;
-  -webkit-user-select: none;
-  -moz-user-select: none;
-  -ms-user-select: none;
-   display: inline;
-   line-height: inherit;
-   font-size: inherit;
-   color: inherit;
+/* Estil per als PARÀGRAFS marcats amb instrucció IA */
+p.ai-prompt-target {
+  background-color: #e0f2fe;
+  border-left: 3px solid #3b82f6;
+  padding-left: 0.5em;
+  border-radius: 3px; /* Afegit arrodoniment */
+  cursor: pointer;
 }
-.ai-prompt-target:hover {
-    background-color: #bae6fd;
-}
-
-/* === Estils per Cursors Indicatius === */
-/* Apliquem cursor només sobre l'àrea del document (.prose) quan el body té la classe */
-body.excel-linking-mode .prose {
-  cursor: crosshair !important; /* Cursor per indicar vinculació Excel */
-}
-/* Hem eliminat ai-prompting-mode perquè ara es detecta implícitament */
-/* body.ai-prompting-mode .prose { cursor: text !important; } */
-/* =================================== */
-
+p.ai-prompt-target:hover { background-color: #bae6fd; }
 
 /* === FINAL Estils Personalitzats === */
 
 
 /* === INICI Estils Impressió === */
 @media print {
-  /* Oculta elements web */
-  .web-header, .web-errors, aside { display: none !important; } /* Ocultem sidebar en imprimir */
-
-  /* Mostra capçalera/peu d'impressió */
+  /* ... (Estils impressió com abans, assegura't que reseteja bé .linked-placeholder i p.ai-prompt-target) ... */
+  .web-header, .web-errors, aside { display: none !important; }
   #print-header, #print-footer { display: block; }
-
   #print-header { position: fixed; top: 0; left: 0; right: 0; padding: 0.5cm 1.5cm; border-bottom: 1px solid #ccc; background-color: white; font-size: 9pt; }
   #print-footer { position: fixed; bottom: 0; left: 0; right: 0; padding: 0.5cm 1.5cm; border-top: 1px solid #ccc; background-color: white; font-size: 9pt; }
-
-  /* Ajustos generals impressió */
-  body { margin-top: 2cm; margin-bottom: 2cm; background-color: white !important; } /* Assegura fons blanc */
-  main { padding: 0 !important; background-color: transparent !important; } /* Treu padding/fons del main */
-  .print-content { /* Ajustos per al contingut principal */
-      box-shadow: none !important;
-      border: none !important;
-      margin: 0 !important;
-      padding: 0 !important;
-      max-width: none !important; /* Ocupa tot l'ample */
-      border-radius: 0 !important;
-      background-color: transparent !important;
-      width: 100% !important;
-  }
-  /* Ajustos tipografia impressió */
-  .prose { font-size: 10pt; line-height: 1.5; color: black !important; }
-  .prose h1 { font-size: 13pt; margin-bottom: 0.8em; }
-  .prose h2 { font-size: 11pt; margin-top: 1.5em; margin-bottom: 0.6em; }
-  /* Ajustos taules impressió */
+  body { margin-top: 2cm; margin-bottom: 2cm; background-color: white !important; }
+  main { padding: 0 !important; background-color: transparent !important; }
+  .print-content { box-shadow: none !important; border: none !important; margin: 0 !important; padding: 0 !important; max-width: none !important; border-radius: 0 !important; background-color: transparent !important; width: 100% !important; }
+  /* Aplica la mida de lletra base més gran també a impressió? O mantenim 10pt? Mantenim 10pt de moment. */
+  .prose { font-size: 10pt; line-height: 1.5; color: black !important; max-width: none !important; } /* Assegura max-width none */
+  .prose h1 { font-size: 13pt; } .prose h2 { font-size: 11pt; } /* Ajusta h3/h4 si cal */
   .prose table { display: table !important; overflow-x: visible !important; width: auto !important; max-width: 100% !important; border: 1px solid #ccc !important; }
   .prose th, .prose td { border: 1px solid #ccc !important; padding: 0.25em 0.4em !important; vertical-align: middle !important; }
-  .prose th { background-color: #eee !important; } /* Fons gris molt clar per capçaleres */
-
-  /* Reset marcadors (ara per spans) */
-  .linked-placeholder, .ai-prompt-target {
-        background-color: transparent !important;
-        border: none !important;
-        padding: 0 !important;
-        user-select: text !important; /* Permet seleccionar text en imprimir/PDF */
-        cursor: default !important;
-        color: inherit !important; /* Hereda color text normal */
-        display: inline !important; /* Assegura que es manté inline */
-  }
-
-  /* Oculta elements no desitjats */
-  /* .debug-links-section, .debug-ai-section { display: none !important; } */ /* Descomenta si tens seccions de debug */
-
-  /* Marges de pàgina */
-  @page {
-      margin: 1.5cm; /* Marges estàndard */
-  }
+  .prose th { background-color: #eee !important; }
+  .linked-placeholder, p.ai-prompt-target { background-color: transparent !important; border: none !important; padding: 0 !important; user-select: text !important; cursor: default !important; color: inherit !important; }
+  p.ai-prompt-target { border-left: none !important; padding-left: 0 !important; }
+  @page { margin: 1.5cm; }
 }
 /* === FINAL Estils Impressió === */
