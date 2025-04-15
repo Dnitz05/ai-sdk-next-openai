@@ -45,7 +45,7 @@
 }
 /* === FINAL Estils Taules === */
 
-/* === Estils per Placeholders Vinculats a Excel === */
+/* Estil per als placeholders vinculats a Excel */
 .linked-placeholder {
   background-color: #fff2a8; /* Groc pàlid */
   border: 1px dashed #e6bf00; /* Vora groguenca */
@@ -62,35 +62,18 @@
    background-color: #ffe97a;
    border-color: #cca300;
 }
-/* ============================================= */
 
-/* === Estil per al text marcat amb instrucció IA === */
-.ai-prompt-target {
+/* Estil per als PARÀGRAFS marcats amb instrucció IA */
+p.ai-prompt-target { /* Aplicat a l'etiqueta P */
   background-color: #e0f2fe; /* Blau cel pàlid */
-  border-bottom: 1px dashed #0ea5e9; /* Línia blava */
-  /* cursor: help; */ /* Podríem posar-lo, però potser millor el cursor general del mode */
-  user-select: none;
-  -webkit-user-select: none;
-  -moz-user-select: none;
-  -ms-user-select: none;
+  border-left: 3px solid #3b82f6; /* Vora esquerra blava */
+  padding-left: 0.5em; /* Espai per la vora */
+  cursor: pointer; /* Indica que es pot clicar per editar el prompt */
+  /* Permet seleccionar text dins si cal */
 }
-.ai-prompt-target:hover {
-    background-color: #bae6fd;
+p.ai-prompt-target:hover {
+    background-color: #bae6fd; /* Blau una mica més fosc en hover */
 }
-/* ============================================= */
-
-
-/* === Estils per Cursors Indicatius === */
-/* Apliquem cursor només sobre l'àrea del document (.prose) quan el body té la classe */
-body.excel-linking-mode .prose {
-  cursor: crosshair !important; /* Cursor per indicar vinculació Excel */
-}
-body.ai-prompting-mode .prose {
-  cursor: text !important; /* Cursor per indicar selecció de text per IA */
-  /* Pots provar altres: 'copy', 'alias', 'grab' */
-}
-/* =================================== */
-
 
 /* === FINAL Estils Personalitzats === */
 
@@ -128,7 +111,7 @@ body.ai-prompting-mode .prose {
   .prose th, .prose td { border: 1px solid #ccc !important; padding: 0.25em 0.4em !important; vertical-align: middle !important; }
   .prose th { background-color: #eee !important; } /* Fons gris molt clar per capçaleres */
   /* Reset marcadors */
-  .linked-placeholder, .ai-prompt-target {
+  .linked-placeholder, p.ai-prompt-target { /* Aplica a ambdós */
         background-color: transparent !important;
         border: none !important;
         padding: 0 !important;
@@ -136,8 +119,12 @@ body.ai-prompting-mode .prose {
         cursor: default !important;
         color: inherit !important; /* Hereda color text normal */
   }
+  p.ai-prompt-target { /* Reset específic vora */
+        border-left: none !important;
+        padding-left: 0 !important;
+  }
   /* Oculta elements no desitjats */
-  .debug-links-section, .debug-ai-section { display: none !important; } /* Si tenim seccions de debug */
+  /* .debug-links-section, .debug-ai-section { display: none !important; } */ /* Descomenta si tens seccions de debug */
 
   /* Marges de pàgina */
   @page {
