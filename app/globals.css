@@ -45,35 +45,59 @@
 }
 /* === FINAL Estils Taules === */
 
-/* Estil per als placeholders vinculats a Excel */
+/* Estil per als placeholders vinculats a Excel (groc) */
 .linked-placeholder {
   background-color: #fff2a8; /* Groc pàlid */
   border: 1px dashed #e6bf00; /* Vora groguenca */
   padding: 0.05em 0.1em;
   border-radius: 3px;
-  cursor: default; /* Cursor normal per defecte */
+  cursor: default; /* Ja no és clicable per IA directament */
   user-select: none;
   -webkit-user-select: none;
   -moz-user-select: none;
   -ms-user-select: none;
   transition: background-color 0.2s ease;
+  /* Important: Evita que hereti estils estranys */
+  display: inline; /* O inline-block si cal, però inline sol ser millor per text */
+  line-height: inherit; /* Hereda interlineat */
+  font-size: inherit; /* Hereda mida font */
+  color: inherit; /* Hereda color text */
 }
 .linked-placeholder:hover {
    background-color: #ffe97a;
    border-color: #cca300;
 }
 
-/* Estil per als PARÀGRAFS marcats amb instrucció IA */
-p.ai-prompt-target { /* Aplicat a l'etiqueta P */
+/* Estil per al text marcat amb instrucció IA (blau cel) */
+/* Ara aplicat a <span> */
+.ai-prompt-target {
   background-color: #e0f2fe; /* Blau cel pàlid */
-  border-left: 3px solid #3b82f6; /* Vora esquerra blava */
-  padding-left: 0.5em; /* Espai per la vora */
-  cursor: pointer; /* Indica que es pot clicar per editar el prompt */
-  /* Permet seleccionar text dins si cal */
+  border-bottom: 1px dashed #0ea5e9; /* Línia blava */
+  padding: 0.05em 0.1em;
+  border-radius: 3px;
+  cursor: help; /* Opcional: indica info extra */
+  user-select: none;
+  -webkit-user-select: none;
+  -moz-user-select: none;
+  -ms-user-select: none;
+   display: inline;
+   line-height: inherit;
+   font-size: inherit;
+   color: inherit;
 }
-p.ai-prompt-target:hover {
-    background-color: #bae6fd; /* Blau una mica més fosc en hover */
+.ai-prompt-target:hover {
+    background-color: #bae6fd;
 }
+
+/* === Estils per Cursors Indicatius === */
+/* Apliquem cursor només sobre l'àrea del document (.prose) quan el body té la classe */
+body.excel-linking-mode .prose {
+  cursor: crosshair !important; /* Cursor per indicar vinculació Excel */
+}
+/* Hem eliminat ai-prompting-mode perquè ara es detecta implícitament */
+/* body.ai-prompting-mode .prose { cursor: text !important; } */
+/* =================================== */
+
 
 /* === FINAL Estils Personalitzats === */
 
@@ -110,19 +134,18 @@ p.ai-prompt-target:hover {
   .prose table { display: table !important; overflow-x: visible !important; width: auto !important; max-width: 100% !important; border: 1px solid #ccc !important; }
   .prose th, .prose td { border: 1px solid #ccc !important; padding: 0.25em 0.4em !important; vertical-align: middle !important; }
   .prose th { background-color: #eee !important; } /* Fons gris molt clar per capçaleres */
-  /* Reset marcadors */
-  .linked-placeholder, p.ai-prompt-target { /* Aplica a ambdós */
+
+  /* Reset marcadors (ara per spans) */
+  .linked-placeholder, .ai-prompt-target {
         background-color: transparent !important;
         border: none !important;
         padding: 0 !important;
         user-select: text !important; /* Permet seleccionar text en imprimir/PDF */
         cursor: default !important;
         color: inherit !important; /* Hereda color text normal */
+        display: inline !important; /* Assegura que es manté inline */
   }
-  p.ai-prompt-target { /* Reset específic vora */
-        border-left: none !important;
-        padding-left: 0 !important;
-  }
+
   /* Oculta elements no desitjats */
   /* .debug-links-section, .debug-ai-section { display: none !important; } */ /* Descomenta si tens seccions de debug */
 
