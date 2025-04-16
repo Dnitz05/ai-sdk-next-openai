@@ -3,9 +3,10 @@
 
 import React, { useState, ChangeEvent, useEffect, useRef, MouseEvent, useMemo } from 'react';
 import * as XLSX from 'xlsx';
+import Link from 'next/link';
 
 // Interfícies
-interface Link { id: string; excelHeader: string; selectedText: string; }
+interface ExcelLink { id: string; excelHeader: string; selectedText: string; }
 interface AiInstruction { id: string; prompt: string; } // ID és el data-paragraph-id del <p>
 
 export default function Home() {
@@ -21,7 +22,7 @@ export default function Home() {
     const [excelError, setExcelError] = useState<string | null>(null);
     const [excelHeaders, setExcelHeaders] = useState<string[]>([]);
     const [selectedExcelHeader, setSelectedExcelHeader] = useState<string | null>(null);
-    const [links, setLinks] = useState<Link[]>([]);
+    const [links, setLinks] = useState<ExcelLink[]>([]);
     const [aiTargetParagraphId, setAiTargetParagraphId] = useState<string | null>(null);
     const [aiUserPrompt, setAiUserPrompt] = useState<string>('');
     const [aiInstructions, setAiInstructions] = useState<AiInstruction[]>([]);
@@ -109,7 +110,12 @@ export default function Home() {
             {/* Capçalera WEB */}
              <div className="web-header w-full max-w-4xl mx-auto flex flex-col sm:flex-row items-start sm:items-center justify-between mb-4 sm:mb-6 px-1 gap-4">
                  <h2 className="text-lg font-semibold text-gray-700">Configurador Plantilles DOCX</h2>
-                 {selectedFileName && (<span className="text-sm text-gray-500 italic hidden sm:block"> Editant: {selectedFileName} {selectedExcelFileName ? ` amb ${selectedExcelFileName}` : ''}</span>)}
+                 <div className="flex space-x-4">
+                    <Link href="/plantilles" className="text-blue-600 hover:underline">
+                      Les Meves Plantilles
+                    </Link>
+                    {selectedFileName && (<span className="text-sm text-gray-500 italic hidden sm:block"> Editant: {selectedFileName} {selectedExcelFileName ? ` amb ${selectedExcelFileName}` : ''}</span>)}
+                 </div>
              </div>
 
             {/* Capçalera/Peu Impressió */}
