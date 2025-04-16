@@ -4,10 +4,10 @@ import supabaseServerClient from '@/lib/supabase/server';
 
 export async function DELETE(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  context: { params: { id: string } }
 ) {
   try {
-    const id = params.id;
+    const { id } = context.params;
     
     if (!id) {
       return NextResponse.json({ error: 'ID de plantilla no proporcionat' }, { status: 400 });
