@@ -1,9 +1,9 @@
 // app/api/delete-template/[id]/route.ts
-import { NextRequest, NextResponse } from 'next/server';
+import { NextResponse } from 'next/server';
 import supabaseServerClient from '@/lib/supabase/server';
 
 export async function DELETE(
-  request: NextRequest,
+  request: Request,
   { params }: { params: { id: string } }
 ) {
   try {
