@@ -7,7 +7,7 @@ export async function GET(
   { params }: { params: { id: string } }
 ) {
   try {
-    const { id } = params;
+    const id = params.id;
     
     if (!id) {
       return NextResponse.json({ error: 'ID de plantilla no proporcionat' }, { status: 400 });
