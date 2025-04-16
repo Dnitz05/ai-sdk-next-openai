@@ -2,13 +2,10 @@
 import { NextRequest, NextResponse } from 'next/server';
 import supabaseServerClient from '@/lib/supabase/server';
 
-type Params = {
-  params: {
-    id: string;
-  };
-};
-
-export async function GET(request: NextRequest, { params }: Params) {
+export async function GET(
+  request: NextRequest,
+  { params }: { params: { id: string } }
+) {
   try {
     const { id } = params;
     
