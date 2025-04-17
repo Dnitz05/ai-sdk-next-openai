@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useState, useEffect } from 'react';
-import { useRouter } from 'next/navigation';
+import { useRouter, useParams } from 'next/navigation';
 import Link from 'next/link';
 
 interface TemplateDetails {
@@ -16,17 +16,24 @@ interface TemplateDetails {
   updated_at: string;
 }
 
-export default function TemplatePage({ params }: { params: { id: string } }) {
+export default function TemplatePage() {
   const router = useRouter();
+  const params = useParams();
+  const id = typeof params.id === 'string' ? params.id : Array.isArray(params.id) ? params.id[0] : undefined;
   const [template, setTemplate] = useState<TemplateDetails | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   
   useEffect(() => {
+    if (!id) {
+      setError('ID de plantilla no proporcionat');
+      setIsLoading(false);
+      return;
+    }
     const fetchTemplate = async () => {
       setIsLoading(true);
       try {
-        const response = await fetch(`/api/get-template/${params.id}`);
+        const response = await fetch(`/api/get-template/${id}`);
         if (!response.ok) {
           throw new Error(`Error ${response.status}: ${response.statusText}`);
         }
@@ -41,15 +48,19 @@ export default function TemplatePage({ params }: { params: { id: string } }) {
     };
     
     fetchTemplate();
-  }, [params.id]);
+  }, [id]);
   
   const handleDelete = async () => {
+    if (!id) {
+      alert('ID de plantilla no proporcionat');
+      return;
+    }
     if (!confirm('Estàs segur que vols eliminar aquesta plantilla?')) {
       return;
     }
     
     try {
-      const response = await fetch(`/api/delete-template/${params.id}`, {
+      const response = await fetch(`/api/delete-template/${id}`, {
         method: 'DELETE',
       });
       
