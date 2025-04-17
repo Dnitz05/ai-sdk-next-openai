@@ -22,7 +22,18 @@ export default function TemplatesPage() {
     const fetchTemplates = async () => {
       setIsLoading(true);
       try {
-        const response = await fetch(`/api/get-templates${searchTerm ? `?search=${encodeURIComponent(searchTerm)}` : ''}`);
+        // Obtenir el token d'usuari de Supabase
+        const { data: sessionData } = await import('../../lib/supabase/client').then(m => m.default.auth.getSession());
+        const accessToken = sessionData?.session?.access_token;
+
+        const response = await fetch(
+          `/api/get-templates${searchTerm ? `?search=${encodeURIComponent(searchTerm)}` : ''}`,
+          {
+            headers: accessToken
+              ? { Authorization: `Bearer ${accessToken}` }
+              : undefined,
+          }
+        );
         if (!response.ok) {
           throw new Error(`Error ${response.status}: ${response.statusText}`);
         }
@@ -35,7 +46,7 @@ export default function TemplatesPage() {
         setIsLoading(false);
       }
     };
-    
+
     fetchTemplates();
   }, [searchTerm]);
   
@@ -44,7 +55,7 @@ export default function TemplatesPage() {
       <div className="w-full max-w-4xl mx-auto">
         <div className="flex justify-between items-center mb-6">
           <h1 className="text-2xl font-semibold text-gray-800">Les Meves Plantilles</h1>
-          <Link href="/" className="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700">
+          <Link href="/plantilles/nova" className="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700">
             Nova Plantilla
           </Link>
         </div>
