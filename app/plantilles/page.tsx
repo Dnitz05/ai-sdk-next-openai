@@ -50,6 +50,14 @@ export default function TemplatesPage() {
     fetchTemplates();
   }, [searchTerm]);
   
+  // Redirecció automàtica si no hi ha plantilles
+  const router = require('next/navigation').useRouter?.() || null;
+  useEffect(() => {
+    if (!isLoading && !error && templates.length === 0 && router) {
+      router.push('/plantilles/nova');
+    }
+  }, [isLoading, error, templates, router]);
+
   return (
     <main className="flex min-h-screen flex-col items-center p-4 sm:p-8 bg-gray-100">
       <div className="w-full max-w-4xl mx-auto">
