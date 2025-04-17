@@ -166,6 +166,7 @@ export default function Home() {
 
     // --- Efecte per gestionar hover i preselecció de paràgrafs en mode IA ---
     useEffect(() => {
+        console.log("[DEBUG IA] useEffect injecta botons IA - iaInstructionsMode:", iaInstructionsMode, "aiInstructions:", aiInstructions, "convertedHtml:", !!convertedHtml);
         if (!iaInstructionsMode || !contentRef.current) {
             // Neteja si es desactiva el mode
             if (contentRef.current) {
