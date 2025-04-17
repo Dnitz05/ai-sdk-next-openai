@@ -54,7 +54,7 @@ export default function TemplatesPage() {
   const router = require('next/navigation').useRouter?.() || null;
   useEffect(() => {
     if (!isLoading && !error && templates.length === 0 && router) {
-      router.push('/plantilles/nova');
+      router.push('/');
     }
   }, [isLoading, error, templates, router]);
 
