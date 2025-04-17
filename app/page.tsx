@@ -26,6 +26,8 @@ export default function Home() {
     const [aiTargetParagraphId, setAiTargetParagraphId] = useState<string | null>(null);
     const [aiUserPrompt, setAiUserPrompt] = useState<string>('');
     const [aiInstructions, setAiInstructions] = useState<AiInstruction[]>([]);
+    // Estat per al mode d'instruccions IA
+    const [iaInstructionsMode, setIaInstructionsMode] = useState(false);
     type SaveStatus = 'idle' | 'saving' | 'success' | 'error';
     const [saveStatus, setSaveStatus] = useState<SaveStatus>('idle');
     const [saveMessage, setSaveMessage] = useState<string | null>(null);
@@ -222,6 +224,20 @@ export default function Home() {
                                 {convertedHtml && (
                                      <div className="p-3 border rounded border-gray-200">
                                         <p className="text-sm font-medium text-gray-700 mb-1">Instruccions IA</p>
+                                        <button
+                                            type="button"
+                                            className={`mb-2 px-4 py-2 rounded font-semibold text-xs transition border ${iaInstructionsMode ? 'bg-indigo-600 text-white border-indigo-700' : 'bg-white text-indigo-700 border-indigo-400'} hover:bg-indigo-50`}
+                                            onClick={() => {
+                                                setIaInstructionsMode((prev) => {
+                                                    const newState = !prev;
+                                                    console.log('Instruccions IA mode:', newState ? 'ACTIVAT' : 'DESACTIVAT');
+                                                    return newState;
+                                                });
+                                            }}
+                                            aria-pressed={iaInstructionsMode}
+                                        >
+                                            Instruccions IA {iaInstructionsMode ? '(Activat)' : '(Desactivat)'}
+                                        </button>
                                         <p className="text-xs text-gray-600 mb-2">Clica un paràgraf al document per afegir/editar instrucció:</p>
                                         {/* UI per afegir/editar instrucció IA */}
                                         {aiTargetParagraphId && (
@@ -246,7 +262,18 @@ export default function Home() {
                                             <div className="mt-4 pt-4 border-t">
                                                 <h4 className="text-sm font-medium text-indigo-700 mb-2">Instruccions Guardades:</h4>
                                                 <ul className="space-y-2 text-xs max-h-32 overflow-y-auto pr-1">
-                                                    {aiInstructions.map((instr, index) => ( <li key={instr.id} className="p-2 border rounded bg-indigo-50 text-gray-700 hover:bg-indigo-100 cursor-pointer" onClick={() => {setAiTargetParagraphId(instr.id); setAiUserPrompt(instr.prompt)}}> <span className="block font-medium text-indigo-800">Inst. {index + 1}</span> <span className='block text-gray-500 text-[10px]'>(Pàrr. ID: {instr.id.substring(2,8)}...)</span> <i className='block mt-1'>{instr.prompt}</i> </li> ))}
+                                                    {aiInstructions.map((instr, index) => (
+                                                        <li
+                                                            key={instr.id}
+                                                            className={`p-2 border rounded bg-indigo-50 text-gray-700 cursor-pointer transition ${iaInstructionsMode ? 'hover:border-dashed hover:border-2 hover:border-indigo-700' : 'hover:bg-indigo-100'}`}
+                                                            onClick={() => { setAiTargetParagraphId(instr.id); setAiUserPrompt(instr.prompt); }}
+                                                            onMouseEnter={() => { if (iaInstructionsMode) { console.log('Hover sobre instrucció IA amb mode ACTIVAT. ID:', instr.id); } }}
+                                                        >
+                                                            <span className="block font-medium text-indigo-800">Inst. {index + 1}</span>
+                                                            <span className='block text-gray-500 text-[10px]'>(Pàrr. ID: {instr.id.substring(2,8)}...)</span>
+                                                            <i className='block mt-1'>{instr.prompt}</i>
+                                                        </li>
+                                                    ))}
                                                 </ul>
                                             </div>
                                         )}
