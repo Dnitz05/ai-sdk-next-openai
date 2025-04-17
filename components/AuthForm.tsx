@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import supabase from '../lib/supabase/client';
 
 type AuthMode = 'login' | 'signup';
@@ -12,6 +12,26 @@ const AuthForm: React.FC = () => {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [message, setMessage] = useState<string | null>(null);
+  const [user, setUser] = useState<any>(null);
+
+  // Recupera la sessió actual i escolta canvis d'autenticació
+  useEffect(() => {
+    let ignore = false;
+    const getSession = async () => {
+      const { data, error } = await supabase.auth.getUser();
+      if (!ignore) setUser(data?.user || null);
+    };
+    getSession();
+
+    const { data: listener } = supabase.auth.onAuthStateChange((_event, session) => {
+      setUser(session?.user || null);
+    });
+
+    return () => {
+      ignore = true;
+      listener?.subscription.unsubscribe();
+    };
+  }, []);
 
   const handleAuth = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -30,6 +50,34 @@ const AuthForm: React.FC = () => {
     }
     setLoading(false);
   };
+
+  const handleLogout = async () => {
+    setLoading(true);
+    setError(null);
+    setMessage(null);
+    const { error } = await supabase.auth.signOut();
+    if (error) setError(error.message);
+    setLoading(false);
+  };
+
+  if (user) {
+    return (
+      <div className="max-w-sm mx-auto p-4 border rounded shadow flex flex-col items-center">
+        <div className="mb-2 text-green-700 font-semibold">
+          Sessió iniciada com a <span className="font-mono">{user.email}</span>
+        </div>
+        <button
+          onClick={handleLogout}
+          disabled={loading}
+          className="btn btn-secondary mt-2"
+        >
+          {loading ? 'Sortint...' : 'Tanca sessió'}
+        </button>
+        {error && <div className="text-red-600 mt-2">{error}</div>}
+        {message && <div className="text-green-600 mt-2">{message}</div>}
+      </div>
+    );
+  }
 
   return (
     <div className="max-w-sm mx-auto p-4 border rounded shadow">
