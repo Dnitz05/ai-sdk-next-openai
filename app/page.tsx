@@ -33,11 +33,7 @@ export default function Home() {
         };
     }, [router]);
 
-    useEffect(() => {
-        if (user) {
-            router.push('/plantilles');
-        }
-    }, [user, router]);
+    // Eliminada la redirecció automàtica a /plantilles per evitar bucles
 
     if (loading) {
         return (
@@ -57,7 +53,15 @@ export default function Home() {
         );
     }
 
-    // Si per algun motiu arriba aquí amb usuari, redirigeix
-    router.push('/plantilles');
-    return null;
+    // Ara, si l'usuari està autenticat, es mostra la pàgina de creació de plantilles (no es redirigeix automàticament)
+    return (
+        <main className="flex min-h-screen w-full flex-col items-center justify-center bg-gray-100">
+            <div className="w-full max-w-3xl mb-8">
+                {/* Aquí va el contingut de creació de plantilles, barra lateral, etc. */}
+                <h1 className="text-2xl font-bold mb-4">Creació de Plantilla</h1>
+                {/* ... (resta de la UI de creació) ... */}
+                <p className="text-gray-500">Aquí pots crear i configurar una nova plantilla.</p>
+            </div>
+        </main>
+    );
 }
