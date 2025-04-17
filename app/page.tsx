@@ -191,7 +191,7 @@ export default function Home() {
                                 {/* Pas 2: Carregar Excel */}
                                 {convertedHtml && excelHeaders.length === 0 && (
                                     <div className="p-3 border border-dashed rounded">
-                                        <p className="text-sm font-medium text-gray-700 mb-2">Pas 2: Carregar Excel (Opcional)</p>
+                                        <p className="text-sm font-medium text-gray-700 mb-2">Carregar Excel</p>
                                         <div className="flex flex-col items-start gap-2">
                                             <label htmlFor="excelInputSidebar" className={`inline-flex items-center justify-center px-3 py-1.5 border border-transparent text-xs sm:text-sm font-medium rounded shadow-sm text-white whitespace-nowrap ${isParsingExcel ? 'bg-gray-400 cursor-not-allowed' : 'bg-green-600 hover:bg-green-700 cursor-pointer'}`}>
                                                 {isParsingExcel ? 'Processant...' : (selectedExcelFileName ? 'Canvia Excel' : 'Selecciona Excel')}

@@ -1,4 +1,4 @@
-'use client';
+puja'use client';
 
 import React, { useState, useEffect } from 'react';
 import { useRouter, useParams } from 'next/navigation';
@@ -23,7 +23,26 @@ export default function TemplatePage() {
   const [template, setTemplate] = useState<TemplateDetails | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  
+
+  // Estat per al mode d'instruccions IA
+  const [iaInstructionsMode, setIaInstructionsMode] = useState(false);
+
+  // Log per canvis d'estat del botó
+  const handleToggleIaInstructions = () => {
+    setIaInstructionsMode((prev) => {
+      const newState = !prev;
+      console.log('Instruccions IA mode:', newState ? 'ACTIVAT' : 'DESACTIVAT');
+      return newState;
+    });
+  };
+
+  // Log per hover sobre paràgraf
+  const handleParagraphHover = (id: string) => {
+    if (iaInstructionsMode) {
+      console.log('Hover sobre paràgraf IA amb mode ACTIVAT. ID:', id);
+    }
+  };
+
   useEffect(() => {
     if (!id) {
       setError('ID de plantilla no proporcionat');
@@ -168,10 +187,22 @@ export default function TemplatePage() {
           
           <div className="mt-6">
             <h2 className="text-lg font-medium mb-3 text-gray-700">Instruccions IA</h2>
+            <button
+              type="button"
+              className={`mb-4 px-4 py-2 rounded font-semibold text-sm transition border ${iaInstructionsMode ? 'bg-blue-600 text-white border-blue-700' : 'bg-white text-blue-700 border-blue-400'} hover:bg-blue-50`}
+              onClick={handleToggleIaInstructions}
+              aria-pressed={iaInstructionsMode}
+            >
+              Instruccions IA {iaInstructionsMode ? '(Activat)' : '(Desactivat)'}
+            </button>
             {template.ai_instructions && template.ai_instructions.length > 0 ? (
               <div className="space-y-3">
                 {template.ai_instructions.map((instruction) => (
-                  <div key={instruction.id} className="p-3 bg-blue-50 rounded border border-blue-200">
+                  <div
+                    key={instruction.id}
+                    className={`p-3 bg-blue-50 rounded border border-blue-200 group transition ${iaInstructionsMode ? 'hover:border-dashed hover:border-2 hover:border-blue-700' : ''}`}
+                    onMouseEnter={() => handleParagraphHover(instruction.id)}
+                  >
                     <p className="text-sm text-gray-500">ID Paràgraf: {instruction.id}</p>
                     <p className="text-gray-800">{instruction.prompt}</p>
                   </div>
