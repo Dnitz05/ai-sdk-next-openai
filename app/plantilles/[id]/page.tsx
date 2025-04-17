@@ -187,6 +187,7 @@ export default function TemplatePage() {
           
           <div className="mt-6">
             <h2 className="text-lg font-medium mb-3 text-gray-700">Instruccions IA</h2>
+            <div style={{background:'red', color:'white', padding:'8px', marginBottom:'8px', fontWeight:'bold'}}>DEBUG IA BUTTON</div>
             <button
               type="button"
               className={`mb-4 px-4 py-2 rounded font-semibold text-sm transition border ${iaInstructionsMode ? 'bg-blue-600 text-white border-blue-700' : 'bg-white text-blue-700 border-blue-400'} hover:bg-blue-50`}
