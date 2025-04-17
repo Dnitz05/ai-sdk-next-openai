@@ -88,8 +88,14 @@ export default function Home() {
             const existingInstruction = aiInstructions.find(instr => instr.id === paragraphId);
             setAiTargetParagraphId(paragraphId);
             setAiUserPrompt(existingInstruction?.prompt || '');
-            console.log("Paràgraf seleccionat per IA:", paragraphId);
-        } else { if (aiTargetParagraphId) { setAiTargetParagraphId(null); setAiUserPrompt(''); } }
+            console.log("[LOG IA] iaInstructionsMode:", iaInstructionsMode, "| Paràgraf seleccionat per IA:", paragraphId, "| aiTargetParagraphId abans:", aiTargetParagraphId);
+        } else {
+            if (aiTargetParagraphId) {
+                setAiTargetParagraphId(null);
+                setAiUserPrompt('');
+                console.log("[LOG IA] Deseleccionat paràgraf. iaInstructionsMode:", iaInstructionsMode, "| aiTargetParagraphId abans:", aiTargetParagraphId);
+            }
+        }
     };
 
     const handleCancelAiInstruction = () => {
@@ -104,6 +110,11 @@ export default function Home() {
         console.log("Intentant desar configuració..."); setSaveStatus('saving'); setSaveMessage(null); if (!contentRef.current) { setSaveMessage("Error: No HTML."); setSaveStatus('error'); return; } let finalHtml = contentRef.current.innerHTML; /* Neteja de temp spans ja no cal */ const configuration = { baseDocxName: selectedFileName, excelInfo: { fileName: selectedExcelFileName, headers: excelHeaders, }, linkMappings: links, aiInstructions: aiInstructions, finalHtml: finalHtml }; console.log("Configuració a desar:", configuration); try { const response = await fetch('/api/save-configuration', { method: 'POST', headers: { 'Content-Type': 'application/json', }, body: JSON.stringify(configuration), }); if (response.ok) { const result = await response.json(); console.log("Guardat amb èxit:", result); setSaveMessage(result.message || "Guardat!"); setSaveStatus('success'); } else { let errorMsg = `Error ${response.status}.`; try { const errorResult = await response.json(); errorMsg = errorResult.error || errorResult.details || errorMsg; } catch (e) {} console.error("Error desant (API):", errorMsg); setSaveMessage(errorMsg); setSaveStatus('error'); } } catch (error) { console.error("Error de xarxa desant:", error); setSaveMessage(`Error xarxa: ${error instanceof Error ? error.message : 'Error'}`); setSaveStatus('error'); }
     };
 
+
+    // --- Logs d'estat per depuració IA ---
+    useEffect(() => {
+        console.log("[LOG IA] useEffect: iaInstructionsMode:", iaInstructionsMode, "| aiTargetParagraphId:", aiTargetParagraphId);
+    }, [iaInstructionsMode, aiTargetParagraphId]);
 
     // --- JSX ---
     return (
