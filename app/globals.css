@@ -28,6 +28,20 @@
 p.ai-prompt-target { background-color: #e0f2fe; border-left: 3px solid #3b82f6; padding-left: 0.5em; border-radius: 3px; cursor: pointer; }
 p.ai-prompt-target:hover { background-color: #bae6fd; }
 
+/* Hover i preselecció per instruccions IA */
+p.ia-hover {
+  background-color: #e0f2fe !important; /* blau cel clar */
+  cursor: pointer !important;
+  transition: background-color 0.15s;
+}
+p.ia-selected {
+  background-color: #bae6fd !important; /* blau més intens per preselecció */
+  border-left: 3px solid #0ea5e9 !important;
+  padding-left: 0.5em !important;
+  border-radius: 3px !important;
+  cursor: pointer !important;
+}
+
 /* === FINAL Estils Personalitzats === */
 
 

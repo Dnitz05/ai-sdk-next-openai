@@ -116,6 +116,52 @@ export default function Home() {
         console.log("[LOG IA] useEffect: iaInstructionsMode:", iaInstructionsMode, "| aiTargetParagraphId:", aiTargetParagraphId);
     }, [iaInstructionsMode, aiTargetParagraphId]);
 
+    // --- Efecte per gestionar hover i preselecció de paràgrafs en mode IA ---
+    useEffect(() => {
+        if (!iaInstructionsMode || !contentRef.current) {
+            // Neteja si es desactiva el mode
+            if (contentRef.current) {
+                const ps = contentRef.current.querySelectorAll('p');
+                ps.forEach(p => {
+                    p.classList.remove('ia-hover');
+                    p.classList.remove('ia-selected');
+                    p.removeEventListener('mouseover', handleMouseOver);
+                    p.removeEventListener('mouseout', handleMouseOut);
+                });
+            }
+            return;
+        }
+
+        function handleMouseOver(this: HTMLElement) {
+            this.classList.add('ia-hover');
+        }
+        function handleMouseOut(this: HTMLElement) {
+            this.classList.remove('ia-hover');
+        }
+
+        const ps = contentRef.current.querySelectorAll('p');
+        ps.forEach(p => {
+            p.addEventListener('mouseover', handleMouseOver);
+            p.addEventListener('mouseout', handleMouseOut);
+            // Preselecció visual
+            if (aiTargetParagraphId && p.dataset.paragraphId === aiTargetParagraphId) {
+                p.classList.add('ia-selected');
+            } else {
+                p.classList.remove('ia-selected');
+            }
+        });
+
+        // Cleanup
+        return () => {
+            ps.forEach(p => {
+                p.classList.remove('ia-hover');
+                p.classList.remove('ia-selected');
+                p.removeEventListener('mouseover', handleMouseOver);
+                p.removeEventListener('mouseout', handleMouseOut);
+            });
+        };
+    }, [iaInstructionsMode, aiTargetParagraphId, convertedHtml]);
+
     // --- JSX ---
     return (
         <main className="flex min-h-screen w-full flex-col items-center p-4 sm:p-8 bg-gray-100">
