@@ -50,13 +50,7 @@ export default function TemplatesPage() {
     fetchTemplates();
   }, [searchTerm]);
   
-  // Redirecció automàtica si no hi ha plantilles
-  const router = require('next/navigation').useRouter?.() || null;
-  useEffect(() => {
-    if (!isLoading && !error && templates.length === 0 && router) {
-      router.push('/');
-    }
-  }, [isLoading, error, templates, router]);
+  // Eliminada la redirecció automàtica si no hi ha plantilles per evitar bucles
 
   return (
     <main className="flex min-h-screen flex-col items-center p-4 sm:p-8 bg-gray-100">
