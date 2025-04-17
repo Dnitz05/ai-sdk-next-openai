@@ -256,7 +256,7 @@ export default function Home() {
 
                 label.appendChild(btnEdit);
                 label.appendChild(btnDelete);
-                p.parentNode?.insertBefore(label, p);
+                p.insertBefore(label, p.firstChild);
             }
         });
 
