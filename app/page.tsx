@@ -116,6 +116,21 @@ export default function Home() {
         console.log("[LOG IA] useEffect: iaInstructionsMode:", iaInstructionsMode, "| aiTargetParagraphId:", aiTargetParagraphId);
     }, [iaInstructionsMode, aiTargetParagraphId]);
 
+    // --- Eliminar instrucció IA ---
+    const handleDeleteAiInstruction = (id: string) => {
+        setAiInstructions(prev => prev.filter(instr => instr.id !== id));
+        // Neteja la classe ai-prompt-target del paràgraf corresponent
+        if (contentRef.current) {
+            const p = contentRef.current.querySelector(`p[data-paragraph-id="${id}"]`);
+            if (p) p.classList.remove('ai-prompt-target');
+        }
+        // Si el paràgraf eliminat estava seleccionat, deselecciona
+        if (aiTargetParagraphId === id) {
+            setAiTargetParagraphId(null);
+            setAiUserPrompt('');
+        }
+    };
+
     // --- Efecte per gestionar hover i preselecció de paràgrafs en mode IA ---
     useEffect(() => {
         if (!iaInstructionsMode || !contentRef.current) {
@@ -128,6 +143,9 @@ export default function Home() {
                     p.removeEventListener('mouseover', handleMouseOver);
                     p.removeEventListener('mouseout', handleMouseOut);
                 });
+                // Neteja etiquetes de referència
+                const labels = contentRef.current.querySelectorAll('.ia-label');
+                labels.forEach(label => label.remove());
             }
             return;
         }
@@ -151,6 +169,27 @@ export default function Home() {
             }
         });
 
+        // --- Injectar referències "Instrucció N" ---
+        // Primer, eliminar etiquetes anteriors
+        const labels = contentRef.current.querySelectorAll('.ia-label');
+        labels.forEach(label => label.remove());
+        // Afegir noves etiquetes
+        aiInstructions.forEach((instr, idx) => {
+            const p = contentRef.current?.querySelector(`p[data-paragraph-id="${instr.id}"]`);
+            if (
+                p &&
+                !(
+                    p.previousSibling instanceof HTMLElement &&
+                    p.previousSibling.classList.contains('ia-label')
+                )
+            ) {
+                const label = document.createElement('span');
+                label.className = 'ia-label';
+                label.textContent = `Instrucció ${idx + 1}`;
+                p.parentNode?.insertBefore(label, p);
+            }
+        });
+
         // Cleanup
         return () => {
             ps.forEach(p => {
@@ -159,8 +198,10 @@ export default function Home() {
                 p.removeEventListener('mouseover', handleMouseOver);
                 p.removeEventListener('mouseout', handleMouseOut);
             });
+            const labels = contentRef.current?.querySelectorAll('.ia-label');
+            labels?.forEach(label => label.remove());
         };
-    }, [iaInstructionsMode, aiTargetParagraphId, convertedHtml]);
+    }, [iaInstructionsMode, aiTargetParagraphId, convertedHtml, aiInstructions]);
 
     // --- JSX ---
     return (
@@ -213,7 +254,27 @@ export default function Home() {
                      {(links.length > 0 || aiInstructions.length > 0) && (
                          <div className="mt-6 border-t border-gray-200 pt-4 space-y-4 text-xs max-w-5xl mx-auto">
                              {links.length > 0 && <div> <h3 className="text-sm font-semibold text-purple-600 mb-1">Placeholders Excel:</h3> <ul className="list-disc list-inside text-gray-600"> {links.map(l => (<li key={l.id} className='mb-1'><code>{l.selectedText}</code> <span className='text-gray-500'>=&gt;</span> <strong>{l.excelHeader}</strong></li>))} </ul> </div>}
-                             {aiInstructions.length > 0 && <div> <h3 className="text-sm font-semibold text-indigo-600 mb-1">Instruccions IA:</h3> <ul className="list-decimal list-inside text-gray-600 space-y-1"> {aiInstructions.map((instr, index) => (<li key={instr.id} className='mb-1 border-b pb-1'> <span className="font-medium text-indigo-800">Inst. {index + 1}</span> <span className='text-gray-500'>(Pàrr. ID: {instr.id.substring(2,8)}...)</span> <i className='block bg-indigo-50 px-1 rounded text-xs'>{instr.prompt}</i> </li>))} </ul> </div>}
+                             {aiInstructions.length > 0 && (
+                               <div>
+                                 <h3 className="text-sm font-semibold text-indigo-600 mb-1">Instruccions IA:</h3>
+                                 <ul className="list-decimal list-inside text-gray-600 space-y-1">
+                                   {aiInstructions.map((instr, index) => (
+                                     <li key={instr.id} className='mb-1 border-b pb-1 flex items-center gap-2'>
+                                       <span className="font-medium text-indigo-800">Inst. {index + 1}</span>
+                                       <span className='text-gray-500'>(Pàrr. ID: {instr.id.substring(2,8)}...)</span>
+                                       <i className='block bg-indigo-50 px-1 rounded text-xs'>{instr.prompt}</i>
+                                       <button
+                                         className="ml-2 px-2 py-0.5 text-xs bg-red-100 text-red-700 rounded hover:bg-red-200"
+                                         title="Elimina instrucció"
+                                         onClick={() => handleDeleteAiInstruction(instr.id)}
+                                       >
+                                         Elimina
+                                       </button>
+                                     </li>
+                                   ))}
+                                 </ul>
+                               </div>
+                             )}
                          </div>
                      )}
                 </div> {/* Fi Foli */}
