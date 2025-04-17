@@ -23,9 +23,7 @@ export default function Home() {
         getSession();
         const { data: listener } = supabase.auth.onAuthStateChange((_event, session) => {
             setUser(session?.user || null);
-            if (session?.user) {
-                router.push('/plantilles');
-            }
+            // Eliminada la redirecció automàtica a /plantilles després del login
         });
         return () => {
             ignore = true;
