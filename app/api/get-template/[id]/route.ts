@@ -2,13 +2,18 @@
 import { NextResponse } from 'next/server';
 import supabaseServerClient from '@/lib/supabase/server';
 
-export async function GET(
-  request: Request,
-  { params }: { params: { id: string } }
-) {
+export async function GET(request: Request) {
+  // Extraiem l'id de la URL manualment segons la nova API de Next.js 15
+  let id: string | undefined;
   try {
-    const id = params.id;
-    
+    const url = new URL(request.url);
+    const pathParts = url.pathname.split("/");
+    id = pathParts[pathParts.length - 1];
+  } catch {
+    id = undefined;
+  }
+
+  try {
     if (!id) {
       return NextResponse.json({ error: 'ID de plantilla no proporcionat' }, { status: 400 });
     }
@@ -21,9 +26,9 @@ export async function GET(
     
     if (error) {
       console.error("Error recuperant plantilla:", error);
-      return NextResponse.json({ 
-        error: 'Error recuperant plantilla', 
-        details: error.message 
+      return NextResponse.json({
+        error: 'Error recuperant plantilla',
+        details: error.message
       }, { status: 500 });
     }
     
@@ -34,9 +39,9 @@ export async function GET(
     return NextResponse.json({ template: data }, { status: 200 });
   } catch (error) {
     console.error("Error general a /api/get-template/[id]:", error);
-    return NextResponse.json({ 
-      error: 'Error intern del servidor', 
-      details: error instanceof Error ? error.message : String(error) 
+    return NextResponse.json({
+      error: 'Error intern del servidor',
+      details: error instanceof Error ? error.message : String(error)
     }, { status: 500 });
   }
 }
