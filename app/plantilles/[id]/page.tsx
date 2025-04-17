@@ -34,15 +34,7 @@ export default function TemplatePage() {
     const fetchTemplate = async () => {
       setIsLoading(true);
       try {
-        // Obtenir el token d'usuari de Supabase
-        const { data: sessionData } = await import('../../../lib/supabase/client').then(m => m.default.auth.getSession());
-        const accessToken = sessionData?.session?.access_token;
-
-        const response = await fetch(`/api/get-template/${id}`, {
-          headers: accessToken
-            ? { Authorization: `Bearer ${accessToken}` }
-            : undefined,
-        });
+        const response = await fetch(`/api/get-template/${id}`);
         if (!response.ok) {
           throw new Error(`Error ${response.status}: ${response.statusText}`);
         }
@@ -55,7 +47,7 @@ export default function TemplatePage() {
         setIsLoading(false);
       }
     };
-
+    
     fetchTemplate();
   }, [id]);
   
@@ -69,21 +61,14 @@ export default function TemplatePage() {
     }
     
     try {
-      // Obtenir el token d'usuari de Supabase
-      const { data: sessionData } = await import('../../../lib/supabase/client').then(m => m.default.auth.getSession());
-      const accessToken = sessionData?.session?.access_token;
-
       const response = await fetch(`/api/delete-template/${id}`, {
         method: 'DELETE',
-        headers: accessToken
-          ? { Authorization: `Bearer ${accessToken}` }
-          : undefined,
       });
-
+      
       if (!response.ok) {
         throw new Error(`Error ${response.status}: ${response.statusText}`);
       }
-
+      
       router.push('/plantilles');
     } catch (err) {
       alert(`Error eliminant plantilla: ${err instanceof Error ? err.message : 'Error desconegut'}`);

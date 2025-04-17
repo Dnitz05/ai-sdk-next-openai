@@ -22,18 +22,7 @@ export default function TemplatesPage() {
     const fetchTemplates = async () => {
       setIsLoading(true);
       try {
-        // Obtenir el token d'usuari de Supabase
-        const { data: sessionData } = await import('../../lib/supabase/client').then(m => m.default.auth.getSession());
-        const accessToken = sessionData?.session?.access_token;
-
-        const response = await fetch(
-          `/api/get-templates${searchTerm ? `?search=${encodeURIComponent(searchTerm)}` : ''}`,
-          {
-            headers: accessToken
-              ? { Authorization: `Bearer ${accessToken}` }
-              : undefined,
-          }
-        );
+        const response = await fetch(`/api/get-templates${searchTerm ? `?search=${encodeURIComponent(searchTerm)}` : ''}`);
         if (!response.ok) {
           throw new Error(`Error ${response.status}: ${response.statusText}`);
         }
@@ -46,12 +35,10 @@ export default function TemplatesPage() {
         setIsLoading(false);
       }
     };
-
+    
     fetchTemplates();
   }, [searchTerm]);
   
-  // Eliminada la redirecció automàtica si no hi ha plantilles per evitar bucles
-
   return (
     <main className="flex min-h-screen flex-col items-center p-4 sm:p-8 bg-gray-100">
       <div className="w-full max-w-4xl mx-auto">
