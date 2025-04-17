@@ -103,7 +103,37 @@ export default function Home() {
     };
 
     const handleSaveAiInstruction = () => {
-        if (!aiUserPrompt.trim() || !aiTargetParagraphId || !contentRef.current) { alert("Selecciona paràgraf i escriu instrucció."); return; } const targetParagraph = contentRef.current.querySelector<HTMLParagraphElement>(`p[data-paragraph-id="${aiTargetParagraphId}"]`); if (targetParagraph) { setAiInstructions(prev => { const index = prev.findIndex(i => i.id === aiTargetParagraphId); if (index > -1) { const updated = [...prev]; updated[index] = { id: aiTargetParagraphId, prompt: aiUserPrompt }; return updated; } else { return [...prev, { id: aiTargetParagraphId, prompt: aiUserPrompt }]; } }); targetParagraph.classList.add('ai-prompt-target'); const updatedHtml = contentRef.current.innerHTML; setConvertedHtml(updatedHtml); console.log(`Instrucció IA guardada per ${aiTargetParagraphId}: "${aiUserPrompt}"`); setAiTargetParagraphId(null); setAiUserPrompt(''); } else { console.error("No trobat paràgraf per guardar IA."); alert("Error guardant."); setAiTargetParagraphId(null); setAiUserPrompt(''); }
+        if (!aiUserPrompt.trim() || !aiTargetParagraphId || !contentRef.current) {
+            alert("Selecciona paràgraf i escriu instrucció.");
+            return;
+        }
+        const targetParagraph = contentRef.current.querySelector<HTMLParagraphElement>(`p[data-paragraph-id="${aiTargetParagraphId}"]`);
+        if (targetParagraph) {
+            // Substitueix el contingut del paràgraf pel prompt de la instrucció IA
+            targetParagraph.textContent = aiUserPrompt;
+
+            setAiInstructions(prev => {
+                const index = prev.findIndex(i => i.id === aiTargetParagraphId);
+                if (index > -1) {
+                    const updated = [...prev];
+                    updated[index] = { id: aiTargetParagraphId, prompt: aiUserPrompt };
+                    return updated;
+                } else {
+                    return [...prev, { id: aiTargetParagraphId, prompt: aiUserPrompt }];
+                }
+            });
+            targetParagraph.classList.add('ai-prompt-target');
+            const updatedHtml = contentRef.current.innerHTML;
+            setConvertedHtml(updatedHtml);
+            console.log(`Instrucció IA guardada per ${aiTargetParagraphId}: "${aiUserPrompt}"`);
+            setAiTargetParagraphId(null);
+            setAiUserPrompt('');
+        } else {
+            console.error("No trobat paràgraf per guardar IA.");
+            alert("Error guardant.");
+            setAiTargetParagraphId(null);
+            setAiUserPrompt('');
+        }
     };
 
     const handleSaveConfiguration = async () => {
