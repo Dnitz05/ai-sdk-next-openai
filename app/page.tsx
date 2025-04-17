@@ -7,7 +7,7 @@ import Link from 'next/link';
 
 // Interfícies
 interface ExcelLink { id: string; excelHeader: string; selectedText: string; }
-interface AiInstruction { id: string; prompt: string; } // ID és el data-paragraph-id del <p>
+interface AiInstruction { id: string; prompt: string; originalText: string; } // ID és el data-paragraph-id del <p>
 
 export default function Home() {
     // --- Estats ---
@@ -109,6 +109,9 @@ export default function Home() {
         }
         const targetParagraph = contentRef.current.querySelector<HTMLParagraphElement>(`p[data-paragraph-id="${aiTargetParagraphId}"]`);
         if (targetParagraph) {
+            // Guarda el text original abans de substituir-lo
+            const originalText = targetParagraph.textContent || "";
+
             // Substitueix el contingut del paràgraf pel prompt de la instrucció IA
             targetParagraph.textContent = aiUserPrompt;
 
@@ -116,10 +119,10 @@ export default function Home() {
                 const index = prev.findIndex(i => i.id === aiTargetParagraphId);
                 if (index > -1) {
                     const updated = [...prev];
-                    updated[index] = { id: aiTargetParagraphId, prompt: aiUserPrompt };
+                    updated[index] = { id: aiTargetParagraphId, prompt: aiUserPrompt, originalText: updated[index].originalText || originalText };
                     return updated;
                 } else {
-                    return [...prev, { id: aiTargetParagraphId, prompt: aiUserPrompt }];
+                    return [...prev, { id: aiTargetParagraphId, prompt: aiUserPrompt, originalText }];
                 }
             });
             targetParagraph.classList.add('ai-prompt-target');
@@ -199,11 +202,11 @@ export default function Home() {
             }
         });
 
-        // --- Injectar referències "Instrucció N" ---
+        // --- Injectar botons editar/eliminar al marge esquerre ---
         // Primer, eliminar etiquetes anteriors
         const labels = contentRef.current.querySelectorAll('.ia-label');
         labels.forEach(label => label.remove());
-        // Afegir noves etiquetes
+        // Afegir nous botons
         aiInstructions.forEach((instr, idx) => {
             const p = contentRef.current?.querySelector(`p[data-paragraph-id="${instr.id}"]`);
             if (
@@ -214,8 +217,44 @@ export default function Home() {
                 )
             ) {
                 const label = document.createElement('span');
-                label.className = 'ia-label';
-                label.textContent = `Instrucció ${idx + 1}`;
+                label.className = 'ia-label flex items-center gap-1 mr-2';
+
+                // Botó editar
+                const btnEdit = document.createElement('button');
+                btnEdit.className = 'ia-edit-btn bg-blue-100 text-blue-700 rounded px-1 text-xs mr-1';
+                btnEdit.title = 'Edita instrucció';
+                btnEdit.textContent = '✎';
+                btnEdit.setAttribute('data-id', instr.id);
+
+                // Botó eliminar
+                const btnDelete = document.createElement('button');
+                btnDelete.className = 'ia-delete-btn bg-red-100 text-red-700 rounded px-1 text-xs';
+                btnDelete.title = 'Elimina instrucció';
+                btnDelete.textContent = '🗑';
+                btnDelete.setAttribute('data-id', instr.id);
+
+                // Listener editar
+                btnEdit.addEventListener('click', (e) => {
+                    e.stopPropagation();
+                    setAiTargetParagraphId(instr.id);
+                    setAiUserPrompt(instr.prompt);
+                });
+
+                // Listener eliminar
+                btnDelete.addEventListener('click', (e) => {
+                    e.stopPropagation();
+                    // Restaura el text original
+                    if (p) {
+                        p.textContent = instr.originalText || '';
+                        p.classList.remove('ai-prompt-target');
+                        const updatedHtml = contentRef.current?.innerHTML || '';
+                        setConvertedHtml(updatedHtml);
+                    }
+                    setAiInstructions(prev => prev.filter(i => i.id !== instr.id));
+                });
+
+                label.appendChild(btnEdit);
+                label.appendChild(btnDelete);
                 p.parentNode?.insertBefore(label, p);
             }
         });
