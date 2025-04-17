@@ -26,6 +26,12 @@ Aquesta plataforma permet:
   - Edició de plantilles.
   - Eliminació de plantilles.
 
+**Millores recents (abril 2025):**
+- Substitució directa del paràgraf pel prompt d'instrucció IA al document.
+- Botons d'editar i eliminar instrucció IA en horitzontal, alineats i sense desplaçar el text.
+- Restauració automàtica del text original en eliminar la instrucció IA.
+- Opció a la UI per decidir si el prompt d'IA inclou el text original del paràgraf o el substitueix completament.
+
 **Pendent:**
 - Autenticació d’usuaris i permisos (Supabase Auth, RLS).
 - Models de dades per a informes generats i documents associats a files d’Excel.
