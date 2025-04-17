@@ -5,6 +5,7 @@ import React, { useState, ChangeEvent, useEffect, useRef, MouseEvent, useMemo } 
 import * as XLSX from 'xlsx';
 import Link from 'next/link';
 import AuthForm from '../components/AuthForm';
+import supabase from '../lib/supabase/client';
 
 // Interfícies
 interface ExcelLink { id: string; excelHeader: string; selectedText: string; }
@@ -151,7 +152,63 @@ export default function Home() {
     };
 
     const handleSaveConfiguration = async () => {
-        console.log("Intentant desar configuració..."); setSaveStatus('saving'); setSaveMessage(null); if (!contentRef.current) { setSaveMessage("Error: No HTML."); setSaveStatus('error'); return; } let finalHtml = contentRef.current.innerHTML; /* Neteja de temp spans ja no cal */ const configuration = { baseDocxName: selectedFileName, excelInfo: { fileName: selectedExcelFileName, headers: excelHeaders, }, linkMappings: links, aiInstructions: aiInstructions, finalHtml: finalHtml }; console.log("Configuració a desar:", configuration); try { const response = await fetch('/api/save-configuration', { method: 'POST', headers: { 'Content-Type': 'application/json', }, body: JSON.stringify(configuration), }); if (response.ok) { const result = await response.json(); console.log("Guardat amb èxit:", result); setSaveMessage(result.message || "Guardat!"); setSaveStatus('success'); } else { let errorMsg = `Error ${response.status}.`; try { const errorResult = await response.json(); errorMsg = errorResult.error || errorResult.details || errorMsg; } catch (e) {} console.error("Error desant (API):", errorMsg); setSaveMessage(errorMsg); setSaveStatus('error'); } } catch (error) { console.error("Error de xarxa desant:", error); setSaveMessage(`Error xarxa: ${error instanceof Error ? error.message : 'Error'}`); setSaveStatus('error'); }
+        console.log("Intentant desar configuració...");
+        setSaveStatus('saving');
+        setSaveMessage(null);
+        if (!contentRef.current) {
+            setSaveMessage("Error: No HTML.");
+            setSaveStatus('error');
+            return;
+        }
+        let finalHtml = contentRef.current.innerHTML;
+        const configuration = {
+            baseDocxName: selectedFileName,
+            excelInfo: { fileName: selectedExcelFileName, headers: excelHeaders },
+            linkMappings: links,
+            aiInstructions: aiInstructions,
+            finalHtml: finalHtml
+        };
+        console.log("Configuració a desar:", configuration);
+
+        try {
+            // Obté el JWT de l'usuari autenticat
+            const { data: sessionData, error: sessionError } = await supabase.auth.getSession();
+            const accessToken = sessionData?.session?.access_token;
+            if (!accessToken) {
+                setSaveMessage("No s'ha trobat la sessió d'usuari. Torna a iniciar sessió.");
+                setSaveStatus('error');
+                return;
+            }
+
+            const response = await fetch('/api/save-configuration', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Authorization': `Bearer ${accessToken}`,
+                },
+                body: JSON.stringify(configuration),
+            });
+
+            if (response.ok) {
+                const result = await response.json();
+                console.log("Guardat amb èxit:", result);
+                setSaveMessage(result.message || "Guardat!");
+                setSaveStatus('success');
+            } else {
+                let errorMsg = `Error ${response.status}.`;
+                try {
+                    const errorResult = await response.json();
+                    errorMsg = errorResult.error || errorResult.details || errorMsg;
+                } catch (e) {}
+                console.error("Error desant (API):", errorMsg);
+                setSaveMessage(errorMsg);
+                setSaveStatus('error');
+            }
+        } catch (error) {
+            console.error("Error de xarxa desant:", error);
+            setSaveMessage(`Error xarxa: ${error instanceof Error ? error.message : 'Error'}`);
+            setSaveStatus('error');
+        }
     };
 
 
