@@ -26,6 +26,8 @@ export default function Home() {
     const [aiTargetParagraphId, setAiTargetParagraphId] = useState<string | null>(null);
     const [aiUserPrompt, setAiUserPrompt] = useState<string>('');
     const [aiInstructions, setAiInstructions] = useState<AiInstruction[]>([]);
+    // Nou estat per a la inclusió del text original al prompt
+    const [includeOriginalText, setIncludeOriginalText] = useState<boolean>(false);
     // Estat per al mode d'instruccions IA
     const [iaInstructionsMode, setIaInstructionsMode] = useState(false);
     type SaveStatus = 'idle' | 'saving' | 'success' | 'error';
@@ -112,30 +114,38 @@ export default function Home() {
             // Guarda el text original abans de substituir-lo
             const originalText = targetParagraph.textContent || "";
 
+            // Decideix el contingut a mostrar segons l'opció
+            let finalPrompt = aiUserPrompt;
+            if (includeOriginalText && !aiUserPrompt.includes(originalText)) {
+                finalPrompt = aiUserPrompt.trim() ? aiUserPrompt + "\n\n" + originalText : originalText;
+            }
+
             // Substitueix el contingut del paràgraf pel prompt de la instrucció IA
-            targetParagraph.textContent = aiUserPrompt;
+            targetParagraph.textContent = finalPrompt;
 
             setAiInstructions(prev => {
                 const index = prev.findIndex(i => i.id === aiTargetParagraphId);
                 if (index > -1) {
                     const updated = [...prev];
-                    updated[index] = { id: aiTargetParagraphId, prompt: aiUserPrompt, originalText: updated[index].originalText || originalText };
+                    updated[index] = { id: aiTargetParagraphId, prompt: finalPrompt, originalText: updated[index].originalText || originalText };
                     return updated;
                 } else {
-                    return [...prev, { id: aiTargetParagraphId, prompt: aiUserPrompt, originalText }];
+                    return [...prev, { id: aiTargetParagraphId, prompt: finalPrompt, originalText }];
                 }
             });
             targetParagraph.classList.add('ai-prompt-target');
             const updatedHtml = contentRef.current.innerHTML;
             setConvertedHtml(updatedHtml);
-            console.log(`Instrucció IA guardada per ${aiTargetParagraphId}: "${aiUserPrompt}"`);
+            console.log(`Instrucció IA guardada per ${aiTargetParagraphId}: "${finalPrompt}"`);
             setAiTargetParagraphId(null);
             setAiUserPrompt('');
+            setIncludeOriginalText(false);
         } else {
             console.error("No trobat paràgraf per guardar IA.");
             alert("Error guardant.");
             setAiTargetParagraphId(null);
             setAiUserPrompt('');
+            setIncludeOriginalText(false);
         }
     };
 
@@ -434,6 +444,18 @@ export default function Home() {
                                                 <div>
                                                     <label htmlFor="aiPrompt" className='block text-xs font-medium text-gray-600 mb-1'>Instrucció per la IA:</label>
                                                     <textarea id="aiPrompt" rows={4} value={aiUserPrompt} onChange={(e) => setAiUserPrompt(e.target.value)} placeholder="Ex: Resumeix aquest paràgraf en una frase" className="w-full p-2 border rounded text-xs" />
+                                                </div>
+                                                <div className="flex items-center gap-2 mb-2">
+                                                    <input
+                                                        type="checkbox"
+                                                        id="includeOriginalText"
+                                                        checked={!!includeOriginalText}
+                                                        onChange={e => setIncludeOriginalText(e.target.checked)}
+                                                        className="mr-2"
+                                                    />
+                                                    <label htmlFor="includeOriginalText" className="text-xs text-gray-700 cursor-pointer">
+                                                        Inclou el text original al prompt
+                                                    </label>
                                                 </div>
                                                 <div className="flex gap-2">
                                                     <button onClick={handleSaveAiInstruction} disabled={!aiUserPrompt.trim() && !(aiInstructions.find(i => i.id === aiTargetParagraphId)?.prompt)} className={`flex-grow px-3 py-1.5 text-xs font-medium rounded shadow-sm text-white transition ${(!aiUserPrompt.trim() && !(aiInstructions.find(i => i.id === aiTargetParagraphId)?.prompt)) ? 'bg-gray-400 cursor-not-allowed' : 'bg-indigo-600 hover:bg-indigo-700'}`} >

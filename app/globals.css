@@ -84,19 +84,6 @@ p.ai-prompt-target, p.ia-hover, p.ia-selected {
   border-radius: 2px;
 }
 
-.ia-label {
-  display: inline-block;
-  min-width: 7em;
-  margin-left: -8em;
-  margin-right: 1em;
-  color: #0ea5e9;
-  font-weight: 600;
-  font-size: 0.95em;
-  vertical-align: top;
-  text-align: right;
-  background: none;
-  pointer-events: none;
-}
 
 /* === FINAL Estils Personalitzats === */
 
