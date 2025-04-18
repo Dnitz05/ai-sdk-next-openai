@@ -51,6 +51,22 @@ export async function POST(request: NextRequest) {
         // 2. Crea el client Supabase autenticat amb la cookie (Next.js + Supabase canònic)
         const supabase = createRouteHandlerClient({ cookies });
 
+        // OPCIÓ A: Obté el token i crea un client manual amb header Authorization
+        const { data: { session } } = await supabase.auth.getSession();
+        const accessToken = session?.access_token;
+
+        // Crea el client manual amb el token
+        // (importa createClient de '@supabase/supabase-js' a dalt si no hi és)
+        // import { createClient } from '@supabase/supabase-js';
+        const serverSupabase = require('@supabase/supabase-js').createClient(
+          process.env.NEXT_PUBLIC_SUPABASE_URL!,
+          process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+          {
+            global: { headers: { Authorization: `Bearer ${accessToken}` } },
+            auth:   { persistSession: false },
+          }
+        );
+
         // 3. Obté l'usuari autenticat
         const { data: userData, error: userError } = await supabase.auth.getUser();
         if (userError || !userData?.user) {
@@ -127,7 +143,7 @@ export async function POST(request: NextRequest) {
         }
         
         // Si la taula existeix, fem la inserció
-        const { data: insertedData, error: dbError } = await supabase
+        const { data: insertedData, error: dbError } = await serverSupabase
             .from('plantilla_configs')
             .insert([configToInsert])
             .select()
