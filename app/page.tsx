@@ -5,7 +5,7 @@ import React, { useState, ChangeEvent, useEffect, useRef, MouseEvent, useMemo } 
 import * as XLSX from 'xlsx';
 import Link from 'next/link';
 import AuthWrapper from '../components/AuthWrapper';
-import supabase from '../lib/supabase/client';
+import { createBrowserSupabaseClient } from '../lib/supabase/browserClient';
 
 // Interfícies
 interface ExcelLink { id: string; excelHeader: string; selectedText: string; }
@@ -172,6 +172,7 @@ export default function Home() {
 
         try {
             // Obté el JWT de l'usuari autenticat
+            const supabase = createBrowserSupabaseClient();
             const { data: sessionData, error: sessionError } = await supabase.auth.getSession();
             const accessToken = sessionData?.session?.access_token;
             if (!accessToken) {

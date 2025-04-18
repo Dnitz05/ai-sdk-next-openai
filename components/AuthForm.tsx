@@ -1,7 +1,8 @@
 'use client';
 
 import React, { useState, useEffect } from 'react';
-import supabase from '../lib/supabase/client';
+import { createBrowserSupabaseClient } from '../lib/supabase/browserClient';
+const supabase = createBrowserSupabaseClient();
 
 type AuthMode = 'login' | 'signup';
 

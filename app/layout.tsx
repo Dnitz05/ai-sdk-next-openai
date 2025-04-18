@@ -1,8 +1,5 @@
 import './globals.css';
 import { Inter } from 'next/font/google';
-import { SessionContextProvider } from '@supabase/auth-helpers-react';
-import supabase from '@/lib/supabase/client';
-
 const inter = Inter({ subsets: ['latin'] });
 
 export const metadata = {
@@ -18,9 +15,7 @@ export default function RootLayout({
   return (
     <html lang="ca">
       <body className={inter.className}>
-        <SessionContextProvider supabaseClient={supabase}>
-          {children}
-        </SessionContextProvider>
+        {children}
       </body>
     </html>
   );
