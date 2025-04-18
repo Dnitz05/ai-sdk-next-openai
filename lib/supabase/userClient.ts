@@ -10,6 +10,9 @@ const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY as string;
  */
 export function createUserSupabaseClient(accessToken: string) {
   return createClient(supabaseUrl, supabaseAnonKey, {
+    auth: { 
+      persistSession: false 
+    },
     global: {
       headers: {
         Authorization: `Bearer ${accessToken}`,
