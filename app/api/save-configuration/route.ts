@@ -4,6 +4,7 @@ import { NextRequest, NextResponse } from 'next/server';
 // PAS 1: Importa el helper de cookies i el client oficial per a route handlers
 import { cookies } from 'next/headers';
 import { createRouteHandlerClient } from '@supabase/auth-helpers-nextjs';
+import { createClient as createAnonClient } from '@supabase/supabase-js';
 
 // Interfície per al payload esperat
 interface SaveConfigPayload {
@@ -58,7 +59,7 @@ export async function POST(request: NextRequest) {
         // Crea el client manual amb el token
         // (importa createClient de '@supabase/supabase-js' a dalt si no hi és)
         // import { createClient } from '@supabase/supabase-js';
-        const serverSupabase = require('@supabase/supabase-js').createClient(
+        const serverSupabase = createAnonClient(
           process.env.NEXT_PUBLIC_SUPABASE_URL!,
           process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
           {
