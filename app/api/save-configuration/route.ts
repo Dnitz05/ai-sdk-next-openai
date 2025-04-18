@@ -1,4 +1,5 @@
-// app/api/save-configuration/route.ts
+// app/
+// api/save-configuration/route.ts
 import { NextRequest, NextResponse } from 'next/server';
 // === PAS 1: Importa el client de Supabase per al servidor ===
 import { createUserSupabaseClient } from '@/lib/supabase/userClient';
@@ -56,18 +57,51 @@ export async function POST(request: NextRequest) {
         // DEBUG: Log del userId obtingut
         console.log("userId obtingut via Supabase:", userId);
 
-        // 4. Inserta la configuració amb el user_id autenticat
+        // 4. Prepara i valida les dades abans d'inserir
+        // Assegurem que el format de les dades complexes sigui correcte per Postgres
+        // Convert complex objects to JSON strings if needed
+        const linkMappingsJson = Array.isArray(configurationData.linkMappings) 
+            ? configurationData.linkMappings 
+            : [];
+            
+        const aiInstructionsJson = Array.isArray(configurationData.aiInstructions)
+            ? configurationData.aiInstructions
+            : [];
+            
+        const excelHeadersArray = Array.isArray(configurationData.excelInfo?.headers)
+            ? configurationData.excelInfo.headers
+            : null;
+            
+        // 5. Inserta la configuració amb el user_id autenticat
         const configToInsert = {
             user_id: userId, // <- OBLIGATORI, exactament igual que la columna!
             config_name: configurationData.config_name || configurationData.baseDocxName || "Plantilla sense nom", // Utilitzem config_name explícit si existeix
             base_docx_name: configurationData.baseDocxName,
             excel_file_name: configurationData.excelInfo?.fileName,
-            excel_headers: configurationData.excelInfo?.headers,
-            link_mappings: configurationData.linkMappings,
-            ai_instructions: configurationData.aiInstructions,
-            final_html: configurationData.finalHtml
+            excel_headers: excelHeadersArray,
+            // Assegurem-nos que els camps complexos són JSON vàlid per PostgreSQL
+            link_mappings: linkMappingsJson,
+            ai_instructions: aiInstructionsJson,
+            final_html: configurationData.finalHtml ? configurationData.finalHtml : ''
         };
         console.log("Intentant inserir a Supabase. user_id:", userId, "TIPUS user_id:", typeof userId, "configToInsert:", JSON.stringify(configToInsert, null, 2));
+        
+        // Comprovar primer si la taula existeix
+        const { error: tableCheckError } = await supabase
+            .from('plantilla_configs')
+            .select('id')
+            .limit(1);
+            
+        if (tableCheckError) {
+            console.error("Error verificant taula plantilla_configs:", tableCheckError);
+            return NextResponse.json({
+                error: "La taula plantilla_configs no existeix o no és accessible.",
+                details: tableCheckError.message,
+                code: tableCheckError.code
+            }, { status: 500 });
+        }
+        
+        // Si la taula existeix, fem la inserció
         const { data: insertedData, error: dbError } = await supabase
             .from('plantilla_configs')
             .insert([configToInsert])
