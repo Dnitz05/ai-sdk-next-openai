@@ -1,8 +1,9 @@
 // app/
 // api/save-configuration/route.ts
 import { NextRequest, NextResponse } from 'next/server';
-// === PAS 1: Importa el client de Supabase per al servidor ===
-import { createUserSupabaseClient } from '@/lib/supabase/userClient';
+// PAS 1: Importa el helper de cookies i el client oficial per a route handlers
+import { cookies } from 'next/headers';
+import { createRouteHandlerClient } from '@supabase/auth-helpers-nextjs';
 
 // Interfície per al payload esperat
 interface SaveConfigPayload {
@@ -18,12 +19,8 @@ interface SaveConfigPayload {
 export async function POST(request: NextRequest) {
     console.log("API Route /api/save-configuration: Petició POST rebuda.");
 
-    // 1. Llegeix el token de l'Authorization header
-    const authHeader = request.headers.get('authorization') || request.headers.get('Authorization');
-    if (!authHeader || !authHeader.startsWith('Bearer ')) {
-        return NextResponse.json({ error: 'No autenticat. Falten credencials.' }, { status: 401 });
-    }
-    const accessToken = authHeader.replace('Bearer ', '').trim();
+    // 1. [ELIMINAT] No cal llegir el token de l'Authorization header: Supabase utilitza la cookie sb-access-token.
+    // La comprovació del header s'ha eliminat per confiar únicament en la cookie.
 
     try {
         // Llegir les dades JSON del body
@@ -42,11 +39,8 @@ export async function POST(request: NextRequest) {
             }, { status: 413 }); // Payload Too Large
         }
 
-        // DEBUG: Log del token rebut
-        console.log("Token JWT rebut a l'API:", accessToken);
-
-        // 2. Crea el client Supabase autenticat amb el token de l'usuari
-        const supabase = createUserSupabaseClient(accessToken);
+        // 2. Crea el client Supabase autenticat amb la cookie (Next.js + Supabase canònic)
+        const supabase = createRouteHandlerClient({ cookies });
 
         // 3. Obté l'usuari autenticat
         const { data: userData, error: userError } = await supabase.auth.getUser();
