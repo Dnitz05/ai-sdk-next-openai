@@ -1,10 +1,8 @@
 // app/
 // api/save-configuration/route.ts
 import { NextRequest, NextResponse } from 'next/server';
-// PAS 1: Importa el helper de cookies i el client oficial per a route handlers
 import { cookies } from 'next/headers';
-import { createRouteHandlerClient } from '@supabase/auth-helpers-nextjs';
-import { createClient as createAnonClient } from '@supabase/supabase-js';
+import { createServerSupabaseClient } from '@/lib/supabase/serverClient';
 
 // Interfície per al payload esperat
 interface SaveConfigPayload {
@@ -49,26 +47,11 @@ export async function POST(request: NextRequest) {
             }, { status: 413 }); // Payload Too Large
         }
 
-        // 2. Crea el client Supabase autenticat amb la cookie (només per obtenir la sessió)
-        const supabase = createRouteHandlerClient({ cookies });
+        // 2. Crea el client Supabase SSR amb la cookie (nadiu per a RLS)
+        const supabase = createServerSupabaseClient(cookies());
 
         // OPCIÓ A: Obté el token i crea un client manual amb header Authorization
-        const { data: { session } } = await supabase.auth.getSession();
-        const accessToken = session?.access_token;
-
-        // Crea el client manual amb el token
-        // (importa createClient de '@supabase/supabase-js' a dalt si no hi és)
-        // import { createClient } from '@supabase/supabase-js';
-        const serverSupabase = createAnonClient(
-          process.env.NEXT_PUBLIC_SUPABASE_URL!,
-          process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
-          {
-            global: { headers: { Authorization: `Bearer ${accessToken}` } },
-            auth:   { persistSession: false },
-          }
-        );
-
-        // 3. Obté l'usuari autenticat
+        // Obté l'usuari autenticat
         const { data: userData, error: userError } = await supabase.auth.getUser();
         if (userError || !userData?.user) {
             return NextResponse.json({ error: 'No s\'ha pogut validar l\'usuari.' }, { status: 401 });
@@ -76,6 +59,7 @@ export async function POST(request: NextRequest) {
         const userId = userData.user.id;
         // DEBUG: Log del userId obtingut
         console.log("userId obtingut via Supabase:", userId);
+
 
         // 4. Prepara i valida les dades abans d'inserir
         // Declarem les variables fora del bloc try per poder usar-les després
@@ -129,7 +113,6 @@ export async function POST(request: NextRequest) {
         console.log("DEBUG INSERT payload:", JSON.stringify(configToInsert, null, 2));
         
         // DEBUG: Mostra el token JWT utilitzat
-        console.log("TOKEN JWT:", accessToken);
 
         // Prova d'insert mínim per validar RLS
         // const { data: insertedData, error: dbError } = await serverSupabase
@@ -138,19 +121,12 @@ export async function POST(request: NextRequest) {
         //     .select()
         //     .single();
 
-        // Prova d'insert mínim per diagnosticar l'error
-        const { data: insertedData, error: dbError } = await serverSupabase
+        // Inserció completa amb tots els camps
+        const { data: insertedData, error: dbError } = await supabase
             .from('plantilla_configs')
-            .insert([{ user_id: userId, config_name: "test ràpid" }])
+            .insert([configToInsert])
             .select()
             .single();
-
-        // // Un cop validat, inserim tots els camps
-        // const { data: insertedData, error: dbError } = await serverSupabase
-        //     .from('plantilla_configs')
-        //     .insert([configToInsert])
-        //     .select()
-        //     .single();
 
         if (dbError) {
             console.error("Error de Supabase al inserir:", dbError);
