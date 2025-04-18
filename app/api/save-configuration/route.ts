@@ -48,16 +48,15 @@ export async function POST(request: NextRequest) {
 
         // 4. Inserta la configuració amb el user_id autenticat
         const configToInsert = {
-            // user_id sempre el del token autenticat, mai del frontend!
-            user_id: userId,
-            config_name: configurationData.baseDocxName || `Config ${new Date().toISOString()}`,
+            user_id: userId, // <- OBLIGATORI, exactament igual que la columna!
             base_docx_name: configurationData.baseDocxName,
             excel_file_name: configurationData.excelInfo?.fileName,
             excel_headers: configurationData.excelInfo?.headers,
             link_mappings: configurationData.linkMappings,
-            ai_instructions: configurationData.aiInstructions
+            ai_instructions: configurationData.aiInstructions,
+            final_html: configurationData.finalHtml
         };
-        console.log("Intentant inserir a Supabase. user_id:", userId, "configToInsert:", JSON.stringify(configToInsert, null, 2));
+        console.log("Intentant inserir a Supabase. user_id:", userId, "TIPUS user_id:", typeof userId, "configToInsert:", JSON.stringify(configToInsert, null, 2));
         const { data: insertedData, error: dbError } = await supabase
             .from('plantilla_configs')
             .insert([configToInsert])
@@ -67,10 +66,14 @@ export async function POST(request: NextRequest) {
         if (dbError) {
             console.error("Error de Supabase al inserir:", dbError);
             console.error("Detalls complets de l'error Supabase:", JSON.stringify(dbError, null, 2));
+            console.error("Valor user_id inserit:", userId, "TIPUS:", typeof userId);
             return NextResponse.json({
                 error: 'Error al desar la configuració a la base de dades.',
                 details: dbError.message,
-                supabaseError: dbError
+                supabaseError: dbError,
+                userId: userId,
+                userIdType: typeof userId,
+                configToInsert
             }, { status: 500 });
         }
 
