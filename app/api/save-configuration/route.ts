@@ -138,12 +138,19 @@ export async function POST(request: NextRequest) {
         //     .select()
         //     .single();
 
-        // Un cop validat, inserim tots els camps
+        // Prova d'insert mínim per diagnosticar l'error
         const { data: insertedData, error: dbError } = await serverSupabase
             .from('plantilla_configs')
-            .insert([configToInsert])
+            .insert([{ user_id: userId, config_name: "test ràpid" }])
             .select()
             .single();
+
+        // // Un cop validat, inserim tots els camps
+        // const { data: insertedData, error: dbError } = await serverSupabase
+        //     .from('plantilla_configs')
+        //     .insert([configToInsert])
+        //     .select()
+        //     .single();
 
         if (dbError) {
             console.error("Error de Supabase al inserir:", dbError);
