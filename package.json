@@ -21,6 +21,7 @@
     "@google-cloud/documentai": "^9.0.0",
     "@supabase/auth-helpers-nextjs": "^0.10.0",
     "@supabase/auth-helpers-react": "^0.5.0",
+    "@supabase/ssr": "^0.6.1",
     "@supabase/supabase-js": "^2.49.4",
     "@types/cheerio": "^0.22.35",
     "@vercel/blob": "^0.26.0",
