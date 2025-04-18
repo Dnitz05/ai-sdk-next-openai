@@ -58,19 +58,38 @@ export async function POST(request: NextRequest) {
         console.log("userId obtingut via Supabase:", userId);
 
         // 4. Prepara i valida les dades abans d'inserir
-        // Assegurem que el format de les dades complexes sigui correcte per Postgres
-        // Convert complex objects to JSON strings if needed
-        const linkMappingsJson = Array.isArray(configurationData.linkMappings) 
-            ? configurationData.linkMappings 
-            : [];
-            
-        const aiInstructionsJson = Array.isArray(configurationData.aiInstructions)
-            ? configurationData.aiInstructions
-            : [];
-            
+        // Declarem les variables fora del bloc try per poder usar-les després
+        let linkMappingsJson: string;
+        let aiInstructionsJson: string;
         const excelHeadersArray = Array.isArray(configurationData.excelInfo?.headers)
             ? configurationData.excelInfo.headers
-            : null;
+            : [];
+            
+        // Convertim explícitament les estructures complexes a JSON
+        try {
+            // Assegurem-nos que les dades són vàlides convertint-les a JSON
+            linkMappingsJson = JSON.stringify(
+                Array.isArray(configurationData.linkMappings) 
+                ? configurationData.linkMappings 
+                : []
+            );
+                
+            aiInstructionsJson = JSON.stringify(
+                Array.isArray(configurationData.aiInstructions)
+                ? configurationData.aiInstructions
+                : []
+            );
+                
+            // Intentem parsejar el JSON per comprovar que és vàlid
+            JSON.parse(linkMappingsJson);
+            JSON.parse(aiInstructionsJson);
+        } catch (jsonError) {
+            console.error("Error processant JSON:", jsonError);
+            return NextResponse.json({
+                error: 'Format JSON invàlid a les dades enviades',
+                details: jsonError instanceof Error ? jsonError.message : String(jsonError)
+            }, { status: 400 });
+        }
             
         // 5. Inserta la configuració amb el user_id autenticat
         const configToInsert = {
@@ -79,9 +98,10 @@ export async function POST(request: NextRequest) {
             base_docx_name: configurationData.baseDocxName,
             excel_file_name: configurationData.excelInfo?.fileName,
             excel_headers: excelHeadersArray,
-            // Assegurem-nos que els camps complexos són JSON vàlid per PostgreSQL
-            link_mappings: linkMappingsJson,
-            ai_instructions: aiInstructionsJson,
+            // Supabase utilitza PostgreSQL JSONB per als camps que contenen objectes.
+            // Internament el client Supabase convertirà aquests objectes a JSONB.
+            link_mappings: JSON.parse(linkMappingsJson), 
+            ai_instructions: JSON.parse(aiInstructionsJson),
             final_html: configurationData.finalHtml ? configurationData.finalHtml : ''
         };
         console.log("Intentant inserir a Supabase. user_id:", userId, "TIPUS user_id:", typeof userId, "configToInsert:", JSON.stringify(configToInsert, null, 2));
