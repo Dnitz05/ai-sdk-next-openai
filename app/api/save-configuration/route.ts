@@ -2,7 +2,8 @@
 // api/save-configuration/route.ts
 import { NextRequest, NextResponse } from 'next/server';
 // === PAS 1: Importa el client de Supabase per al servidor ===
-import { createUserSupabaseClient } from '@/lib/supabase/userClient';
+import { cookies } from 'next/headers';
+import { createRouteHandlerClient } from '@supabase/auth-helpers-nextjs';
 
 // Interfície per al payload esperat
 interface SaveConfigPayload {
@@ -42,20 +43,21 @@ export async function POST(request: NextRequest) {
             }, { status: 413 }); // Payload Too Large
         }
 
-        // DEBUG: Log del token rebut
-        console.log("Token JWT rebut a l'API:", accessToken);
+    // DEBUG: Log del token rebut
+    console.log("Token JWT rebut a l'API:", accessToken);
 
-        // 2. Crea el client Supabase autenticat amb el token de l'usuari
-        const supabase = createUserSupabaseClient(accessToken);
-
-        // 3. Obté l'usuari autenticat
-        const { data: userData, error: userError } = await supabase.auth.getUser();
-        if (userError || !userData?.user) {
-            return NextResponse.json({ error: 'No s\'ha pogut validar l\'usuari.' }, { status: 401 });
-        }
-        const userId = userData.user.id;
-        // DEBUG: Log del userId obtingut
-        console.log("userId obtingut via Supabase:", userId);
+    // 2. Crea el client Supabase autenticat des de cookies
+    const supabase = createRouteHandlerClient({ cookies });
+    
+    // 3. Obté l'usuari autenticat
+    const { data: { user }, error: userError } = await supabase.auth.getUser();
+    if (userError || !user) {
+        console.error("Error obtenint usuari:", userError);
+        return NextResponse.json({ error: 'No s\'ha pogut validar l\'usuari.' }, { status: 401 });
+    }
+    const userId = user.id;
+    // DEBUG: Log del userId obtingut
+    console.log("userId obtingut via Supabase:", userId);
 
         // 4. Prepara i valida les dades abans d'inserir
         // Declarem les variables fora del bloc try per poder usar-les després
