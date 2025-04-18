@@ -4,7 +4,7 @@
 import React, { useState, ChangeEvent, useEffect, useRef, MouseEvent, useMemo } from 'react';
 import * as XLSX from 'xlsx';
 import Link from 'next/link';
-import AuthForm from '../components/AuthForm';
+import AuthWrapper from '../components/AuthWrapper';
 import supabase from '../lib/supabase/client';
 
 // Interfícies
@@ -346,7 +346,7 @@ export default function Home() {
         <main className="flex min-h-screen w-full flex-col items-center p-4 sm:p-8 bg-gray-100">
             {/* Bloc d'autenticació Supabase */}
             <div className="w-full max-w-md mb-8">
-                <AuthForm />
+                <AuthWrapper />
             </div>
 
             {/* Capçalera WEB */}
