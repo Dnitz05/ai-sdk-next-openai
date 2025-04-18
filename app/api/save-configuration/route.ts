@@ -108,6 +108,8 @@ export async function POST(request: NextRequest) {
             final_html: configurationData.finalHtml ? configurationData.finalHtml : ''
         };
         console.log("Intentant inserir a Supabase. user_id:", userId, "TIPUS user_id:", typeof userId, "configToInsert:", JSON.stringify(configToInsert, null, 2));
+        // DEBUG: Mostra el JSON complet que s'intenta inserir
+        console.log("DEBUG INSERT payload:", JSON.stringify(configToInsert, null, 2));
         
         // Comprovar primer si la taula existeix
         const { error: tableCheckError } = await supabase
