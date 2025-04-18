@@ -49,7 +49,7 @@ export async function POST(request: NextRequest) {
             }, { status: 413 }); // Payload Too Large
         }
 
-        // 2. Crea el client Supabase autenticat amb la cookie (Next.js + Supabase canònic)
+        // 2. Crea el client Supabase autenticat amb la cookie (només per obtenir la sessió)
         const supabase = createRouteHandlerClient({ cookies });
 
         // OPCIÓ A: Obté el token i crea un client manual amb header Authorization
@@ -120,7 +120,7 @@ export async function POST(request: NextRequest) {
             excel_headers: excelHeadersArray,
             // Supabase utilitza PostgreSQL JSONB per als camps que contenen objectes.
             // Internament el client Supabase convertirà aquests objectes a JSONB.
-            link_mappings: JSON.parse(linkMappingsJson), 
+            link_mappings: JSON.parse(linkMappingsJson),
             ai_instructions: JSON.parse(aiInstructionsJson),
             final_html: configurationData.finalHtml ? configurationData.finalHtml : ''
         };
@@ -128,22 +128,17 @@ export async function POST(request: NextRequest) {
         // DEBUG: Mostra el JSON complet que s'intenta inserir
         console.log("DEBUG INSERT payload:", JSON.stringify(configToInsert, null, 2));
         
-        // Comprovar primer si la taula existeix
-        const { error: tableCheckError } = await supabase
-            .from('plantilla_configs')
-            .select('id')
-            .limit(1);
-            
-        if (tableCheckError) {
-            console.error("Error verificant taula plantilla_configs:", tableCheckError);
-            return NextResponse.json({
-                error: "La taula plantilla_configs no existeix o no és accessible.",
-                details: tableCheckError.message,
-                code: tableCheckError.code
-            }, { status: 500 });
-        }
-        
-        // Si la taula existeix, fem la inserció
+        // DEBUG: Mostra el token JWT utilitzat
+        console.log("TOKEN JWT:", accessToken);
+
+        // Prova d'insert mínim per validar RLS
+        // const { data: insertedData, error: dbError } = await serverSupabase
+        //     .from('plantilla_configs')
+        //     .insert([{ user_id: userId, config_name: "test ràpid" }])
+        //     .select()
+        //     .single();
+
+        // Un cop validat, inserim tots els camps
         const { data: insertedData, error: dbError } = await serverSupabase
             .from('plantilla_configs')
             .insert([configToInsert])
