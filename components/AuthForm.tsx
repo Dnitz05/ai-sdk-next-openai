@@ -40,13 +40,39 @@ const AuthForm: React.FC = () => {
     setMessage(null);
 
     if (mode === 'login') {
-      const { error } = await supabase.auth.signInWithPassword({ email, password });
-      if (error) setError(error.message);
-      else setMessage('Sessió iniciada correctament!');
+      console.log('Intentant iniciar sessió amb:', { email, passwordLength: password.length });
+      const { data, error } = await supabase.auth.signInWithPassword({ email, password });
+      console.log('Resposta signin:', { data: data ? 'Rebut' : 'No rebut', error });
+      
+      if (error) {
+        console.error('Error login detallat:', { 
+          message: error.message, 
+          status: error.status,
+          code: error.code,
+          name: error.name
+        });
+        setError(`${error.message} (${error.code || 'No code'})`);
+      } else {
+        setMessage('Sessió iniciada correctament!');
+      }
     } else {
-      const { error } = await supabase.auth.signUp({ email, password });
-      if (error) setError(error.message);
-      else setMessage('Compte creat! Revisa el teu correu per verificar-lo.');
+      console.log('Intentant registrar-se amb:', { email, passwordLength: password.length });
+      const { data, error } = await supabase.auth.signUp({ email, password });
+      console.log('Resposta signup:', { data: data ? 'Rebut' : 'No rebut', error });
+      
+      if (error) {
+        console.error('Error signup detallat:', { 
+          message: error.message, 
+          status: error.status,
+          code: error.code,
+          name: error.name
+        });
+        setError(`${error.message} (${error.code || 'No code'})`);
+      } else {
+        setMessage(data?.user?.identities?.length === 0 
+          ? 'Aquest correu ja està registrat. Prova d\'iniciar sessió.'
+          : 'Compte creat! Revisa el teu correu per verificar-lo.');
+      }
     }
     setLoading(false);
   };
