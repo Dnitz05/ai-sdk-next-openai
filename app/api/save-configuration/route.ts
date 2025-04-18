@@ -6,6 +6,7 @@ import { createUserSupabaseClient } from '@/lib/supabase/userClient';
 // Interfície per al payload esperat
 interface SaveConfigPayload {
     baseDocxName: string | null;
+    config_name?: string; // Afegit camp opcional per coherència
     excelInfo: { fileName: string | null; headers: string[] | null; } | null;
     linkMappings: { id: string; excelHeader: string; selectedText: string; }[];
     aiInstructions: { id: string; prompt: string; originalText?: string; }[];
@@ -30,6 +31,15 @@ export async function POST(request: NextRequest) {
         if (!configurationData || typeof configurationData !== 'object') {
             throw new Error("Payload buit o invàlid.");
         }
+        
+        // Comprovem la mida del HTML per evitar problemes amb límits de Supabase
+        if (configurationData.finalHtml && configurationData.finalHtml.length > 1000000) { // 1MB aproximadament
+            console.warn("HTML molt gran, podria excedir límits de Supabase:", configurationData.finalHtml.length, "caràcters");
+            return NextResponse.json({
+                error: 'El contingut HTML és massa gran (més d\'1MB). Redueix el contingut o divideix-lo en parts més petites.',
+                htmlSize: configurationData.finalHtml.length
+            }, { status: 413 }); // Payload Too Large
+        }
 
         // DEBUG: Log del token rebut
         console.log("Token JWT rebut a l'API:", accessToken);
@@ -49,6 +59,7 @@ export async function POST(request: NextRequest) {
         // 4. Inserta la configuració amb el user_id autenticat
         const configToInsert = {
             user_id: userId, // <- OBLIGATORI, exactament igual que la columna!
+            config_name: configurationData.config_name || configurationData.baseDocxName || "Plantilla sense nom", // Utilitzem config_name explícit si existeix
             base_docx_name: configurationData.baseDocxName,
             excel_file_name: configurationData.excelInfo?.fileName,
             excel_headers: configurationData.excelInfo?.headers,
@@ -65,15 +76,34 @@ export async function POST(request: NextRequest) {
 
         if (dbError) {
             console.error("Error de Supabase al inserir:", dbError);
+            console.error("Codi d'error:", dbError.code);
+            console.error("Detalls:", dbError.details);
+            console.error("Suggeriment:", dbError.hint);
             console.error("Detalls complets de l'error Supabase:", JSON.stringify(dbError, null, 2));
             console.error("Valor user_id inserit:", userId, "TIPUS:", typeof userId);
+            
+            // Millorem el missatge d'error segons el codi
+            let errorMessage = 'Error al desar la configuració a la base de dades.';
+            if (dbError.code === "23502") {
+                errorMessage = 'Error: Falta un camp obligatori a la base de dades.';
+            } else if (dbError.code === "23505") {
+                errorMessage = 'Error: Ja existeix una plantilla amb aquestes dades.';
+            } else if (dbError.code === "42P01") {
+                errorMessage = 'Error: La taula no existeix o no s\'hi pot accedir.';
+            } else if (dbError.code?.startsWith("42")) {
+                errorMessage = 'Error de sintaxi SQL o problema d\'estructura.';
+            } else if (dbError.code?.startsWith("28")) {
+                errorMessage = 'Error d\'autorització. Comprova les polítiques RLS.';
+            }
+            
             return NextResponse.json({
-                error: 'Error al desar la configuració a la base de dades.',
+                error: errorMessage,
                 details: dbError.message,
+                code: dbError.code,
+                hint: dbError.hint,
                 supabaseError: dbError,
                 userId: userId,
-                userIdType: typeof userId,
-                configToInsert
+                userIdType: typeof userId
             }, { status: 500 });
         }
 
