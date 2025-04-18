@@ -18,6 +18,15 @@ interface SaveConfigPayload {
 // Handler per a les peticions POST (Guardar configuració)
 export async function POST(request: NextRequest) {
     console.log("API Route /api/save-configuration: Petició POST rebuda.");
+    // DEBUG: Llista de cookies rebudes
+    const allCookies = await cookies();
+    // Llista totes les cookies rebudes (async, compatible amb Next.js 14+)
+    // Si getAll() existeix, mostra totes les cookies; si no, mostra només la sb-access-token
+    if (typeof allCookies.getAll === 'function') {
+        console.log("Cookies rebudes al backend:", allCookies.getAll());
+    } else {
+        console.log("Cookie sb-access-token:", allCookies.get('sb-access-token'));
+    }
 
     // 1. [ELIMINAT] No cal llegir el token de l'Authorization header: Supabase utilitza la cookie sb-access-token.
     // La comprovació del header s'ha eliminat per confiar únicament en la cookie.
