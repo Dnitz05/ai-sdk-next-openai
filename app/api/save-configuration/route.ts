@@ -31,18 +31,23 @@ export async function POST(request: NextRequest) {
 // 3. Instància Supabase SSR amb gestió de cookies completa
 const supabase = await createServerSupabaseClient()
 
-    // 4. Obté la sessió, l'usuari i el token
+    // 4. CRÍTICO: Obtén PRIMERO la sesión completa con getSession
     const { data: { session }, error: sessionError } = await supabase.auth.getSession()
     if (sessionError || !session) {
-      return NextResponse.json({ error: 'Sessió no trobada.' }, { status: 401 })
+      console.error("Error de sesión:", sessionError)
+      return NextResponse.json({ error: 'Sessió no disponible.' }, { status: 401 })
     }
     
+    // El usuario debe obtenerse DESPUÉS de getSession
     const { data: userData, error: userError } = await supabase.auth.getUser()
     if (userError || !userData?.user) {
-      return NextResponse.json({ error: 'Usuari no validat.' }, { status: 401 })
+      console.error("Error de usuario:", userError)
+      return NextResponse.json({ error: 'Usuari no reconegut.' }, { status: 401 })
     }
     const userId = userData.user.id
     const accessToken = session.access_token
+    
+    console.log("Token JWT obtenido y usuario identificado:", !!accessToken, userId)
     
     // Crea un client amb el token JWT per passar les validacions RLS
     const authenticatedSupabase = createClient(
@@ -52,9 +57,27 @@ const supabase = await createServerSupabaseClient()
         global: {
           headers: { Authorization: `Bearer ${accessToken}` }
         },
-        auth: { persistSession: false }
+        auth: { 
+          autoRefreshToken: false,  // Evita conflictos de refresh
+          persistSession: false     // No interfiere con cookies existentes
+        }
       }
     )
+    
+    // COMPROBACIÓN CRUCIAL - Verificar que el cliente está correctamente autenticado
+    const { data: verifyAuth, error: verifyError } = await authenticatedSupabase.auth.getUser()
+    if (verifyError || !verifyAuth?.user || verifyAuth.user.id !== userId) {
+      console.error("Error crítico de autenticación:", {
+        verifyError,
+        expectedId: userId,
+        actualId: verifyAuth?.user?.id || 'no reconocido'
+      })
+      return NextResponse.json({ 
+        error: 'Error crític d\'autenticació. Contacta amb suport.' 
+      }, { status: 500 })
+    }
+    
+    console.log("✅ Verificación de cliente autenticado exitosa:", verifyAuth.user.id)
 
     // 5. Serialitza camps JSON
     let linkMappings, aiInstructions
@@ -84,6 +107,7 @@ const supabase = await createServerSupabaseClient()
     }
 
     // 7. Inserció amb el client autenticat que passa el token JWT
+    console.log("Iniciando inserción con cliente autenticado...")
     const { data: insertedData, error: dbError } = await authenticatedSupabase
       .from('plantilla_configs')
       .insert([configToInsert])
@@ -91,6 +115,13 @@ const supabase = await createServerSupabaseClient()
       .single()
 
     if (dbError) {
+      console.error("Error detallado de inserción:", {
+        code: dbError.code,
+        message: dbError.message,
+        details: dbError.details,
+        hint: dbError.hint
+      })
+      
       let msg = 'Error al desar.'
       if (dbError.code === '23502') msg = 'Camp obligatori faltant.'
       else if (dbError.code === '23505') msg = 'Duplicat.'
@@ -102,6 +133,8 @@ const supabase = await createServerSupabaseClient()
         { status: 500 }
       )
     }
+    
+    console.log("✅ Inserción completada con éxito:", insertedData?.id)
 
     // 8. Retorna èxit
     return NextResponse.json(
