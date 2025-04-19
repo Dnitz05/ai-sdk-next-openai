@@ -19,8 +19,27 @@ export async function POST(request: NextRequest) {
     const configurationData = (await request.json()) as SaveConfigPayload
 
     // 2. Validacions bàsiques
+    // VALIDACIÓ EXPLÍCITA DEL PAYLOAD
     if (!configurationData || typeof configurationData !== 'object') {
       return NextResponse.json({ error: 'Payload invàlid.' }, { status: 400 })
+    }
+    // Validació bàsica de camps essencials
+    if (
+      typeof configurationData.finalHtml !== 'string' ||
+      configurationData.finalHtml.length === 0
+    ) {
+      return NextResponse.json({ error: 'finalHtml obligatori i ha de ser string.' }, { status: 400 })
+    }
+    if (
+      !Array.isArray(configurationData.linkMappings) ||
+      !Array.isArray(configurationData.aiInstructions)
+    ) {
+      return NextResponse.json({ error: 'linkMappings i aiInstructions han de ser arrays.' }, { status: 400 })
+    }
+    if (
+      configurationData.config_name && typeof configurationData.config_name !== 'string'
+    ) {
+      return NextResponse.json({ error: 'config_name ha de ser string.' }, { status: 400 })
     }
     if (configurationData.finalHtml.length > 1_000_000) {
       return NextResponse.json(
@@ -103,8 +122,13 @@ const supabase = await createServerSupabaseClient()
       final_html: configurationData.finalHtml,
     }
 
+    // 7. LOGS DETALLATS I ASSERTS
+    console.log("Iniciant inserció amb payload:", JSON.stringify(configToInsert, null, 2), "userId:", userId)
+    if (!configToInsert.user_id || configToInsert.user_id !== userId) {
+      console.error("Assert fallit: user_id no coincideix amb userId autenticat!", { configToInsertUserId: configToInsert.user_id, userId })
+      return NextResponse.json({ error: 'Assert: user_id no coincideix amb l’usuari autenticat.' }, { status: 500 })
+    }
     // 7. Inserción con el cliente de servicio (bypasa RLS)
-    console.log("Iniciando inserción con cliente de servicio...")
     const { data: insertedData, error: dbError } = await serviceClient
       .from('plantilla_configs')
       .insert([configToInsert])
@@ -125,8 +149,12 @@ const supabase = await createServerSupabaseClient()
       else if (dbError.code === '42P01') msg = 'Taula no trobada.'
       else if (dbError.code?.startsWith('42')) msg = 'Sintaxi SQL.'
       else if (dbError.code?.startsWith('28')) msg = 'RLS / permisos.'
+      // RETORNAR MÉS INFO EN DEV
+      const isDev = process.env.NODE_ENV === 'development' || process.env.SUPABASE_DEBUG === 'true'
       return NextResponse.json(
-        { error: msg, details: dbError.message },
+        isDev
+          ? { error: msg, details: dbError }
+          : { error: msg, details: dbError.message },
         { status: 500 }
       )
     }
