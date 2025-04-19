@@ -26,17 +26,30 @@ export default function TemplatesPage() {
         const { createBrowserSupabaseClient } = await import('@/lib/supabase/browserClient');
         const supabase = createBrowserSupabaseClient();
         const { data: { session }, error: sessionError } = await supabase.auth.getSession();
+        console.log('Resultat de getSession():', session, 'Error:', sessionError);
         if (sessionError || !session) {
+          console.error('No autenticat. Torna a iniciar sessió.');
           throw new Error('No autenticat. Torna a iniciar sessió.');
         }
         const accessToken = session.access_token;
+        console.log('accessToken obtingut:', accessToken);
+        // LOG DEL USER_ID AUTENTICAT
+        const { data: userData, error: userError } = await supabase.auth.getUser();
+        if (userError || !userData?.user) {
+          console.warn('No s’ha pogut obtenir el user_id autenticat:', userError);
+        } else {
+          console.log('user_id autenticat (frontend):', userData.user.id);
+        }
+        // Log de l'objecte headers
+        const headers = {
+          Authorization: `Bearer ${accessToken}`,
+        };
+        console.log('Headers passats al fetch:', headers);
         // Fer fetch passant el token al header Authorization
         const response = await fetch(
           `/api/get-templates${searchTerm ? `?search=${encodeURIComponent(searchTerm)}` : ''}`,
           {
-            headers: {
-              Authorization: `Bearer ${accessToken}`,
-            },
+            headers,
           }
         );
         if (!response.ok) {
