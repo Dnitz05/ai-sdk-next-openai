@@ -19,7 +19,7 @@ export async function POST(request: NextRequest) {
     // 1. Llegeix i parseja el JSON un cop
     let configurationData: SaveConfigPayload;
     try {
-      configurationData = await request.json<SaveConfigPayload>();
+      configurationData = await request.json() as SaveConfigPayload;
     } catch (e) {
       console.error("JSON invàlid:", e);
       return NextResponse.json({ error: 'JSON invàlid' }, { status: 400 });
