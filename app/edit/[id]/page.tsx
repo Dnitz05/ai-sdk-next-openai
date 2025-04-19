@@ -26,7 +26,17 @@ export default function EditTemplatePage() {
     const fetchTemplate = async () => {
       setIsLoading(true);
       try {
-        const response = await fetch(`/api/get-template/${id}`);
+        // Obtenir el token JWT del client Supabase
+        const { createBrowserSupabaseClient } = await import('@/lib/supabase/browserClient');
+        const supabase = createBrowserSupabaseClient();
+        const { data: { session }, error: sessionError } = await supabase.auth.getSession();
+        if (sessionError || !session) throw new Error('No autenticat. Torna a iniciar sessió.');
+        const accessToken = session.access_token;
+        const response = await fetch(`/api/get-template/${id}`, {
+          headers: {
+            Authorization: `Bearer ${accessToken}`,
+          },
+        });
         if (!response.ok) throw new Error('No s\'ha pogut carregar la plantilla');
         const data = await response.json();
         setTemplate(data.template);
