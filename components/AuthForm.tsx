@@ -1,12 +1,12 @@
 'use client';
 
 import React, { useState, useEffect } from 'react';
-import { createBrowserSupabaseClient } from '../lib/supabase/browserClient';
-const supabase = createBrowserSupabaseClient();
+import { useSupabase } from './SessionProvider';
 
 type AuthMode = 'login' | 'signup';
 
 const AuthForm: React.FC = () => {
+  const supabase = useSupabase();
   const [mode, setMode] = useState<AuthMode>('login');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');

@@ -27,8 +27,8 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    // 3. Instància Supabase SSR
-    const supabase = await createServerSupabaseClient()
+// 3. Instància Supabase SSR amb gestió de cookies completa
+const supabase = await createServerSupabaseClient()
 
     // 4. Obté l'usuari
     const { data: userData, error: userError } = await supabase.auth.getUser()
