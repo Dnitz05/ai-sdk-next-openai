@@ -26,6 +26,14 @@ export async function POST(request: NextRequest) {
     } else {
         console.log("Cookie sb-access-token:", allCookies.get('sb-access-token'));
     }
+    // LOG extra: headers i request
+    console.log("DEBUG HEADERS:", request.headers);
+    try {
+        const rawBody = await request.text();
+        console.log("DEBUG RAW BODY:", rawBody);
+    } catch (e) {
+        console.log("DEBUG RAW BODY: error llegint body", e);
+    }
 
     // 1. [ELIMINAT] No cal llegir el token de l'Authorization header: Supabase utilitza la cookie sb-access-token.
     // La comprovació del header s'ha eliminat per confiar únicament en la cookie.
@@ -48,13 +56,15 @@ export async function POST(request: NextRequest) {
         }
 
         // 2. Crea el client Supabase SSR amb la cookie (nadiu per a RLS)
-        const supabase = createServerSupabaseClient(cookies());
+        // Ja no cal passar cookiesHeader, el helper les llegeix internament
+        const supabase = createServerSupabaseClient();
 
         // OPCIÓ A: Obté el token i crea un client manual amb header Authorization
         // Obté l'usuari autenticat
         const { data: userData, error: userError } = await supabase.auth.getUser();
+        console.log("DEBUG getUser result:", { userData, userError });
         if (userError || !userData?.user) {
-            return NextResponse.json({ error: 'No s\'ha pogut validar l\'usuari.' }, { status: 401 });
+            return NextResponse.json({ error: 'No s\'ha pogut validar l\'usuari.', userError, userData }, { status: 401 });
         }
         const userId = userData.user.id;
         // DEBUG: Log del userId obtingut
