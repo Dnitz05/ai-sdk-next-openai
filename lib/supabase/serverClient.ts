@@ -1,5 +1,5 @@
 // lib/supabase/serverClient.ts
-import { createServerClient, type CookieMethodsServer } from '@supabase/ssr'
+import { createServerClient } from '@supabase/ssr'
 import { cookies } from 'next/headers'
 
 /**
@@ -7,25 +7,13 @@ import { cookies } from 'next/headers'
  * amb suport nadiu de cookies per RLS.
  */
 export async function createServerSupabaseClient() {
+  // ReadonlyRequestCookies amb get() i getAll()
   const cookieStore = await cookies()
 
-  const cookieMethods: CookieMethodsServer = {
-    get: (name: string) => {
-      const c = cookieStore.get(name)
-      return c ? { name: c.name, value: c.value } : undefined
-    },
-    getAll: () =>
-      cookieStore.getAll().map((c) => ({
-        name: c.name,
-        value: c.value,
-      })),
-    set: () => {
-      /* no-op: refresca cookies en middleware o a la resposta */
-    },
-    delete: () => {
-      /* no-op */
-    },
-  }
+  // Cast genèric perquè la interfície de Supabase accepti la store
+  const cookieMethods = cookieStore as unknown as Parameters<
+    typeof createServerClient
+  >[2]['cookies']
 
   return createServerClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
