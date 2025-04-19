@@ -14,7 +14,7 @@ export async function POST(request: NextRequest) {
   try {
     console.log('API Route POST rebuda.')
 
-    // 1️⃣ Llegeix i parseja el JSON
+    // 1️⃣ Parseja el JSON
     let payload: SaveConfigPayload
     try {
       payload = (await request.json()) as SaveConfigPayload
@@ -23,7 +23,7 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'JSON invàlid' }, { status: 400 })
     }
 
-    // 2️⃣ Validacions bàsiques
+    // 2️⃣ Validacions
     if (!payload.finalHtml) {
       return NextResponse.json({ error: 'Manca finalHtml.' }, { status: 400 })
     }
@@ -35,10 +35,10 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    // 3️⃣ Instància Supabase SSR
-    const supabase = createServerSupabaseClient()
+    // 3️⃣ Crea el client Supabase SSR
+    const supabase = await createServerSupabaseClient()
 
-    // 4️⃣ Obté l’usuari i comprova RLS
+    // 4️⃣ Obté l’usuari autenticat
     const { data: userData, error: userError } = await supabase.auth.getUser()
     if (userError || !userData?.user) {
       console.error('Usuari no validat:', userError)
@@ -46,7 +46,7 @@ export async function POST(request: NextRequest) {
     }
     const userId = userData.user.id
 
-    // 5️⃣ Serialitza els camps JSON
+    // 5️⃣ Stringify dels camps JSON
     let linkMappingsJson: string
     let aiInstructionsJson: string
     try {
@@ -62,7 +62,7 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    // 6️⃣ Prepara payload d’inserció
+    // 6️⃣ Prepara l’objecte per inserir
     const toInsert = {
       user_id: userId,
       config_name:
@@ -77,7 +77,7 @@ export async function POST(request: NextRequest) {
 
     console.log('Payload insert:', toInsert)
 
-    // 7️⃣ Inserció a Supabase
+    // 7️⃣ Inserta a Supabase
     const { data: inserted, error: dbError } = await supabase
       .from('plantilla_configs')
       .insert([toInsert])
@@ -98,7 +98,7 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    // 8️⃣ Tot correcte
+    // 8️⃣ Retorna 201 Created
     return NextResponse.json(
       { message: 'Configuració desada!', configId: inserted?.id },
       { status: 201 }
