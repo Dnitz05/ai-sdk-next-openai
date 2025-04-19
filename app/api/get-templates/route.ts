@@ -18,6 +18,14 @@ export async function GET(request: NextRequest) {
     // 2. Crea el client Supabase autenticat amb el token de l'usuari
     const supabase = createUserSupabaseClient(accessToken);
 
+    // LOG DEL USER_ID DEL TOKEN JWT
+    const { data: userData, error: userError } = await supabase.auth.getUser();
+    if (userError || !userData?.user) {
+      console.warn('No s’ha pogut obtenir el user_id del token JWT:', userError);
+    } else {
+      console.log('user_id del token JWT (API):', userData.user.id);
+    }
+
     // 3. Consulta a Supabase (la RLS filtrarà per user_id)
     let query = supabase
       .from('plantilla_configs')
@@ -38,7 +46,8 @@ export async function GET(request: NextRequest) {
       }, { status: 500 });
     }
 
-    return NextResponse.json({ templates: data }, { status: 200 });
+    console.log('Resposta API get-templates:', { user_id: userData?.user?.id || null, templates: data });
+    return NextResponse.json({ templates: data, user_id: userData?.user?.id || null }, { status: 200 });
   } catch (error) {
     console.error("Error general a /api/get-templates:", error);
     return NextResponse.json({
