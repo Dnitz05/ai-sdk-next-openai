@@ -102,36 +102,41 @@ export default function TemplatesPage() {
         
         {!isLoading && !error && templates.length > 0 && (
           <div className="grid gap-4">
-            {templates.map((template) => (
-              <div key={template.id} className="bg-white p-4 rounded shadow">
-                <div className="flex justify-between items-start">
-                  <div>
-                    <h2 className="text-lg font-medium text-gray-800">{template.config_name}</h2>
-                    <p className="text-sm text-gray-500">
-                      {template.base_docx_name && `DOCX: ${template.base_docx_name}`}
-                      {template.excel_file_name && ` | Excel: ${template.excel_file_name}`}
-                    </p>
-                    <p className="text-xs text-gray-400 mt-1">
-                      Creat: {new Date(template.created_at).toLocaleDateString()}
-                    </p>
-                  </div>
-                  <div className="flex space-x-2">
-                    <Link 
-                      href={`/plantilles/${template.id}`} 
-                      className="px-3 py-1 text-sm bg-gray-100 text-gray-700 rounded hover:bg-gray-200"
-                    >
-                      Detalls
-                    </Link>
-                    <Link 
-                      href={`/edit/${template.id}`} 
-                      className="px-3 py-1 text-sm bg-blue-100 text-blue-700 rounded hover:bg-blue-200"
-                    >
-                      Editar
-                    </Link>
+            {templates.map((template, idx) => {
+              console.log('DEBUG plantilla:', idx, template);
+              return (
+                <div key={template.id} className="bg-white p-4 rounded shadow">
+                  <div className="flex justify-between items-start">
+                    <div>
+                      <h2 className="text-lg font-medium text-gray-800">
+                        {typeof template.config_name === 'string' ? template.config_name : JSON.stringify(template.config_name)}
+                      </h2>
+                      <p className="text-sm text-gray-500">
+                        {template.base_docx_name && `DOCX: ${typeof template.base_docx_name === 'string' ? template.base_docx_name : JSON.stringify(template.base_docx_name)}`}
+                        {template.excel_file_name && ` | Excel: ${typeof template.excel_file_name === 'string' ? template.excel_file_name : JSON.stringify(template.excel_file_name)}`}
+                      </p>
+                      <p className="text-xs text-gray-400 mt-1">
+                        Creat: {template.created_at ? new Date(template.created_at).toLocaleDateString() : 'Data invàlida'}
+                      </p>
+                    </div>
+                    <div className="flex space-x-2">
+                      <Link
+                        href={`/plantilles/${template.id}`}
+                        className="px-3 py-1 text-sm bg-gray-100 text-gray-700 rounded hover:bg-gray-200"
+                      >
+                        Detalls
+                      </Link>
+                      <Link
+                        href={`/edit/${template.id}`}
+                        className="px-3 py-1 text-sm bg-blue-100 text-blue-700 rounded hover:bg-blue-200"
+                      >
+                        Editar
+                      </Link>
+                    </div>
                   </div>
                 </div>
-              </div>
-            ))}
+              );
+            })}
           </div>
         )}
       </div>
