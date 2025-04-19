@@ -35,24 +35,26 @@ export async function POST(request: NextRequest) {
     let configurationData: SaveConfigPayload;
     try {
         configurationData = JSON.parse(bodyText);
-        console.log("Dades rebudes:", configurationData);
-        if (!configurationData || typeof configurationData !== 'object') {
-            throw new Error("Payload buit o invàlid.");
-        }
-        // Comprovem la mida del HTML per evitar problemes amb límits de Supabase
-        if (configurationData.finalHtml && configurationData.finalHtml.length > 1000000) { // 1MB aproximadament
-            console.warn("HTML molt gran, podria excedir límits de Supabase:", configurationData.finalHtml.length, "caràcters");
-            return NextResponse.json({
-                error: 'El contingut HTML és massa gran (més d\'1MB). Redueix el contingut o divideix-lo en parts més petites.',
-                htmlSize: configurationData.finalHtml.length
-            }, { status: 413 }); // Payload Too Large
-        }
+    } catch (e) {
+        return NextResponse.json({ error: 'JSON invàlid' }, { status: 400 });
+    }
+    console.log("Dades rebudes:", configurationData);
+    if (!configurationData || typeof configurationData !== 'object') {
+        return NextResponse.json({ error: "Payload buit o invàlid." }, { status: 400 });
+    }
+    // Comprovem la mida del HTML per evitar problemes amb límits de Supabase
+    if (configurationData.finalHtml && configurationData.finalHtml.length > 1000000) { // 1MB aproximadament
+        console.warn("HTML molt gran, podria excedir límits de Supabase:", configurationData.finalHtml.length, "caràcters");
+        return NextResponse.json({
+            error: 'El contingut HTML és massa gran (més d\'1MB). Redueix el contingut o divideix-lo en parts més petites.',
+            htmlSize: configurationData.finalHtml.length
+        }, { status: 413 }); // Payload Too Large
+    }
 
+    try {
         // 2. Crea el client Supabase SSR amb la cookie (nadiu per a RLS)
-        // Ja no cal passar cookiesHeader, el helper les llegeix internament
         const supabase = createServerSupabaseClient();
 
-        // OPCIÓ A: Obté el token i crea un client manual amb header Authorization
         // Obté l'usuari autenticat
         const { data: userData, error: userError } = await supabase.auth.getUser();
         console.log("DEBUG getUser result:", { userData, userError });
@@ -64,7 +66,6 @@ export async function POST(request: NextRequest) {
         console.log("userId obtingut via Supabase:", userId);
 
         // 4. Prepara i valida les dades abans d'inserir
-        // Declarem les variables fora del bloc try per poder usar-les després
         let linkMappingsJson: string;
         let aiInstructionsJson: string;
         const excelHeadersArray = Array.isArray(configurationData.excelInfo?.headers)
@@ -73,20 +74,16 @@ export async function POST(request: NextRequest) {
             
         // Convertim explícitament les estructures complexes a JSON
         try {
-            // Assegurem-nos que les dades són vàlides convertint-les a JSON
             linkMappingsJson = JSON.stringify(
                 Array.isArray(configurationData.linkMappings)
                 ? configurationData.linkMappings
                 : []
             );
-                
             aiInstructionsJson = JSON.stringify(
                 Array.isArray(configurationData.aiInstructions)
                 ? configurationData.aiInstructions
                 : []
             );
-                
-            // Intentem parsejar el JSON per comprovar que és vàlid
             JSON.parse(linkMappingsJson);
             JSON.parse(aiInstructionsJson);
         } catch (jsonError) {
@@ -99,19 +96,16 @@ export async function POST(request: NextRequest) {
             
         // 5. Inserta la configuració amb el user_id autenticat
         const configToInsert = {
-            user_id: userId, // <- OBLIGATORI, exactament igual que la columna!
-            config_name: configurationData.config_name || configurationData.baseDocxName || "Plantilla sense nom", // Utilitzem config_name explícit si existeix
+            user_id: userId,
+            config_name: configurationData.config_name || configurationData.baseDocxName || "Plantilla sense nom",
             base_docx_name: configurationData.baseDocxName,
             excel_file_name: configurationData.excelInfo?.fileName,
             excel_headers: excelHeadersArray,
-            // Supabase utilitza PostgreSQL JSONB per als camps que contenen objectes.
-            // Internament el client Supabase convertirà aquests objectes a JSONB.
             link_mappings: JSON.parse(linkMappingsJson),
             ai_instructions: JSON.parse(aiInstructionsJson),
             final_html: configurationData.finalHtml ? configurationData.finalHtml : ''
         };
         console.log("Intentant inserir a Supabase. user_id:", userId, "TIPUS user_id:", typeof userId, "configToInsert:", JSON.stringify(configToInsert, null, 2));
-        // DEBUG: Mostra el JSON complet que s'intenta inserir
         console.log("DEBUG INSERT payload:", JSON.stringify(configToInsert, null, 2));
         
         // Inserció completa amb tots els camps
@@ -129,7 +123,6 @@ export async function POST(request: NextRequest) {
             console.error("Detalls complets de l'error Supabase:", JSON.stringify(dbError, null, 2));
             console.error("Valor user_id inserit:", userId, "TIPUS:", typeof userId);
             
-            // Millorem el missatge d'error segons el codi
             let errorMessage = 'Error al desar la configuració a la base de dades.';
             if (dbError.code === "23502") {
                 errorMessage = 'Error: Falta un camp obligatori a la base de dades.';
