@@ -22,8 +22,10 @@ export async function PUT(request: NextRequest) {
     'config_name',
     'base_docx_name',
     'excel_file_name',
-    'final_html'
-    // Afegeix més camps si cal
+    'final_html',
+    'excel_headers',
+    'link_mappings',
+    'ai_instructions'
   ];
   const updateData: Record<string, any> = {};
   for (const key of fields) {
