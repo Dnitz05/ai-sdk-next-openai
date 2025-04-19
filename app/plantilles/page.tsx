@@ -22,7 +22,23 @@ export default function TemplatesPage() {
     const fetchTemplates = async () => {
       setIsLoading(true);
       try {
-        const response = await fetch(`/api/get-templates${searchTerm ? `?search=${encodeURIComponent(searchTerm)}` : ''}`);
+        // Obtenir el token JWT de Supabase (browser client)
+        const { createBrowserSupabaseClient } = await import('@/lib/supabase/browserClient');
+        const supabase = createBrowserSupabaseClient();
+        const { data: { session }, error: sessionError } = await supabase.auth.getSession();
+        if (sessionError || !session) {
+          throw new Error('No autenticat. Torna a iniciar sessió.');
+        }
+        const accessToken = session.access_token;
+        // Fer fetch passant el token al header Authorization
+        const response = await fetch(
+          `/api/get-templates${searchTerm ? `?search=${encodeURIComponent(searchTerm)}` : ''}`,
+          {
+            headers: {
+              Authorization: `Bearer ${accessToken}`,
+            },
+          }
+        );
         if (!response.ok) {
           throw new Error(`Error ${response.status}: ${response.statusText}`);
         }
@@ -35,7 +51,7 @@ export default function TemplatesPage() {
         setIsLoading(false);
       }
     };
-    
+
     fetchTemplates();
   }, [searchTerm]);
   
