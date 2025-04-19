@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { createServerSupabaseClient } from '@/lib/supabase/serverClient'
+import { supabase } from '@/lib/supabase/serverClient'
 
 interface SaveConfigPayload {
   baseDocxName: string | null
@@ -36,7 +36,7 @@ export async function POST(request: NextRequest) {
     }
 
     // 3️⃣ Instància Supabase SSR (llegirà cookies internament)
-    const supabase = createServerSupabaseClient()
+    // Utilitza la instància supabase importada
 
     // 4️⃣ Obté l’usuari i comprova RLS
     const { data: userData, error: userError } = await supabase.auth.getUser()
