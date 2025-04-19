@@ -1,16 +1,14 @@
-import { createServerClient } from '@supabase/ssr'
+// lib/supabase/serverClient.ts
+import { createServerClient, type CookieMethodsServer } from '@supabase/ssr'
 import { cookies } from 'next/headers'
-import type { Cookie, CookieMethodsServer } from '@supabase/ssr'
 
 /**
  * Retorna un client Supabase per a Next.js App Router
  * amb suport nadiu de cookies per RLS.
  */
 export async function createServerSupabaseClient() {
-  // Llegim el store de cookies de Next.js
   const cookieStore = await cookies()
 
-  // Implementem les quatre crides que Supabase SSR necessita
   const cookieMethods: CookieMethodsServer = {
     get: (name: string) => {
       const c = cookieStore.get(name)
@@ -22,7 +20,7 @@ export async function createServerSupabaseClient() {
         value: c.value,
       })),
     set: () => {
-      /* no-op: si vols refrescar-les has de fer-ho en middleware o en la resposta */
+      /* no-op: refresca cookies en middleware o a la resposta */
     },
     delete: () => {
       /* no-op */
