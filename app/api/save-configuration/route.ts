@@ -28,23 +28,149 @@ export async function POST(request: NextRequest) {
     }
     // LOG extra: headers i request
     console.log("DEBUG HEADERS:", request.headers);
-    try {
-        const rawBody = await request.text();
-        console.log("DEBUG RAW BODY:", rawBody);
-    } catch (e) {
-        console.log("DEBUG RAW BODY: error llegint body", e);
-    }
+    // Llegeix el body UNA SOLA VEGADA
+    const bodyText = await request.text();
+    console.log("DEBUG RAW BODY:", bodyText);
 
-    // 1. [ELIMINAT] No cal llegir el token de l'Authorization header: Supabase utilitza la cookie sb-access-token.
-    // La comprovació del header s'ha eliminat per confiar únicament en la cookie.
-
+    let configurationData: SaveConfigPayload;
     try {
-        // Llegir les dades JSON del body
-        const configurationData: SaveConfigPayload = await request.json();
+        configurationData = JSON.parse(bodyText);
         console.log("Dades rebudes:", configurationData);
         if (!configurationData || typeof configurationData !== 'object') {
             throw new Error("Payload buit o invàlid.");
         }
+        // Comprovem la mida del HTML per evitar problemes amb límits de Supabase
+        if (configurationData.finalHtml && configurationData.finalHtml.length > 1000000) { // 1MB aproximadament
+            console.warn("HTML molt gran, podria excedir límits de Supabase:", configurationData.finalHtml.length, "caràcters");
+            return NextResponse.json({
+                error: 'El contingut HTML és massa gran (més d\'1MB). Redueix el contingut o divideix-lo en parts més petites.',
+                htmlSize: configurationData.finalHtml.length
+            }, { status: 413 }); // Payload Too Large
+        }
+
+        // 2. Crea el client Supabase SSR amb la cookie (nadiu per a RLS)
+        // Ja no cal passar cookiesHeader, el helper les llegeix internament
+        const supabase = createServerSupabaseClient();
+
+        // OPCIÓ A: Obté el token i crea un client manual amb header Authorization
+        // Obté l'usuari autenticat
+        const { data: userData, error: userError } = await supabase.auth.getUser();
+        console.log("DEBUG getUser result:", { userData, userError });
+        if (userError || !userData?.user) {
+            return NextResponse.json({ error: 'No s\'ha pogut validar l\'usuari.', userError, userData }, { status: 401 });
+        }
+        const userId = userData.user.id;
+        // DEBUG: Log del userId obtingut
+        console.log("userId obtingut via Supabase:", userId);
+
+        // 4. Prepara i valida les dades abans d'inserir
+        // Declarem les variables fora del bloc try per poder usar-les després
+        let linkMappingsJson: string;
+        let aiInstructionsJson: string;
+        const excelHeadersArray = Array.isArray(configurationData.excelInfo?.headers)
+            ? configurationData.excelInfo.headers
+            : [];
+            
+        // Convertim explícitament les estructures complexes a JSON
+        try {
+            // Assegurem-nos que les dades són vàlides convertint-les a JSON
+            linkMappingsJson = JSON.stringify(
+                Array.isArray(configurationData.linkMappings)
+                ? configurationData.linkMappings
+                : []
+            );
+                
+            aiInstructionsJson = JSON.stringify(
+                Array.isArray(configurationData.aiInstructions)
+                ? configurationData.aiInstructions
+                : []
+            );
+                
+            // Intentem parsejar el JSON per comprovar que és vàlid
+            JSON.parse(linkMappingsJson);
+            JSON.parse(aiInstructionsJson);
+        } catch (jsonError) {
+            console.error("Error processant JSON:", jsonError);
+            return NextResponse.json({
+                error: 'Format JSON invàlid a les dades enviades',
+                details: jsonError instanceof Error ? jsonError.message : String(jsonError)
+            }, { status: 400 });
+        }
+            
+        // 5. Inserta la configuració amb el user_id autenticat
+        const configToInsert = {
+            user_id: userId, // <- OBLIGATORI, exactament igual que la columna!
+            config_name: configurationData.config_name || configurationData.baseDocxName || "Plantilla sense nom", // Utilitzem config_name explícit si existeix
+            base_docx_name: configurationData.baseDocxName,
+            excel_file_name: configurationData.excelInfo?.fileName,
+            excel_headers: excelHeadersArray,
+            // Supabase utilitza PostgreSQL JSONB per als camps que contenen objectes.
+            // Internament el client Supabase convertirà aquests objectes a JSONB.
+            link_mappings: JSON.parse(linkMappingsJson),
+            ai_instructions: JSON.parse(aiInstructionsJson),
+            final_html: configurationData.finalHtml ? configurationData.finalHtml : ''
+        };
+        console.log("Intentant inserir a Supabase. user_id:", userId, "TIPUS user_id:", typeof userId, "configToInsert:", JSON.stringify(configToInsert, null, 2));
+        // DEBUG: Mostra el JSON complet que s'intenta inserir
+        console.log("DEBUG INSERT payload:", JSON.stringify(configToInsert, null, 2));
+        
+        // Inserció completa amb tots els camps
+        const { data: insertedData, error: dbError } = await supabase
+            .from('plantilla_configs')
+            .insert([configToInsert])
+            .select()
+            .single();
+
+        if (dbError) {
+            console.error("Error de Supabase al inserir:", dbError);
+            console.error("Codi d'error:", dbError.code);
+            console.error("Detalls:", dbError.details);
+            console.error("Suggeriment:", dbError.hint);
+            console.error("Detalls complets de l'error Supabase:", JSON.stringify(dbError, null, 2));
+            console.error("Valor user_id inserit:", userId, "TIPUS:", typeof userId);
+            
+            // Millorem el missatge d'error segons el codi
+            let errorMessage = 'Error al desar la configuració a la base de dades.';
+            if (dbError.code === "23502") {
+                errorMessage = 'Error: Falta un camp obligatori a la base de dades.';
+            } else if (dbError.code === "23505") {
+                errorMessage = 'Error: Ja existeix una plantilla amb aquestes dades.';
+            } else if (dbError.code === "42P01") {
+                errorMessage = 'Error: La taula no existeix o no s\'hi pot accedir.';
+            } else if (dbError.code?.startsWith("42")) {
+                errorMessage = 'Error de sintaxi SQL o problema d\'estructura.';
+            } else if (dbError.code?.startsWith("28")) {
+                errorMessage = 'Error d\'autorització. Comprova les polítiques RLS.';
+            }
+            
+            return NextResponse.json({
+                error: errorMessage,
+                details: dbError.message,
+                code: dbError.code,
+                hint: dbError.hint,
+                supabaseError: dbError,
+                userId: userId,
+                userIdType: typeof userId
+            }, { status: 500 });
+        }
+
+        console.log("Inserció a Supabase realitzada amb èxit. insertedData:", JSON.stringify(insertedData, null, 2));
+        return NextResponse.json({
+            message: "Configuració desada amb èxit!",
+            configId: insertedData?.id,
+            insertedData
+        }, { status: 201 });
+    } catch (error) {
+        console.error("Error general a /api/save-configuration (POST):", error);
+        if (error instanceof SyntaxError) {
+            return NextResponse.json({ error: 'Format JSON invàlid' }, { status: 400 });
+        }
+        return NextResponse.json({
+            error: 'Error intern del servidor al processar la petició',
+            details: error instanceof Error ? error.message : String(error)
+        }, { status: 500 });
+    }
+}
         
         // Comprovem la mida del HTML per evitar problemes amb límits de Supabase
         if (configurationData.finalHtml && configurationData.finalHtml.length > 1000000) { // 1MB aproximadament
@@ -177,7 +303,6 @@ export async function POST(request: NextRequest) {
             configId: insertedData?.id,
             insertedData
         }, { status: 201 });
-
     } catch (error) {
         console.error("Error general a /api/save-configuration (POST):", error);
         if (error instanceof SyntaxError) {
