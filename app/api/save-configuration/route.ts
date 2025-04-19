@@ -1,6 +1,7 @@
 // app/api/save-configuration/route.ts
 import { NextRequest, NextResponse } from 'next/server'
 import { createServerSupabaseClient } from '@/lib/supabase/serverClient'
+import { createClient } from '@supabase/supabase-js'
 
 interface SaveConfigPayload {
   baseDocxName: string | null
@@ -30,12 +31,30 @@ export async function POST(request: NextRequest) {
 // 3. Instància Supabase SSR amb gestió de cookies completa
 const supabase = await createServerSupabaseClient()
 
-    // 4. Obté l'usuari
+    // 4. Obté la sessió, l'usuari i el token
+    const { data: { session }, error: sessionError } = await supabase.auth.getSession()
+    if (sessionError || !session) {
+      return NextResponse.json({ error: 'Sessió no trobada.' }, { status: 401 })
+    }
+    
     const { data: userData, error: userError } = await supabase.auth.getUser()
     if (userError || !userData?.user) {
       return NextResponse.json({ error: 'Usuari no validat.' }, { status: 401 })
     }
     const userId = userData.user.id
+    const accessToken = session.access_token
+    
+    // Crea un client amb el token JWT per passar les validacions RLS
+    const authenticatedSupabase = createClient(
+      process.env.NEXT_PUBLIC_SUPABASE_URL!,
+      process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+      {
+        global: {
+          headers: { Authorization: `Bearer ${accessToken}` }
+        },
+        auth: { persistSession: false }
+      }
+    )
 
     // 5. Serialitza camps JSON
     let linkMappings, aiInstructions
@@ -64,8 +83,8 @@ const supabase = await createServerSupabaseClient()
       final_html: configurationData.finalHtml,
     }
 
-    // 7. Inserció
-    const { data: insertedData, error: dbError } = await supabase
+    // 7. Inserció amb el client autenticat que passa el token JWT
+    const { data: insertedData, error: dbError } = await authenticatedSupabase
       .from('plantilla_configs')
       .insert([configToInsert])
       .select()
