@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { supabase } from '@/lib/supabase/serverClient'
+import { createServerSupabaseClient } from '@/lib/supabase/serverClient'
 
 interface SaveConfigPayload {
   baseDocxName: string | null
@@ -35,8 +35,8 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    // 3️⃣ Instància Supabase SSR (llegirà cookies internament)
-    // Utilitza la instància supabase importada
+    // 3️⃣ Instància Supabase SSR
+    const supabase = createServerSupabaseClient()
 
     // 4️⃣ Obté l’usuari i comprova RLS
     const { data: userData, error: userError } = await supabase.auth.getUser()
@@ -52,7 +52,8 @@ export async function POST(request: NextRequest) {
     try {
       linkMappingsJson = JSON.stringify(payload.linkMappings || [])
       aiInstructionsJson = JSON.stringify(payload.aiInstructions || [])
-      JSON.parse(linkMappingsJson); JSON.parse(aiInstructionsJson)
+      JSON.parse(linkMappingsJson)
+      JSON.parse(aiInstructionsJson)
     } catch (e) {
       console.error('Camp JSON invàlid:', e)
       return NextResponse.json(
@@ -61,10 +62,11 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    // 6️⃣ Prepara el payload d’inserció
+    // 6️⃣ Prepara payload d’inserció
     const toInsert = {
       user_id: userId,
-      config_name: payload.config_name || payload.baseDocxName || 'Sense nom',
+      config_name:
+        payload.config_name || payload.baseDocxName || 'Sense nom',
       base_docx_name: payload.baseDocxName,
       excel_file_name: payload.excelInfo?.fileName ?? null,
       excel_headers: payload.excelInfo?.headers ?? [],
