@@ -1,6 +1,7 @@
 import './globals.css';
 import { Inter } from 'next/font/google';
 import AppNavbar from '../components/AppNavbar';
+import SessionProvider from '../components/SessionProvider';
 
 const inter = Inter({ subsets: ['latin'] });
 
@@ -17,8 +18,10 @@ export default function RootLayout({
   return (
     <html lang="ca">
       <body className={inter.className}>
-        <AppNavbar />
-        {children}
+        <SessionProvider>
+          <AppNavbar />
+          {children}
+        </SessionProvider>
       </body>
     </html>
   );
