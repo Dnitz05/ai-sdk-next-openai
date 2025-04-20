@@ -127,7 +127,7 @@ export default function TemplatesPage() {
                         Detalls
                       </Link>
                       <Link
-                        href={`/plantilles/editor/${template.id}`}
+                        href={`/plantilles/editar/${template.id}`}
                         className="px-3 py-1 text-sm bg-blue-100 text-blue-700 rounded hover:bg-blue-200"
                       >
                         Editar
