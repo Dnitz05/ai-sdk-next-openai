@@ -14,26 +14,7 @@ function Logo() {
   );
 }
 
-function UserMenu({ onLogin }: { onLogin: () => void }) {
-  const [user, setUser] = useState<{ email: string } | null>(null);
-  const [loading, setLoading] = useState(true);
-
-  useEffect(() => {
-    async function fetchUser() {
-      setLoading(true);
-      try {
-        const supabase = createBrowserSupabaseClient();
-        const { data } = await supabase.auth.getUser();
-        setUser(data?.user ? { email: data.user.email ?? '' } : null);
-      } catch {
-        setUser(null);
-      } finally {
-        setLoading(false);
-      }
-    }
-    fetchUser();
-  }, []);
-
+function UserMenu({ onLogin, user, loading }: { onLogin: () => void; user: { email: string } | null; loading: boolean }) {
   const handleLogout = async () => {
     const supabase = createBrowserSupabaseClient();
     await supabase.auth.signOut();
@@ -93,6 +74,38 @@ function AuthModal({ open, onClose }: { open: boolean; onClose: () => void }) {
 
 export default function AppNavbar() {
   const [showAuth, setShowAuth] = useState(false);
+  const [user, setUser] = useState<{ email: string } | null>(null);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    async function fetchUser() {
+      setLoading(true);
+      try {
+        const supabase = createBrowserSupabaseClient();
+        const { data } = await supabase.auth.getUser();
+        setUser(data?.user ? { email: data.user.email ?? '' } : null);
+      } catch {
+        setUser(null);
+      } finally {
+        setLoading(false);
+      }
+    }
+    fetchUser();
+
+    // Escolta canvis d'autenticació per tancar el modal automàticament
+    const supabase = createBrowserSupabaseClient();
+    const { data: listener } = supabase.auth.onAuthStateChange((_event, session) => {
+      if (session?.user) {
+        setUser({ email: session.user.email ?? '' });
+        setShowAuth(false); // Tanca el modal automàticament
+      } else {
+        setUser(null);
+      }
+    });
+    return () => {
+      listener?.subscription.unsubscribe();
+    };
+  }, []);
 
   return (
     <>
@@ -107,7 +120,7 @@ export default function AppNavbar() {
           </Link>
         </div>
         <div className="flex items-center gap-4">
-          <UserMenu onLogin={() => setShowAuth(true)} />
+          <UserMenu onLogin={() => setShowAuth(true)} user={user} loading={loading} />
         </div>
       </nav>
       <AuthModal open={showAuth} onClose={() => setShowAuth(false)} />
