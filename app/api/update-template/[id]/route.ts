@@ -32,6 +32,10 @@ export async function PUT(request: NextRequest) {
     if (key in body) updateData[key] = body[key];
   }
 
+  // LOG del body rebut i del payload d'update
+  console.log('[API UPDATE-TEMPLATE] body rebut:', body);
+  console.log('[API UPDATE-TEMPLATE] updateData:', updateData);
+
   const { data, error } = await supabase
     .from('plantilla_configs')
     .update(updateData)
@@ -40,7 +44,8 @@ export async function PUT(request: NextRequest) {
     .single();
 
   if (error) {
-    return NextResponse.json({ error: 'Error actualitzant la plantilla', details: error.message }, { status: 400 });
+    console.error('[API UPDATE-TEMPLATE] error:', error);
+    return NextResponse.json({ error: 'Error actualitzant la plantilla', details: error.message, supabase: error }, { status: 400 });
   }
 
   return NextResponse.json({ template: data }, { status: 200 });

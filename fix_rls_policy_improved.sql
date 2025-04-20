@@ -1,4 +1,9 @@
--- Script avanzado para solucionar problemas de políticas RLS en Supabase
+Error detallado de inserción: {
+  code: '42501',
+  message: 'new row violates row-level security policy for table "plantilla_configs"',
+  details: null,
+  hint: null
+}-- Script avanzado para solucionar problemas de políticas RLS en Supabase
 -- Ejecutar este script en el SQL Editor de Supabase
 
 -- 1. Diagnóstico: Verificar el esquema de la tabla y las políticas actuales
