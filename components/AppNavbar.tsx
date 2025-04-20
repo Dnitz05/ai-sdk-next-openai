@@ -3,6 +3,7 @@
 import Link from 'next/link';
 import { useEffect, useState } from 'react';
 import { createBrowserSupabaseClient } from '../lib/supabase/browserClient';
+import AuthForm from './AuthForm';
 
 function Logo() {
   return (
@@ -13,7 +14,7 @@ function Logo() {
   );
 }
 
-function UserMenu() {
+function UserMenu({ onLogin }: { onLogin: () => void }) {
   const [user, setUser] = useState<{ email: string } | null>(null);
   const [loading, setLoading] = useState(true);
 
@@ -63,30 +64,53 @@ function UserMenu() {
   }
 
   return (
-    <Link
-      href="/"
+    <button
+      onClick={onLogin}
       className="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 font-semibold transition"
     >
       Inicia sessió
-    </Link>
+    </button>
+  );
+}
+
+function AuthModal({ open, onClose }: { open: boolean; onClose: () => void }) {
+  if (!open) return null;
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
+      <div className="bg-white rounded shadow-lg p-6 relative w-full max-w-sm mx-auto">
+        <button
+          onClick={onClose}
+          className="absolute top-2 right-2 text-gray-400 hover:text-gray-700 text-xl font-bold"
+          aria-label="Tanca"
+        >
+          ×
+        </button>
+        <AuthForm />
+      </div>
+    </div>
   );
 }
 
 export default function AppNavbar() {
+  const [showAuth, setShowAuth] = useState(false);
+
   return (
-    <nav className="w-full bg-white shadow flex items-center justify-between px-4 sm:px-8 py-3 z-50">
-      <div className="flex items-center gap-6">
-        <Logo />
-        <Link href="/" className="text-sm font-medium text-blue-700 hover:text-blue-900 transition hidden sm:inline">
-          Nova plantilla
-        </Link>
-        <Link href="/plantilles" className="text-sm font-medium text-blue-700 hover:text-blue-900 transition hidden sm:inline">
-          Les meves plantilles
-        </Link>
-      </div>
-      <div className="flex items-center gap-4">
-        <UserMenu />
-      </div>
-    </nav>
+    <>
+      <nav className="w-full bg-white shadow flex items-center justify-between px-4 sm:px-8 py-3 z-50">
+        <div className="flex items-center gap-6">
+          <Logo />
+          <Link href="/" className="text-sm font-medium text-blue-700 hover:text-blue-900 transition hidden sm:inline">
+            Nova plantilla
+          </Link>
+          <Link href="/plantilles" className="text-sm font-medium text-blue-700 hover:text-blue-900 transition hidden sm:inline">
+            Les meves plantilles
+          </Link>
+        </div>
+        <div className="flex items-center gap-4">
+          <UserMenu onLogin={() => setShowAuth(true)} />
+        </div>
+      </nav>
+      <AuthModal open={showAuth} onClose={() => setShowAuth(false)} />
+    </>
   );
 }
