@@ -1,7 +1,6 @@
 import React, { useState, useEffect, useRef, ChangeEvent, MouseEvent, useMemo } from 'react';
 import * as XLSX from 'xlsx';
 import Link from 'next/link';
-import AuthWrapper from './AuthWrapper';
 import { createBrowserSupabaseClient } from '../lib/supabase/browserClient';
 
 export interface ExcelLink { id: string; excelHeader: string; selectedText: string; }
@@ -314,10 +313,6 @@ const TemplateEditor: React.FC<TemplateEditorProps> = ({ initialTemplateData, mo
   // --- Renderitzat complet ---
   return (
     <main className="flex min-h-screen w-full flex-col items-center p-4 sm:p-8 bg-gray-100">
-      {/* Bloc d'autenticació Supabase */}
-      <div className="w-full max-w-md mb-8">
-        <AuthWrapper />
-      </div>
       {/* Capçalera WEB */}
       <div className="web-header w-full max-w-4xl mx-auto flex flex-col sm:flex-row items-start sm:items-center justify-between mb-4 sm:mb-6 px-1 gap-4">
         <h2 className="text-lg font-semibold text-gray-700">Configurador Plantilles DOCX</h2>
