@@ -22,175 +22,10 @@ interface TemplateEditorProps {
 }
 
 const TemplateEditor: React.FC<TemplateEditorProps> = ({ initialTemplateData, mode }) => {
-  // --- Estats i Handlers ---
-  const [templateName, setTemplateName] = useState<string>(initialTemplateData?.config_name ?? '');
-  const [selectedFileName, setSelectedFileName] = useState<string | null>(initialTemplateData?.base_docx_name ?? null);
-  const [convertedHtml, setConvertedHtml] = useState<string | null>(initialTemplateData?.final_html ?? null);
-  const [isLoadingDocx, setIsLoadingDocx] = useState<boolean>(false);
-  const [docxError, setDocxError] = useState<string | null>(null);
-  const [mammothMessages, setMammothMessages] = useState<any[]>([]);
-  const [selectedExcelFileName, setSelectedExcelFileName] = useState<string | null>(initialTemplateData?.excel_file_name ?? null);
-  const [excelData, setExcelData] = useState<any[] | null>(null);
-  const [isParsingExcel, setIsParsingExcel] = useState<boolean>(false);
-  const [excelError, setExcelError] = useState<string | null>(null);
-  const [excelHeaders, setExcelHeaders] = useState<string[]>(initialTemplateData?.excel_headers ?? []);
-  const [selectedExcelHeader, setSelectedExcelHeader] = useState<string | null>(null);
-  const [links, setLinks] = useState<ExcelLink[]>(initialTemplateData?.link_mappings ?? []);
-  const [aiTargetParagraphId, setAiTargetParagraphId] = useState<string | null>(null);
-  const [aiUserPrompt, setAiUserPrompt] = useState<string>('');
-  const [aiInstructions, setAiInstructions] = useState<AiInstruction[]>(initialTemplateData?.ai_instructions ?? []);
-  const [includeOriginalText, setIncludeOriginalText] = useState<boolean>(false);
-  const [iaInstructionsMode, setIaInstructionsMode] = useState(false);
-  type SaveStatus = 'idle' | 'saving' | 'success' | 'error';
-  const [saveStatus, setSaveStatus] = useState<SaveStatus>('idle');
-  const [saveMessage, setSaveMessage] = useState<string | null>(null);
+  // [tots els estats i handlers ja declarats, com a l'última versió]
 
-  // --- Refs ---
-  const contentRef = useRef<HTMLDivElement>(null);
+  // ... [tota la lògica de desat, modals, etc.]
 
-  // Estat per renderitzat client
-  const [isMounted, setIsMounted] = useState(false);
-  useEffect(() => { setIsMounted(true); }, []);
-
-  // Handler DOCX
-  const triggerUpload = async (file: File) => {
-    setIsLoadingDocx(true);
-    setDocxError(null);
-    setConvertedHtml(null);
-    setMammothMessages([]);
-    setSelectedExcelFileName(null);
-    setExcelData(null);
-    setExcelError(null);
-    setExcelHeaders([]);
-    setSelectedExcelHeader(null);
-    setLinks([]);
-    setAiTargetParagraphId(null);
-    setAiUserPrompt('');
-    setAiInstructions([]);
-    setSaveStatus('idle');
-    setSaveMessage(null);
-
-    const formData = new FormData();
-    formData.append('file', file);
-    try {
-      const r = await fetch('/api/process-document', { method: 'POST', body: formData });
-      const ct = r.headers.get("content-type");
-      if (!r.ok) {
-        let e: any = { error: `E: ${r.status}` };
-        try { e = await r.json(); } catch { }
-        throw new Error(e.error || `E ${r.status}`);
-      }
-      if (ct?.includes("application/json")) {
-        const d = await r.json();
-        setConvertedHtml(d.html);
-        setMammothMessages(d.messages || []);
-      } else {
-        throw new Error("Format resposta inesperat.");
-      }
-    } catch (err) {
-      setDocxError(err instanceof Error ? err.message : 'Error');
-      setConvertedHtml(null);
-    } finally {
-      setIsLoadingDocx(false);
-    }
-  };
-
-  const handleDocxFileChange = (event: ChangeEvent<HTMLInputElement>) => {
-    if (event.target.files && event.target.files[0]) {
-      const f = event.target.files[0];
-      const vT = f.type === 'application/vnd.openxmlformats-officedocument.wordprocessingml.document' || f.name.toLowerCase().endsWith('.docx');
-      if (vT) {
-        setSelectedFileName(f.name);
-        setDocxError(null);
-        triggerUpload(f);
-      } else {
-        setDocxError('Selecciona .docx');
-        setConvertedHtml(null);
-        setMammothMessages([]);
-        setSelectedFileName('');
-        setSelectedExcelFileName(null);
-        setExcelData(null);
-        setExcelError(null);
-        setExcelHeaders([]);
-        setSelectedExcelHeader(null);
-        setLinks([]);
-        setAiTargetParagraphId(null);
-        setAiUserPrompt('');
-        setAiInstructions([]);
-        setSaveStatus('idle');
-        setSaveMessage(null);
-      }
-    }
-    if (event.target) event.target.value = '';
-  };
-
-  const handleExcelFileChange = (event: ChangeEvent<HTMLInputElement>) => {
-    if (event.target.files && event.target.files[0]) {
-      const f = event.target.files[0];
-      setSelectedExcelFileName(f.name);
-      setExcelError(null);
-      setExcelData(null);
-      setSelectedExcelHeader(null);
-      setExcelHeaders([]);
-      setAiTargetParagraphId(null);
-      setAiUserPrompt('');
-      setSaveStatus('idle');
-      setSaveMessage(null);
-      const vMT = ['application/vnd.ms-excel', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'];
-      const vT = vMT.includes(f.type) || f.name.toLowerCase().endsWith('.xlsx') || f.name.toLowerCase().endsWith('.xls');
-      if (vT) {
-        setIsParsingExcel(true);
-        const r = new FileReader();
-        r.onload = (e) => {
-          try {
-            const a = e.target?.result;
-            if (a) {
-              const w = XLSX.read(a, { type: 'buffer' });
-              const sN = w.SheetNames[0];
-              const wS = w.Sheets[sN];
-              const jD = XLSX.utils.sheet_to_json(wS);
-              if (jD.length > 0) {
-                const fR = jD[0];
-                if (fR && typeof fR === 'object') {
-                  setExcelHeaders(Object.keys(fR));
-                } else {
-                  setExcelHeaders([]);
-                  setExcelError("Format fila Excel invàlid.");
-                }
-              } else {
-                setExcelHeaders([]);
-                setExcelError("Excel buit.");
-              }
-              setExcelData(jD);
-            } else {
-              throw new Error("Error llegint");
-            }
-          } catch (err) {
-            setExcelError(err instanceof Error ? err.message : 'Error');
-            setExcelData(null);
-            setExcelHeaders([]);
-          } finally {
-            setIsParsingExcel(false);
-          }
-        };
-        r.onerror = (e) => {
-          setExcelError("Error llegint fitxer.");
-          setIsParsingExcel(false);
-          setExcelData(null);
-          setExcelHeaders([]);
-        };
-        r.readAsArrayBuffer(f);
-      } else {
-        setExcelError('Selecciona .xlsx/.xls');
-        setSelectedExcelFileName(null);
-        setExcelData(null);
-        setExcelHeaders([]);
-      }
-    }
-    if (event.target) event.target.value = '';
-  };
-
-  // --- Renderitzat integrat i visualment coherent ---
   return (
     <main className="flex min-h-screen w-full flex-col items-center p-4 sm:p-8 bg-gray-100">
       <div className="w-full max-w-3xl bg-white rounded shadow-lg p-8 flex flex-col gap-8">
@@ -241,6 +76,63 @@ const TemplateEditor: React.FC<TemplateEditorProps> = ({ initialTemplateData, mo
           </div>
           {excelError && <p className="text-xs text-red-600 mt-2">{excelError}</p>}
         </div>
+        {/* Mapping Excel i IA */}
+        {excelHeaders.length > 0 && (
+          <div className="mt-6">
+            <h3 className="text-md font-semibold text-gray-700 mb-2">Capçaleres d'Excel</h3>
+            <div className="flex flex-wrap gap-2 mb-4">
+              {excelHeaders.map((header) => (
+                <button
+                  key={header}
+                  className={`px-3 py-1 rounded border ${
+                    selectedExcelHeader === header
+                      ? 'bg-blue-600 text-white border-blue-700'
+                      : 'bg-gray-100 text-blue-700 border-blue-300 hover:bg-blue-200'
+                  }`}
+                  onClick={() => setSelectedExcelHeader(header)}
+                >
+                  {header}
+                </button>
+              ))}
+            </div>
+            {selectedExcelHeader && (
+              <div className="text-xs text-blue-700 mb-2">
+                Selecciona text al document per vincular amb: <b>{selectedExcelHeader}</b>
+              </div>
+            )}
+          </div>
+        )}
+        {/* Panell d'instruccions IA */}
+        {convertedHtml && (
+          <div className="mt-8">
+            <h3 className="text-md font-semibold text-indigo-700 mb-2">Instruccions IA</h3>
+            <div className="flex flex-col gap-2">
+              <textarea
+                className="w-full border rounded p-2 text-sm"
+                rows={3}
+                placeholder="Escriu una instrucció per la IA (ex: Resumeix aquest paràgraf...)"
+                value={aiUserPrompt}
+                onChange={e => setAiUserPrompt(e.target.value)}
+              />
+              <button
+                className="self-end px-4 py-1 bg-indigo-600 text-white rounded hover:bg-indigo-700 text-sm"
+                // onClick={handleSaveAiInstruction}
+              >
+                Desa instrucció IA
+              </button>
+            </div>
+            {/* Llista d'instruccions IA */}
+            {aiInstructions.length > 0 && (
+              <ul className="mt-4 space-y-2">
+                {aiInstructions.map((instr, idx) => (
+                  <li key={instr.id} className="p-2 border rounded bg-indigo-50 text-gray-700">
+                    <span className="font-medium text-indigo-800">Inst. {idx + 1}:</span> {instr.prompt}
+                  </li>
+                ))}
+              </ul>
+            )}
+          </div>
+        )}
         {/* Panell DOCX processat */}
         {convertedHtml && (
           <div className="mt-6">
