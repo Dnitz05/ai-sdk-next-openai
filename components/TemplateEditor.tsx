@@ -1,30 +1,41 @@
-import React, { useState, useEffect, useRef, ChangeEvent, useMemo } from 'react';
+import React, { useState, useEffect, useRef, ChangeEvent } from 'react';
 import * as XLSX from 'xlsx';
 import Link from 'next/link';
-import { createBrowserSupabaseClient } from '../lib/supabase/browserClient';
 
-export interface ExcelLink { id: string; excelHeader: string; selectedText: string; }
-export interface AiInstruction { id: string; prompt: string; originalText: string; }
-export interface TemplateData {
-  id?: string;
-  config_name: string;
-  base_docx_name: string | null;
-  excel_file_name: string | null;
-  excel_headers: string[] | null;
-  link_mappings: ExcelLink[];
-  ai_instructions: AiInstruction[];
-  final_html: string;
-}
+const TemplateEditor: React.FC = () => {
+  // Declaració d'estats bàsics
+  const [templateName, setTemplateName] = useState('');
+  const [selectedFileName, setSelectedFileName] = useState<string | null>(null);
+  const [convertedHtml, setConvertedHtml] = useState<string | null>(null);
+  const [isLoadingDocx, setIsLoadingDocx] = useState(false);
+  const [docxError, setDocxError] = useState<string | null>(null);
+  const [selectedExcelFileName, setSelectedExcelFileName] = useState<string | null>(null);
+  const [excelHeaders, setExcelHeaders] = useState<string[]>([]);
+  const [selectedExcelHeader, setSelectedExcelHeader] = useState<string | null>(null);
+  const [isParsingExcel, setIsParsingExcel] = useState(false);
+  const [excelError, setExcelError] = useState<string | null>(null);
+  const [aiUserPrompt, setAiUserPrompt] = useState('');
+  const [aiInstructions, setAiInstructions] = useState<{ id: string; prompt: string }[]>([]);
+  const [saveStatus, setSaveStatus] = useState<'idle' | 'saving' | 'success' | 'error'>('idle');
 
-interface TemplateEditorProps {
-  initialTemplateData: TemplateData | null;
-  mode: 'new' | 'edit';
-}
+  // Handlers
+  const handleDocxFileChange = (event: ChangeEvent<HTMLInputElement>) => {
+    // Simulació de pujada DOCX
+    if (event.target.files && event.target.files[0]) {
+      setSelectedFileName(event.target.files[0].name);
+      setConvertedHtml('<p>Contingut DOCX processat!</p>');
+      setDocxError(null);
+    }
+  };
 
-const TemplateEditor: React.FC<TemplateEditorProps> = ({ initialTemplateData, mode }) => {
-  // [tots els estats i handlers ja declarats, com a l'última versió]
-
-  // ... [tota la lògica de desat, modals, etc.]
+  const handleExcelFileChange = (event: ChangeEvent<HTMLInputElement>) => {
+    // Simulació de pujada Excel
+    if (event.target.files && event.target.files[0]) {
+      setSelectedExcelFileName(event.target.files[0].name);
+      setExcelHeaders(['Nom', 'Cognoms', 'Data']);
+      setExcelError(null);
+    }
+  };
 
   return (
     <main className="flex min-h-screen w-full flex-col items-center p-4 sm:p-8 bg-gray-100">
@@ -116,7 +127,6 @@ const TemplateEditor: React.FC<TemplateEditorProps> = ({ initialTemplateData, mo
               />
               <button
                 className="self-end px-4 py-1 bg-indigo-600 text-white rounded hover:bg-indigo-700 text-sm"
-                // onClick={handleSaveAiInstruction}
               >
                 Desa instrucció IA
               </button>
@@ -137,13 +147,12 @@ const TemplateEditor: React.FC<TemplateEditorProps> = ({ initialTemplateData, mo
         {convertedHtml && (
           <div className="mt-6">
             <h3 className="text-md font-semibold text-gray-700 mb-2">Previsualització DOCX</h3>
-            <div ref={contentRef} className="prose max-w-5xl mx-auto bg-gray-50 p-4 rounded" dangerouslySetInnerHTML={{ __html: convertedHtml }} />
+            <div className="prose max-w-5xl mx-auto bg-gray-50 p-4 rounded" dangerouslySetInnerHTML={{ __html: convertedHtml }} />
           </div>
         )}
         {/* Botó Desa */}
         <div className="flex justify-end">
           <button
-            // handler de desat aquí
             disabled={
               saveStatus === 'saving' ||
               !templateName.trim() ||
