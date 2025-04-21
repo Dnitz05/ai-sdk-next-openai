@@ -7,23 +7,29 @@ import TemplateEditor from '../../../../components/TemplateEditor';
 export default function EditarPlantilla() {
   const { id } = useParams();
   const [template, setTemplate] = useState<any>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    // Crida real a l'API per obtenir la plantilla
-    // TODO: substituir per la crida real
-    setTemplate({
-      id,
-      config_name: 'Plantilla demo',
-      base_docx_name: 'demo.docx',
-      excel_file_name: 'demo.xlsx',
-      excel_headers: ['Nom', 'Cognoms', 'Data'],
-      link_mappings: [],
-      ai_instructions: [],
-      final_html: '<p>Contingut demo</p>',
-    });
+    async function fetchTemplate() {
+      setLoading(true);
+      setError(null);
+      try {
+        const response = await fetch(`/api/get-template/${id}`);
+        if (!response.ok) throw new Error('No s\'ha trobat la plantilla');
+        const data = await response.json();
+        setTemplate(data.template);
+      } catch (err: any) {
+        setError('Error carregant la plantilla');
+      } finally {
+        setLoading(false);
+      }
+    }
+    if (id) fetchTemplate();
   }, [id]);
 
-  if (!template) return <div>Carregant plantilla...</div>;
+  if (loading) return <div>Carregant plantilla...</div>;
+  if (error || !template) return <div className="text-red-600">{error || 'No s\'ha trobat la plantilla.'}</div>;
 
   return <TemplateEditor initialTemplateData={template} mode="edit" />;
 }
