@@ -2,6 +2,7 @@
 
 import { useRouter } from 'next/navigation';
 import { useState } from 'react';
+import * as XLSX from 'xlsx';
 
 export default function NovaPlantilla() {
   const router = useRouter();
@@ -10,26 +11,71 @@ export default function NovaPlantilla() {
   const [excelFile, setExcelFile] = useState<File | null>(null);
   const [isSaving, setIsSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [finalHtml, setFinalHtml] = useState<string | null>(null);
+  const [excelHeaders, setExcelHeaders] = useState<string[]>([]);
 
-  // Simulació: processar fitxers i obtenir dades (en producció, crida a /api/process-document i processa Excel)
-  const processFiles = async () => {
-    // Aquí hauries de processar el DOCX i l'Excel i obtenir el HTML i les capçaleres
-    // Per la demo, retornem valors simulats
-    return {
-      baseDocxName: wordFile?.name || '',
-      config_name: templateName,
-      excelInfo: { fileName: excelFile?.name || '', headers: ['Nom', 'Cognoms', 'Data'] },
-      linkMappings: [],
-      aiInstructions: [],
-      finalHtml: '<p>Contingut DOCX processat!</p>',
-    };
+  // Processa el DOCX amb l'API
+  const processDocx = async (file: File) => {
+    const formData = new FormData();
+    formData.append('file', file);
+    const r = await fetch('/api/process-document', { method: 'POST', body: formData });
+    if (!r.ok) throw new Error('Error processant DOCX');
+    const d = await r.json();
+    return d.html as string;
+  };
+
+  // Processa l'Excel al frontend
+  const processExcel = async (file: File) => {
+    return new Promise<string[]>((resolve, reject) => {
+      const r = new FileReader();
+      r.onload = (e) => {
+        try {
+          const a = e.target?.result;
+          if (a) {
+            const w = XLSX.read(a, { type: 'buffer' });
+            const sN = w.SheetNames[0];
+            const wS = w.Sheets[sN];
+            const jD = XLSX.utils.sheet_to_json(wS);
+            if (jD.length > 0) {
+              const fR = jD[0];
+              if (fR && typeof fR === 'object') {
+                resolve(Object.keys(fR));
+                return;
+              }
+            }
+            reject('Excel buit o format invàlid');
+          } else {
+            reject('Error llegint Excel');
+          }
+        } catch (err) {
+          reject('Error processant Excel');
+        }
+      };
+      r.onerror = () => reject('Error llegint fitxer Excel');
+      r.readAsArrayBuffer(file);
+    });
   };
 
   const handleSave = async () => {
     setIsSaving(true);
     setError(null);
     try {
-      const config = await processFiles();
+      if (!wordFile || !excelFile) throw new Error('Falten fitxers');
+      // Processa DOCX i Excel
+      const html = await processDocx(wordFile);
+      setFinalHtml(html);
+      const headers = await processExcel(excelFile);
+      setExcelHeaders(headers);
+
+      // Desa la plantilla
+      const config = {
+        baseDocxName: wordFile.name,
+        config_name: templateName,
+        excelInfo: { fileName: excelFile.name, headers },
+        linkMappings: [],
+        aiInstructions: [],
+        finalHtml: html,
+      };
       const response = await fetch('/api/save-configuration', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -40,7 +86,7 @@ export default function NovaPlantilla() {
       const id = data.configId || data.id || data.templateId || 'plantilla-fake-id';
       router.push(`/plantilles/editar/${id}`);
     } catch (err: any) {
-      setError('Error desant la plantilla');
+      setError('Error processant o desant la plantilla');
     } finally {
       setIsSaving(false);
     }
