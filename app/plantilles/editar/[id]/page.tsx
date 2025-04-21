@@ -15,7 +15,7 @@ export default function EditarPlantilla() {
       setLoading(true);
       setError(null);
       try {
-        const response = await fetch(`/api/get-template/${id}`);
+        const response = await fetch(`/api/get-template/${id}`, { credentials: 'include' });
         if (!response.ok) throw new Error('No s\'ha trobat la plantilla');
         const data = await response.json();
         setTemplate(data.template);
