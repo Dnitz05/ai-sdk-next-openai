@@ -15,10 +15,20 @@ export default function NovaPlantilla() {
     setIsSaving(true);
     setError(null);
     try {
-      // Simulació: desa la plantilla i obté l'id
-      // TODO: crida real a l'API de desat
-      const fakeId = 'plantilla-fake-id';
-      router.push(`/plantilles/editar/${fakeId}`);
+      // Crida real a l'API de desat
+      const formData = new FormData();
+      formData.append('name', templateName);
+      if (wordFile) formData.append('word', wordFile);
+      if (excelFile) formData.append('excel', excelFile);
+
+      const response = await fetch('/api/save-configuration', {
+        method: 'POST',
+        body: formData,
+      });
+      if (!response.ok) throw new Error('Error desant la plantilla');
+      const data = await response.json();
+      const id = data.id || data.templateId || data.result?.id || 'plantilla-fake-id';
+      router.push(`/plantilles/editar/${id}`);
     } catch (err: any) {
       setError('Error desant la plantilla');
     } finally {
