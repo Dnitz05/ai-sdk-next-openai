@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react';
 import { useParams } from 'next/navigation';
 import TemplateEditor from '../../../../components/TemplateEditor';
+import { createBrowserSupabaseClient } from '../../../../lib/supabase/browserClient';
 
 export default function EditarPlantilla() {
   const { id } = useParams();
@@ -15,7 +16,14 @@ export default function EditarPlantilla() {
       setLoading(true);
       setError(null);
       try {
-        const response = await fetch(`/api/get-template/${id}`, { credentials: 'include' });
+        const supabase = createBrowserSupabaseClient();
+        // Refresca la sessió per obtenir el token més recent
+        await supabase.auth.refreshSession();
+        const { data: sessionData } = await supabase.auth.getSession();
+        const accessToken = sessionData?.session?.access_token;
+        const response = await fetch(`/api/get-template/${id}`, {
+          headers: accessToken ? { Authorization: `Bearer ${accessToken}` } : {},
+        });
         if (!response.ok) throw new Error('No s\'ha trobat la plantilla');
         const data = await response.json();
         setTemplate(data.template);
