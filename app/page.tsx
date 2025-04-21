@@ -18,7 +18,7 @@ export default function NovaPlantilla() {
   const processDocx = async (file: File) => {
     const formData = new FormData();
     formData.append('file', file);
-    const r = await fetch('/api/process-document', { method: 'POST', body: formData });
+    const r = await fetch('/api/process-document', { method: 'POST', body: formData, credentials: 'include' });
     if (!r.ok) throw new Error('Error processant DOCX');
     const d = await r.json();
     return d.html as string;
@@ -79,6 +79,7 @@ export default function NovaPlantilla() {
       const response = await fetch('/api/save-configuration', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
         body: JSON.stringify(config),
       });
       if (!response.ok) throw new Error('Error desant la plantilla');
