@@ -11,23 +11,33 @@ export default function NovaPlantilla() {
   const [isSaving, setIsSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  // Simulació: processar fitxers i obtenir dades (en producció, crida a /api/process-document i processa Excel)
+  const processFiles = async () => {
+    // Aquí hauries de processar el DOCX i l'Excel i obtenir el HTML i les capçaleres
+    // Per la demo, retornem valors simulats
+    return {
+      baseDocxName: wordFile?.name || '',
+      config_name: templateName,
+      excelInfo: { fileName: excelFile?.name || '', headers: ['Nom', 'Cognoms', 'Data'] },
+      linkMappings: [],
+      aiInstructions: [],
+      finalHtml: '<p>Contingut DOCX processat!</p>',
+    };
+  };
+
   const handleSave = async () => {
     setIsSaving(true);
     setError(null);
     try {
-      // Crida real a l'API de desat
-      const formData = new FormData();
-      formData.append('name', templateName);
-      if (wordFile) formData.append('word', wordFile);
-      if (excelFile) formData.append('excel', excelFile);
-
+      const config = await processFiles();
       const response = await fetch('/api/save-configuration', {
         method: 'POST',
-        body: formData,
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(config),
       });
       if (!response.ok) throw new Error('Error desant la plantilla');
       const data = await response.json();
-      const id = data.id || data.templateId || data.result?.id || 'plantilla-fake-id';
+      const id = data.configId || data.id || data.templateId || 'plantilla-fake-id';
       router.push(`/plantilles/editar/${id}`);
     } catch (err: any) {
       setError('Error desant la plantilla');
