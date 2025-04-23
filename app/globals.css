@@ -32,9 +32,13 @@ p.ai-prompt-target:hover { background-color: #bae6fd; }
 p.ia-hover {
   cursor: pointer !important;
   transition: background-color 0.15s;
+  /* Elimina padding/marge per evitar desplaçament */
+  padding-left: 0 !important;
+  border-left: none !important;
 }
 p.ia-hover:hover {
   background-color: #e0f2fe !important; /* blau cel clar */
+  /* No afegeix padding ni border */
 }
 p.ia-selected {
   background-color: #bae6fd !important; /* blau més intens per preselecció */
