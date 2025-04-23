@@ -130,7 +130,7 @@ const TemplateEditor: React.FC<{ initialTemplateData: any; mode: 'edit' | 'new' 
           {convertedHtml ? (
             <div
               ref={contentRef}
-              className="prose max-w-5xl mx-auto bg-gray-50 p-4 rounded"
+              className="prose max-w-5xl mx-auto bg-white p-4 rounded"
               dangerouslySetInnerHTML={{ __html: convertedHtml }}
               onMouseUp={handleTextSelection}
               onClick={iaInstructionsMode ? handleContentClick : undefined}
