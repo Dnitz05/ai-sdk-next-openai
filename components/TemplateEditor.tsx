@@ -40,6 +40,24 @@ const TemplateEditor: React.FC<{ initialTemplateData: any; mode: 'edit' | 'new' 
     }
   }, [iaInstructionsMode, convertedHtml, aiTargetParagraphId]);
 
+  // Assegura que tots els <p> tinguin un data-paragraph-id únic i persistent
+  useEffect(() => {
+    if (contentRef.current) {
+      const paragraphs = contentRef.current.querySelectorAll('p');
+      let updated = false;
+      paragraphs.forEach(p => {
+        if (!p.dataset.paragraphId) {
+          p.dataset.paragraphId = `p-${Date.now()}-${Math.random().toString(36).substring(2, 9)}`;
+          updated = true;
+        }
+      });
+      // Si s'han assignat nous id, actualitza el HTML per persistir-los
+      if (updated) {
+        setConvertedHtml(contentRef.current.innerHTML);
+      }
+    }
+  }, [convertedHtml]);
+
   // Handler de selecció de text per mapping
   const handleTextSelection = () => {
     if (!convertedHtml || !selectedExcelHeader) return;
