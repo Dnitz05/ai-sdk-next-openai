@@ -30,9 +30,11 @@ p.ai-prompt-target:hover { background-color: #bae6fd; }
 
 /* Hover i preselecció per instruccions IA */
 p.ia-hover {
-  background-color: #e0f2fe !important; /* blau cel clar */
   cursor: pointer !important;
   transition: background-color 0.15s;
+}
+p.ia-hover:hover {
+  background-color: #e0f2fe !important; /* blau cel clar */
 }
 p.ia-selected {
   background-color: #bae6fd !important; /* blau més intens per preselecció */
