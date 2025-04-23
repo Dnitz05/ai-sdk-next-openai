@@ -18,6 +18,18 @@ const TemplateEditor: React.FC<{ initialTemplateData: any; mode: 'edit' | 'new' 
   const [aiInstructions, setAiInstructions] = useState<{ id: string; prompt: string; originalText: string }[]>(initialTemplateData?.ai_instructions || []);
   const [iaInstructionsMode, setIaInstructionsMode] = useState(false);
 
+  // Afegir/treure hover als paràgrafs quan la IA està activa
+  useEffect(() => {
+    if (contentRef.current) {
+      const paragraphs = contentRef.current.querySelectorAll('p');
+      if (iaInstructionsMode) {
+        paragraphs.forEach(p => p.classList.add('ia-hover'));
+      } else {
+        paragraphs.forEach(p => p.classList.remove('ia-hover'));
+      }
+    }
+  }, [iaInstructionsMode, convertedHtml]);
+
   // Handler de selecció de text per mapping
   const handleTextSelection = () => {
     if (!convertedHtml || !selectedExcelHeader) return;
