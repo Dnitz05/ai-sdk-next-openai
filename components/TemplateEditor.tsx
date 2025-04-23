@@ -97,10 +97,7 @@ const TemplateEditor: React.FC<{ initialTemplateData: any; mode: 'edit' | 'new' 
       setAiTargetParagraphId(paragraphId);
       setAiUserPrompt(existingInstruction?.prompt || '');
     } else {
-      if (aiTargetParagraphId) {
-        setAiTargetParagraphId(null);
-        setAiUserPrompt('');
-      }
+      // No deseleccionem el paràgraf si es fa clic fora
     }
   };
 
