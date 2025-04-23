@@ -47,9 +47,13 @@ p.ia-selected {
 }
 
 /* Botons IA al marge esquerre, alineats verticalment i sense desplaçar el text */
-p.ai-prompt-target, p.ia-hover, p.ia-selected {
+p.ai-prompt-target, p.ia-selected {
   position: relative;
   padding-left: 2.5em !important;
+}
+p.ia-hover {
+  position: relative;
+  padding-left: 0 !important;
 }
 .ia-label {
   position: absolute;
