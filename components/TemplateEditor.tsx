@@ -123,7 +123,7 @@ const TemplateEditor: React.FC<{ initialTemplateData: any; mode: 'edit' | 'new' 
           return [...prev, { id: aiTargetParagraphId, prompt: aiUserPrompt, originalText }];
         }
       });
-      setAiTargetParagraphId(null);
+      // NO deseleccionem el paràgraf després de desar la instrucció
       setAiUserPrompt('');
     }
   };
