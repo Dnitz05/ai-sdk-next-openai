@@ -12,14 +12,11 @@ const TemplateEditor: React.FC<{ initialTemplateData: any; mode: 'edit' | 'new' 
   const [convertedHtml, setConvertedHtml] = useState<string | null>(initialTemplateData?.final_html || null);
   const contentRef = useRef<HTMLDivElement>(null);
 
-  // Recompte d'usos de cada capçalera
-  const linkCounts = useMemo(() => {
-    const counts: { [key: string]: number } = {};
-    for (const link of links) {
-      counts[link.excelHeader] = (counts[link.excelHeader] || 0) + 1;
-    }
-    return counts;
-  }, [links]);
+  // IA: paràgraf seleccionat, prompt, llista d'instruccions
+  const [aiTargetParagraphId, setAiTargetParagraphId] = useState<string | null>(null);
+  const [aiUserPrompt, setAiUserPrompt] = useState('');
+  const [aiInstructions, setAiInstructions] = useState<{ id: string; prompt: string; originalText: string }[]>(initialTemplateData?.ai_instructions || []);
+  const [iaInstructionsMode, setIaInstructionsMode] = useState(false);
 
   // Handler de selecció de text per mapping
   const handleTextSelection = () => {
@@ -58,6 +55,57 @@ const TemplateEditor: React.FC<{ initialTemplateData: any; mode: 'edit' | 'new' 
     }
   };
 
+  // Handler de selecció de paràgraf per IA
+  const handleContentClick = (event: MouseEvent<HTMLDivElement>) => {
+    if (!convertedHtml) return;
+    const target = event.target as HTMLElement;
+    const targetParagraph = target.closest('p');
+    if (targetParagraph) {
+      let paragraphId = targetParagraph.dataset.paragraphId;
+      let htmlNeedsUpdate = false;
+      if (!paragraphId) {
+        paragraphId = `p-${Date.now()}-${Math.random().toString(36).substring(2, 9)}`;
+        targetParagraph.dataset.paragraphId = paragraphId;
+        htmlNeedsUpdate = true;
+      }
+      if (htmlNeedsUpdate && contentRef.current) {
+        setConvertedHtml(contentRef.current.innerHTML);
+      }
+      const existingInstruction = aiInstructions.find(instr => instr.id === paragraphId);
+      setAiTargetParagraphId(paragraphId);
+      setAiUserPrompt(existingInstruction?.prompt || '');
+    } else {
+      if (aiTargetParagraphId) {
+        setAiTargetParagraphId(null);
+        setAiUserPrompt('');
+      }
+    }
+  };
+
+  // Handler de desar instrucció IA
+  const handleSaveAiInstruction = () => {
+    if (!aiUserPrompt.trim() || !aiTargetParagraphId || !contentRef.current) {
+      alert("Selecciona paràgraf i escriu instrucció.");
+      return;
+    }
+    const targetParagraph = contentRef.current.querySelector<HTMLParagraphElement>(`p[data-paragraph-id="${aiTargetParagraphId}"]`);
+    if (targetParagraph) {
+      const originalText = targetParagraph.textContent || "";
+      setAiInstructions(prev => {
+        const index = prev.findIndex(i => i.id === aiTargetParagraphId);
+        if (index > -1) {
+          const updated = [...prev];
+          updated[index] = { id: aiTargetParagraphId, prompt: aiUserPrompt, originalText: updated[index].originalText || originalText };
+          return updated;
+        } else {
+          return [...prev, { id: aiTargetParagraphId, prompt: aiUserPrompt, originalText }];
+        }
+      });
+      setAiTargetParagraphId(null);
+      setAiUserPrompt('');
+    }
+  };
+
   return (
     <main className="flex min-h-screen w-full flex-col items-center p-4 sm:p-8 bg-gray-100">
       {/* Capçalera */}
@@ -73,6 +121,8 @@ const TemplateEditor: React.FC<{ initialTemplateData: any; mode: 'edit' | 'new' 
               className="prose max-w-5xl mx-auto bg-gray-50 p-4 rounded"
               dangerouslySetInnerHTML={{ __html: convertedHtml }}
               onMouseUp={handleTextSelection}
+              onClick={iaInstructionsMode ? handleContentClick : undefined}
+              style={{ cursor: iaInstructionsMode ? 'pointer' : 'auto' }}
             />
           ) : (
             <p className="text-gray-400 italic text-center py-10">
@@ -110,11 +160,6 @@ const TemplateEditor: React.FC<{ initialTemplateData: any; mode: 'edit' | 'new' 
                       onClick={() => setSelectedExcelHeader(header)}
                     >
                       {header}
-                      {linkCounts[header] ? (
-                        <span className="ml-2 text-xs font-normal px-1.5 py-0.5 rounded bg-gray-200 text-gray-600">
-                          ({linkCounts[header]})
-                        </span>
-                      ) : null}
                     </button>
                   ))}
                 </div>
@@ -125,7 +170,45 @@ const TemplateEditor: React.FC<{ initialTemplateData: any; mode: 'edit' | 'new' 
                 )}
               </div>
             )}
-            {/* ... resta del sidebar: IA, etc. ... */}
+            {/* Panell d'instruccions IA */}
+            <div className="mt-8">
+              <h3 className="text-md font-semibold text-indigo-700 mb-2 flex items-center gap-2">
+                Instruccions IA
+                <button
+                  className={`ml-2 px-2 py-1 rounded text-xs font-semibold ${iaInstructionsMode ? 'bg-indigo-600 text-white' : 'bg-gray-200 text-indigo-700'}`}
+                  onClick={() => setIaInstructionsMode(v => !v)}
+                >
+                  {iaInstructionsMode ? 'Mode IA: ACTIU' : 'Mode IA: Inactiu'}
+                </button>
+              </h3>
+              {iaInstructionsMode && (
+                <div className="flex flex-col gap-2">
+                  <textarea
+                    className="w-full border rounded p-2 text-sm"
+                    rows={3}
+                    placeholder="Escriu una instrucció per la IA (ex: Resumeix aquest paràgraf...)"
+                    value={aiUserPrompt}
+                    onChange={e => setAiUserPrompt(e.target.value)}
+                  />
+                  <button
+                    className="self-end px-4 py-1 bg-indigo-600 text-white rounded hover:bg-indigo-700 text-sm"
+                    onClick={handleSaveAiInstruction}
+                  >
+                    Desa instrucció IA
+                  </button>
+                </div>
+              )}
+              {/* Llista d'instruccions IA */}
+              {aiInstructions.length > 0 && (
+                <ul className="mt-4 space-y-2">
+                  {aiInstructions.map((instr, idx) => (
+                    <li key={instr.id} className="p-2 border rounded bg-indigo-50 text-gray-700">
+                      <span className="font-medium text-indigo-800">Inst. {idx + 1}:</span> {instr.prompt}
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </div>
           </div>
         </aside>
       </div>
