@@ -19,16 +19,26 @@ const TemplateEditor: React.FC<{ initialTemplateData: any; mode: 'edit' | 'new' 
   const [iaInstructionsMode, setIaInstructionsMode] = useState(false);
 
   // Afegir/treure hover als paràgrafs quan la IA està activa
+  // Hover i selecció de paràgrafs per IA
   useEffect(() => {
     if (contentRef.current) {
       const paragraphs = contentRef.current.querySelectorAll('p');
-      if (iaInstructionsMode) {
-        paragraphs.forEach(p => p.classList.add('ia-hover'));
-      } else {
-        paragraphs.forEach(p => p.classList.remove('ia-hover'));
-      }
+      paragraphs.forEach(p => {
+        // Gestiona hover
+        if (iaInstructionsMode) {
+          p.classList.add('ia-hover');
+        } else {
+          p.classList.remove('ia-hover');
+        }
+        // Gestiona selecció permanent
+        if (aiTargetParagraphId && p.dataset.paragraphId === aiTargetParagraphId) {
+          p.classList.add('ia-selected');
+        } else {
+          p.classList.remove('ia-selected');
+        }
+      });
     }
-  }, [iaInstructionsMode, convertedHtml]);
+  }, [iaInstructionsMode, convertedHtml, aiTargetParagraphId]);
 
   // Handler de selecció de text per mapping
   const handleTextSelection = () => {
@@ -196,7 +206,9 @@ const TemplateEditor: React.FC<{ initialTemplateData: any; mode: 'edit' | 'new' 
               {iaInstructionsMode && (
                 <div className="flex flex-col gap-2">
                   <textarea
-                    className="w-full border rounded p-2 text-sm"
+                    className={`w-full border rounded p-2 text-sm transition-colors duration-150 ${
+                      aiTargetParagraphId ? 'border-blue-500 ring-2 ring-blue-200' : 'border-gray-300'
+                    }`}
                     rows={3}
                     placeholder="Escriu una instrucció per la IA (ex: Resumeix aquest paràgraf...)"
                     value={aiUserPrompt}
@@ -214,7 +226,21 @@ const TemplateEditor: React.FC<{ initialTemplateData: any; mode: 'edit' | 'new' 
               {aiInstructions.length > 0 && (
                 <ul className="mt-4 space-y-2">
                   {aiInstructions.map((instr, idx) => (
-                    <li key={instr.id} className="p-2 border rounded bg-indigo-50 text-gray-700">
+                    <li
+                      key={instr.id}
+                      className={`p-2 border rounded bg-indigo-50 text-gray-700 cursor-pointer transition-colors duration-150 ${
+                        aiTargetParagraphId === instr.id ? 'border-blue-500 bg-blue-50' : ''
+                      }`}
+                      onClick={() => {
+                        setAiTargetParagraphId(instr.id);
+                        setAiUserPrompt(instr.prompt);
+                        // Scroll al paràgraf associat
+                        if (contentRef.current) {
+                          const p = contentRef.current.querySelector(`p[data-paragraph-id="${instr.id}"]`);
+                          if (p) p.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                        }
+                      }}
+                    >
                       <span className="font-medium text-indigo-800">Inst. {idx + 1}:</span> {instr.prompt}
                     </li>
                   ))}
