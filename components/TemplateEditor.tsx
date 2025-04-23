@@ -15,6 +15,16 @@ const TemplateEditor: React.FC<{ initialTemplateData: any; mode: 'edit' | 'new' 
   // IA: paràgraf seleccionat, prompt, llista d'instruccions
   const [aiTargetParagraphId, setAiTargetParagraphId] = useState<string | null>(null);
   const [aiUserPrompt, setAiUserPrompt] = useState('');
+  // Evita que la selecció es perdi si el paràgraf seleccionat desapareix temporalment
+  useEffect(() => {
+    if (aiTargetParagraphId && contentRef.current) {
+      const p = contentRef.current.querySelector(`p[data-paragraph-id="${aiTargetParagraphId}"]`);
+      if (!p) {
+        // El paràgraf seleccionat no existeix, però no esborrem la selecció
+        // (no fem setAiTargetParagraphId(null))
+      }
+    }
+  }, [aiTargetParagraphId, convertedHtml]);
   const [aiInstructions, setAiInstructions] = useState<{ id: string; prompt: string; originalText: string }[]>(initialTemplateData?.ai_instructions || []);
   const [iaInstructionsMode, setIaInstructionsMode] = useState(false);
 
