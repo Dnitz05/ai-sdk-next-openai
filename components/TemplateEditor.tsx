@@ -1,64 +1,48 @@
 import React, { useState, useEffect, useRef, ChangeEvent, MouseEvent, useMemo } from 'react';
+import ReactDOM from 'react-dom'; // Importa ReactDOM
 import * as XLSX from 'xlsx';
 
-// Component auxiliar per editar el paràgraf inline
-const InlineParagraphEditor = ({
-  containerId,
-  value,
-  onChange,
-  onSave,
-  onCancel,
-}: {
-  containerId: string;
+// Component React per editar el paràgraf inline amb botons al marge esquerre
+const InlineParagraphEditor: React.FC<{
   value: string;
   onChange: (v: string) => void;
   onSave: () => void;
   onCancel: () => void;
-}) => {
+}> = ({ value, onChange, onSave, onCancel }) => {
+  const textareaRef = useRef<HTMLTextAreaElement>(null);
+
   useEffect(() => {
-    const container = document.getElementById(containerId);
-    if (container) {
-      container.innerHTML = '';
-      // Contenidor principal: flex row
-      const wrapper = document.createElement('div');
-      wrapper.style.display = 'flex';
-      wrapper.style.alignItems = 'flex-start';
+    // Focus automàtic al textarea
+    textareaRef.current?.focus();
+  }, []);
 
-      // Botons a l'esquerra
-      const btnsDiv = document.createElement('div');
-      btnsDiv.style.display = 'flex';
-      btnsDiv.style.flexDirection = 'column';
-      btnsDiv.style.gap = '0.5em';
-      btnsDiv.style.marginRight = '0.5em';
-
-      const btnSave = document.createElement('button');
-      btnSave.textContent = 'Desa';
-      btnSave.className = 'px-2 py-0.5 bg-blue-600 text-white rounded hover:bg-blue-700 text-xs mb-1 ml-[-0.5em]';
-      btnSave.onclick = onSave;
-      btnsDiv.appendChild(btnSave);
-
-      const btnCancel = document.createElement('button');
-      btnCancel.textContent = 'Cancel·la';
-      btnCancel.className = 'px-2 py-0.5 bg-gray-300 text-gray-800 rounded hover:bg-gray-400 text-xs ml-[-0.5em]';
-      btnCancel.onclick = onCancel;
-      btnsDiv.appendChild(btnCancel);
-
-      // Textarea a la dreta
-      const textarea = document.createElement('textarea');
-      textarea.value = value;
-      textarea.className = 'w-full border rounded p-2 text-xs mb-2';
-      textarea.rows = 3;
-      textarea.oninput = (e: any) => onChange(e.target.value);
-
-      wrapper.appendChild(btnsDiv);
-      wrapper.appendChild(textarea);
-
-      container.appendChild(wrapper);
-
-      textarea.focus();
-    }
-  }, [containerId, value, onChange, onSave, onCancel]);
-  return null;
+  return (
+    <div style={{ display: 'flex', alignItems: 'flex-start' }}>
+      {/* Botons a l'esquerra */}
+      <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5em', marginRight: '0.5em' }}>
+        <button
+          className="px-2 py-0.5 bg-blue-600 text-white rounded hover:bg-blue-700 text-xs mb-1 ml-[-0.5em]"
+          onClick={onSave}
+        >
+          Desa
+        </button>
+        <button
+          className="px-2 py-0.5 bg-gray-300 text-gray-800 rounded hover:bg-gray-400 text-xs ml-[-0.5em]"
+          onClick={onCancel}
+        >
+          Cancel·la
+        </button>
+      </div>
+      {/* Textarea a la dreta */}
+      <textarea
+        ref={textareaRef}
+        value={value}
+        className="w-full border rounded p-2 text-xs mb-2"
+        rows={3}
+        onChange={(e) => onChange(e.target.value)}
+      />
+    </div>
+  );
 };
 
 const TemplateEditor: React.FC<{ initialTemplateData: any; mode: 'edit' | 'new' }> = ({ initialTemplateData, mode }) => {
@@ -76,38 +60,10 @@ const TemplateEditor: React.FC<{ initialTemplateData: any; mode: 'edit' | 'new' 
   const [editingParagraphId, setEditingParagraphId] = useState<string | null>(null);
   const [editingPrompt, setEditingPrompt] = useState<string>('');
 
-  // IA: paràgraf seleccionat, prompt, llista d'instruccions
+  // IA: paràgraf seleccionat, prompt, llista d'instruccions (només per persistència, no per UI)
   const [aiTargetParagraphId, setAiTargetParagraphId] = useState<string | null>(null);
-  const [aiUserPrompt, setAiUserPrompt] = useState('');
-  // Evita que la selecció es perdi si el paràgraf seleccionat desapareix temporalment
-  useEffect(() => {
-    if (aiTargetParagraphId && contentRef.current) {
-      const p = contentRef.current.querySelector(`p[data-paragraph-id="${aiTargetParagraphId}"]`);
-      if (!p) {
-        // El paràgraf seleccionat no existeix, però no esborrem la selecció
-        // (no fem setAiTargetParagraphId(null))
-      }
-    }
-  }, [aiTargetParagraphId, convertedHtml]);
   const [aiInstructions, setAiInstructions] = useState<{ id: string; prompt: string; originalText: string }[]>(initialTemplateData?.ai_instructions || []);
   const [iaInstructionsMode, setIaInstructionsMode] = useState(false);
-
-  // Afegir/treure hover als paràgrafs quan la IA està activa
-  // Hover i selecció de paràgrafs per IA
-  // Només gestiona la selecció permanent via JS, el hover es fa via CSS
-  useEffect(() => {
-    if (contentRef.current) {
-      const paragraphs = contentRef.current.querySelectorAll('p');
-      paragraphs.forEach(p => {
-        // Gestiona selecció permanent
-        if (aiTargetParagraphId && p.dataset.paragraphId === aiTargetParagraphId) {
-          p.classList.add('ia-selected');
-        } else {
-          p.classList.remove('ia-selected');
-        }
-      });
-    }
-  }, [convertedHtml, aiTargetParagraphId]);
 
   // Assegura que tots els <p> tinguin un data-paragraph-id únic i persistent
   useEffect(() => {
@@ -125,7 +81,7 @@ const TemplateEditor: React.FC<{ initialTemplateData: any; mode: 'edit' | 'new' 
         setConvertedHtml(contentRef.current.innerHTML);
       }
     }
-  }, [convertedHtml]);
+  }, [convertedHtml]); // Executa només quan convertedHtml canvia
 
   // Handler de selecció de text per mapping
   const handleTextSelection = () => {
@@ -167,7 +123,7 @@ const TemplateEditor: React.FC<{ initialTemplateData: any; mode: 'edit' | 'new' 
   // Handler de selecció de paràgraf per IA
   // Edició ràpida: click sobre paràgraf per editar-lo directament
   const handleContentClick = (event: MouseEvent<HTMLDivElement>) => {
-    if (!convertedHtml) return;
+    if (!convertedHtml || !iaInstructionsMode) return; // Només en mode IA
     const target = event.target as HTMLElement;
     const targetParagraph = target.closest('p');
     if (targetParagraph) {
@@ -181,16 +137,44 @@ const TemplateEditor: React.FC<{ initialTemplateData: any; mode: 'edit' | 'new' 
       if (htmlNeedsUpdate && contentRef.current) {
         setConvertedHtml(contentRef.current.innerHTML);
       }
-      // Troba el prompt associat o el text original
-      // NO busquem cap instrucció, només editem el text del paràgraf
+      // Inicia l'edició del paràgraf
       setEditingParagraphId(paragraphId);
       setEditingPrompt(targetParagraph.textContent || '');
     }
   };
 
-  // Handler de desar instrucció IA
-  // Elimina la lògica de desar instrucció a la barra lateral: només es desa al document
-  const handleSaveAiInstruction = () => {};
+  // Funció per desar el text editat directament al foli
+  const saveEditedParagraph = () => {
+    if (contentRef.current && editingParagraphId) {
+      const placeholderDiv = contentRef.current.querySelector(`#react-edit-p-${editingParagraphId}`);
+      if (placeholderDiv) {
+        const newP = document.createElement('p');
+        newP.dataset.paragraphId = editingParagraphId;
+        newP.textContent = editingPrompt;
+        placeholderDiv.parentNode?.replaceChild(newP, placeholderDiv);
+        setConvertedHtml(contentRef.current.innerHTML); // Actualitza l'estat amb el nou HTML
+      }
+    }
+    setEditingParagraphId(null);
+    setEditingPrompt('');
+  };
+
+  // Funció per cancel·lar l'edició
+  const cancelEditParagraph = () => {
+    if (contentRef.current && editingParagraphId) {
+      const placeholderDiv = contentRef.current.querySelector(`#react-edit-p-${editingParagraphId}`);
+      if (placeholderDiv) {
+        const newP = document.createElement('p');
+        newP.dataset.paragraphId = editingParagraphId;
+        // Restaura amb el text que hi havia abans d'editar (que està a editingPrompt)
+        newP.textContent = editingPrompt;
+        placeholderDiv.parentNode?.replaceChild(newP, placeholderDiv);
+        setConvertedHtml(contentRef.current.innerHTML); // Actualitza l'estat amb el nou HTML
+      }
+    }
+    setEditingParagraphId(null);
+    setEditingPrompt('');
+  };
 
   return (
     <main className="flex min-h-screen w-full flex-col items-center p-4 sm:p-8 bg-gray-100">
@@ -199,48 +183,6 @@ const TemplateEditor: React.FC<{ initialTemplateData: any; mode: 'edit' | 'new' 
         <h1 className="text-2xl font-bold text-gray-800">{templateTitle}</h1>
       </div>
       <div className="flex w-full max-w-6xl gap-x-6 px-1" style={{ position: 'relative' }}>
-        {/* Botons d'edició fora del foli blanc */}
-        {editingParagraphId && (
-          <div style={{
-            position: 'absolute',
-            left: '-180px', // Ajusta segons necessitat
-            top: '30%', // Ajusta segons necessitat
-            zIndex: 20,
-            display: 'flex',
-            flexDirection: 'column',
-            alignItems: 'flex-end'
-          }}>
-            <InlineParagraphEditor
-              containerId={`react-edit-p-${editingParagraphId}`}
-              value={editingPrompt}
-              onChange={setEditingPrompt}
-              onSave={() => {
-                // Desa el text directament al foli
-                if (contentRef.current) {
-                  const html = contentRef.current.innerHTML.replace(
-                    `<div id="react-edit-p-${editingParagraphId}"></div>`,
-                    `<p data-paragraph-id="${editingParagraphId}">${editingPrompt}</p>`
-                  );
-                  setConvertedHtml(html);
-                }
-                setEditingParagraphId(null);
-                setEditingPrompt('');
-              }}
-              onCancel={() => {
-                // Cancel·la l'edició i restaura el paràgraf original
-                if (contentRef.current) {
-                  const html = contentRef.current.innerHTML.replace(
-                    `<div id="react-edit-p-${editingParagraphId}"></div>`,
-                    `<p data-paragraph-id="${editingParagraphId}">${editingPrompt}</p>` // Restaura amb el text actual, no l'original
-                  );
-                  setConvertedHtml(html);
-                }
-                setEditingParagraphId(null);
-                setEditingPrompt('');
-              }}
-            />
-          </div>
-        )}
         {/* Foli blanc */}
         <div className="flex-grow print-content bg-white shadow-lg rounded-sm p-8 md:p-12 lg:p-16 my-0">
           {convertedHtml ? (
@@ -254,7 +196,7 @@ const TemplateEditor: React.FC<{ initialTemplateData: any; mode: 'edit' | 'new' 
                         `<p([^>]*data-paragraph-id=["']${editingParagraphId}["'][^>]*)>([\\s\\S]*?)<\\/p>`,
                         'i'
                       ),
-                      `<div id="react-edit-p-${editingParagraphId}"></div>`
+                      `<div id="react-edit-p-${editingParagraphId}"></div>` // Crea el placeholder
                     )
                   : convertedHtml,
               }}
@@ -268,6 +210,24 @@ const TemplateEditor: React.FC<{ initialTemplateData: any; mode: 'edit' | 'new' 
             </p>
           )}
         </div>
+        {/* Portal per a l'editor inline, fora del foli */}
+        {editingParagraphId && document.getElementById(`react-edit-p-${editingParagraphId}`) && ReactDOM.createPortal(
+          <div style={{
+            position: 'absolute',
+            left: '-180px', // Ajusta segons necessitat
+            top: '30%', // Ajusta segons necessitat
+            zIndex: 20,
+            // El component InlineParagraphEditor ja té el display:flex
+          }}>
+            <InlineParagraphEditor
+              value={editingPrompt}
+              onChange={setEditingPrompt}
+              onSave={saveEditedParagraph}
+              onCancel={cancelEditParagraph}
+            />
+          </div>,
+          document.getElementById(`react-edit-p-${editingParagraphId}`)!
+        )}
         {/* Sidebar */}
         <aside className="w-80 flex-shrink-0 my-0 relative">
           <div className="sticky top-4 p-4 bg-white rounded shadow-lg border max-h-[calc(100vh-2rem)] overflow-y-auto flex flex-col">
@@ -308,7 +268,7 @@ const TemplateEditor: React.FC<{ initialTemplateData: any; mode: 'edit' | 'new' 
                 )}
               </div>
             )}
-            {/* Panell d'instruccions IA */}
+            {/* Panell d'instruccions IA (simplificat) */}
             <div className="mt-8">
               <h3 className="text-md font-semibold text-indigo-700 mb-2 flex items-center gap-2">
                 Instruccions IA
@@ -320,47 +280,7 @@ const TemplateEditor: React.FC<{ initialTemplateData: any; mode: 'edit' | 'new' 
                 </button>
               </h3>
               {iaInstructionsMode && (
-                <div className="flex flex-col gap-2">
-                  <textarea
-                    className={`w-full border rounded p-2 text-sm transition-colors duration-150 ${
-                      aiTargetParagraphId ? 'border-blue-500 ring-2 ring-blue-200' : 'border-gray-300'
-                    }`}
-                    rows={3}
-                    placeholder="Escriu una instrucció per la IA (ex: Resumeix aquest paràgraf...)"
-                    value={aiUserPrompt}
-                    onChange={e => setAiUserPrompt(e.target.value)}
-                  />
-                  <button
-                    className="self-end px-4 py-1 bg-indigo-600 text-white rounded hover:bg-indigo-700 text-sm"
-                    onClick={handleSaveAiInstruction}
-                  >
-                    Desa instrucció IA
-                  </button>
-                </div>
-              )}
-              {/* Llista d'instruccions IA */}
-              {aiInstructions.length > 0 && (
-                <ul className="mt-4 space-y-2">
-                  {aiInstructions.map((instr, idx) => (
-                    <li
-                      key={instr.id}
-                      className={`p-2 border rounded bg-indigo-50 text-gray-700 cursor-pointer transition-colors duration-150 ${
-                        aiTargetParagraphId === instr.id ? 'border-blue-500 bg-blue-50' : ''
-                      }`}
-                      onClick={() => {
-                        setAiTargetParagraphId(instr.id);
-                        setAiUserPrompt(instr.prompt);
-                        // Scroll al paràgraf associat
-                        if (contentRef.current) {
-                          const p = contentRef.current.querySelector(`p[data-paragraph-id="${instr.id}"]`);
-                          if (p) p.scrollIntoView({ behavior: 'smooth', block: 'center' });
-                        }
-                      }}
-                    >
-                      <span className="font-medium text-indigo-800">Inst. {idx + 1}:</span> {instr.prompt}
-                    </li>
-                  ))}
-                </ul>
+                 <p className="text-xs text-gray-500 italic">Fes clic sobre un paràgraf per editar-lo directament.</p>
               )}
             </div>
           </div>
