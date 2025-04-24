@@ -182,9 +182,9 @@ const TemplateEditor: React.FC<{ initialTemplateData: any; mode: 'edit' | 'new' 
         setConvertedHtml(contentRef.current.innerHTML);
       }
       // Troba el prompt associat o el text original
-      const existingInstruction = aiInstructions.find(instr => instr.id === paragraphId);
+      // NO busquem cap instrucció, només editem el text del paràgraf
       setEditingParagraphId(paragraphId);
-      setEditingPrompt(existingInstruction?.prompt || targetParagraph.textContent || '');
+      setEditingPrompt(targetParagraph.textContent || '');
     }
   };
 
