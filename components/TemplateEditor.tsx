@@ -1,6 +1,51 @@
 import React, { useState, useEffect, useRef, ChangeEvent, MouseEvent, useMemo } from 'react';
 import * as XLSX from 'xlsx';
 
+// Component auxiliar per editar el paràgraf inline
+const InlineParagraphEditor = ({
+  containerId,
+  value,
+  onChange,
+  onSave,
+  onCancel,
+}: {
+  containerId: string;
+  value: string;
+  onChange: (v: string) => void;
+  onSave: () => void;
+  onCancel: () => void;
+}) => {
+  useEffect(() => {
+    const container = document.getElementById(containerId);
+    if (container) {
+      // Renderitza el textarea dins el div placeholder
+      container.innerHTML = '';
+      const textarea = document.createElement('textarea');
+      textarea.value = value;
+      textarea.className = 'w-full border rounded p-2 text-sm mb-2';
+      textarea.rows = 3;
+      textarea.oninput = (e: any) => onChange(e.target.value);
+      container.appendChild(textarea);
+
+      // Botons
+      const btnSave = document.createElement('button');
+      btnSave.textContent = 'Desa';
+      btnSave.className = 'ml-2 px-3 py-1 bg-blue-600 text-white rounded hover:bg-blue-700 text-sm';
+      btnSave.onclick = onSave;
+      container.appendChild(btnSave);
+
+      const btnCancel = document.createElement('button');
+      btnCancel.textContent = 'Cancel·la';
+      btnCancel.className = 'ml-2 px-3 py-1 bg-gray-300 text-gray-800 rounded hover:bg-gray-400 text-sm';
+      btnCancel.onclick = onCancel;
+      container.appendChild(btnCancel);
+
+      textarea.focus();
+    }
+  }, [containerId, value, onChange, onSave, onCancel]);
+  return null;
+};
+
 const TemplateEditor: React.FC<{ initialTemplateData: any; mode: 'edit' | 'new' }> = ({ initialTemplateData, mode }) => {
   // --- Estats bàsics ---
   const templateTitle = initialTemplateData?.config_name || '';
@@ -11,6 +56,10 @@ const TemplateEditor: React.FC<{ initialTemplateData: any; mode: 'edit' | 'new' 
   const [links, setLinks] = useState<{ id: string; excelHeader: string; selectedText: string }[]>(initialTemplateData?.link_mappings || []);
   const [convertedHtml, setConvertedHtml] = useState<string | null>(initialTemplateData?.final_html || null);
   const contentRef = useRef<HTMLDivElement>(null);
+
+  // Edició ràpida: estat per saber quin paràgraf està en mode edició i el seu valor
+  const [editingParagraphId, setEditingParagraphId] = useState<string | null>(null);
+  const [editingPrompt, setEditingPrompt] = useState<string>('');
 
   // IA: paràgraf seleccionat, prompt, llista d'instruccions
   const [aiTargetParagraphId, setAiTargetParagraphId] = useState<string | null>(null);
@@ -101,6 +150,7 @@ const TemplateEditor: React.FC<{ initialTemplateData: any; mode: 'edit' | 'new' 
   };
 
   // Handler de selecció de paràgraf per IA
+  // Edició ràpida: click sobre paràgraf per editar-lo directament
   const handleContentClick = (event: MouseEvent<HTMLDivElement>) => {
     if (!convertedHtml) return;
     const target = event.target as HTMLElement;
@@ -116,11 +166,10 @@ const TemplateEditor: React.FC<{ initialTemplateData: any; mode: 'edit' | 'new' 
       if (htmlNeedsUpdate && contentRef.current) {
         setConvertedHtml(contentRef.current.innerHTML);
       }
+      // Troba el prompt associat o el text original
       const existingInstruction = aiInstructions.find(instr => instr.id === paragraphId);
-      setAiTargetParagraphId(paragraphId);
-      setAiUserPrompt(existingInstruction?.prompt || '');
-    } else {
-      // No deseleccionem el paràgraf si es fa clic fora
+      setEditingParagraphId(paragraphId);
+      setEditingPrompt(existingInstruction?.prompt || targetParagraph.textContent || '');
     }
   };
 
@@ -158,14 +207,70 @@ const TemplateEditor: React.FC<{ initialTemplateData: any; mode: 'edit' | 'new' 
         {/* Foli blanc */}
         <div className="flex-grow print-content bg-white shadow-lg rounded-sm p-8 md:p-12 lg:p-16 my-0">
           {convertedHtml ? (
-            <div
-              ref={contentRef}
-              className={`prose max-w-5xl mx-auto bg-white p-4 rounded${iaInstructionsMode ? ' ia-mode-actiu' : ''}`}
-              dangerouslySetInnerHTML={{ __html: convertedHtml }}
-              onMouseUp={handleTextSelection}
-              onClick={iaInstructionsMode ? handleContentClick : undefined}
-              style={{ cursor: iaInstructionsMode ? 'pointer' : 'auto' }}
-            />
+            <>
+              <div
+                ref={contentRef}
+                className={`prose max-w-5xl mx-auto bg-white p-4 rounded${iaInstructionsMode ? ' ia-mode-actiu' : ''}`}
+                dangerouslySetInnerHTML={{
+                  __html: editingParagraphId
+                    ? convertedHtml.replace(
+                        new RegExp(
+                          `<p([^>]*data-paragraph-id=["']${editingParagraphId}["'][^>]*)>([\\s\\S]*?)<\\/p>`,
+                          'i'
+                        ),
+                        `<div id="react-edit-p-${editingParagraphId}"></div>`
+                      )
+                    : convertedHtml,
+                }}
+                onMouseUp={handleTextSelection}
+                onClick={iaInstructionsMode ? handleContentClick : undefined}
+                style={{ cursor: iaInstructionsMode ? 'pointer' : 'auto' }}
+              />
+              {/* Renderitza el textarea React dins el placeholder */}
+              {editingParagraphId && (
+                <InlineParagraphEditor
+                  containerId={`react-edit-p-${editingParagraphId}`}
+                  value={editingPrompt}
+                  onChange={setEditingPrompt}
+                  onSave={() => {
+                    // Desa la instrucció i substitueix el paràgraf pel prompt
+                    setAiInstructions(prev => {
+                      const idx = prev.findIndex(i => i.id === editingParagraphId);
+                      if (idx > -1) {
+                        const updated = [...prev];
+                        updated[idx] = { ...updated[idx], prompt: editingPrompt };
+                        return updated;
+                      }
+                      // Si no existeix, afegeix nova instrucció
+                      return [...prev, { id: editingParagraphId, prompt: editingPrompt, originalText: '' }];
+                    });
+                    // Substitueix el <div> pel <p> amb el prompt
+                    if (contentRef.current) {
+                      const html = contentRef.current.innerHTML.replace(
+                        `<div id="react-edit-p-${editingParagraphId}"></div>`,
+                        `<p data-paragraph-id="${editingParagraphId}">${editingPrompt}</p>`
+                      );
+                      setConvertedHtml(html);
+                    }
+                    setEditingParagraphId(null);
+                    setEditingPrompt('');
+                  }}
+                  onCancel={() => {
+                    // Cancel·la l'edició i restaura el paràgraf original
+                    if (contentRef.current) {
+                      const original = aiInstructions.find(i => i.id === editingParagraphId)?.prompt || '';
+                      const html = contentRef.current.innerHTML.replace(
+                        `<div id="react-edit-p-${editingParagraphId}"></div>`,
+                        `<p data-paragraph-id="${editingParagraphId}">${original}</p>`
+                      );
+                      setConvertedHtml(html);
+                    }
+                    setEditingParagraphId(null);
+                    setEditingPrompt('');
+                  }}
+                />
+              )}
+            </>
           ) : (
             <p className="text-gray-400 italic text-center py-10">
               Carrega un DOCX per començar.
