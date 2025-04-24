@@ -33,20 +33,20 @@ const InlineParagraphEditor = ({
 
       const btnSave = document.createElement('button');
       btnSave.textContent = 'Desa';
-      btnSave.className = 'px-3 py-1 bg-blue-600 text-white rounded hover:bg-blue-700 text-sm mb-1';
+      btnSave.className = 'px-2 py-0.5 bg-blue-600 text-white rounded hover:bg-blue-700 text-xs mb-1 ml-[-0.5em]';
       btnSave.onclick = onSave;
       btnsDiv.appendChild(btnSave);
 
       const btnCancel = document.createElement('button');
       btnCancel.textContent = 'Cancel·la';
-      btnCancel.className = 'px-3 py-1 bg-gray-300 text-gray-800 rounded hover:bg-gray-400 text-sm';
+      btnCancel.className = 'px-2 py-0.5 bg-gray-300 text-gray-800 rounded hover:bg-gray-400 text-xs ml-[-0.5em]';
       btnCancel.onclick = onCancel;
       btnsDiv.appendChild(btnCancel);
 
       // Textarea a la dreta
       const textarea = document.createElement('textarea');
       textarea.value = value;
-      textarea.className = 'w-full border rounded p-2 text-sm mb-2';
+      textarea.className = 'w-full border rounded p-2 text-xs mb-2';
       textarea.rows = 3;
       textarea.oninput = (e: any) => onChange(e.target.value);
 
@@ -189,28 +189,8 @@ const TemplateEditor: React.FC<{ initialTemplateData: any; mode: 'edit' | 'new' 
   };
 
   // Handler de desar instrucció IA
-  const handleSaveAiInstruction = () => {
-    if (!aiUserPrompt.trim() || !aiTargetParagraphId || !contentRef.current) {
-      alert("Selecciona paràgraf i escriu instrucció.");
-      return;
-    }
-    const targetParagraph = contentRef.current.querySelector<HTMLParagraphElement>(`p[data-paragraph-id="${aiTargetParagraphId}"]`);
-    if (targetParagraph) {
-      const originalText = targetParagraph.textContent || "";
-      setAiInstructions(prev => {
-        const index = prev.findIndex(i => i.id === aiTargetParagraphId);
-        if (index > -1) {
-          const updated = [...prev];
-          updated[index] = { id: aiTargetParagraphId, prompt: aiUserPrompt, originalText: updated[index].originalText || originalText };
-          return updated;
-        } else {
-          return [...prev, { id: aiTargetParagraphId, prompt: aiUserPrompt, originalText }];
-        }
-      });
-      // NO deseleccionem el paràgraf després de desar la instrucció
-      setAiUserPrompt('');
-    }
-  };
+  // Elimina la lògica de desar instrucció a la barra lateral: només es desa al document
+  const handleSaveAiInstruction = () => {};
 
   return (
     <main className="flex min-h-screen w-full flex-col items-center p-4 sm:p-8 bg-gray-100">
