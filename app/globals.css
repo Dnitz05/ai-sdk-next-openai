@@ -29,19 +29,14 @@ p.ai-prompt-target { background-color: #e0f2fe; border-left: 3px solid #3b82f6; 
 p.ai-prompt-target:hover { background-color: #bae6fd; }
 
 /* Hover i preselecció per instruccions IA */
-p.ia-hover {
+/* Només hover visual via CSS quan la IA està activa */
+.ia-mode-actiu p:hover {
+  background-color: #e0f2fe !important;
   cursor: pointer !important;
   transition: background-color 0.15s;
-  /* Elimina padding/marge per evitar desplaçament */
-  padding-left: 0 !important;
-  border-left: none !important;
-}
-p.ia-hover:hover {
-  background-color: #e0f2fe !important; /* blau cel clar */
-  /* No afegeix padding ni border */
 }
 p.ia-selected {
-  background-color: #bae6fd !important; /* blau més intens per preselecció */
+  background-color: #bae6fd !important;
   border-left: 3px solid #0ea5e9 !important;
   padding-left: 0.5em !important;
 }

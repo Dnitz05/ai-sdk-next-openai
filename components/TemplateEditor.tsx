@@ -30,16 +30,11 @@ const TemplateEditor: React.FC<{ initialTemplateData: any; mode: 'edit' | 'new' 
 
   // Afegir/treure hover als paràgrafs quan la IA està activa
   // Hover i selecció de paràgrafs per IA
+  // Només gestiona la selecció permanent via JS, el hover es fa via CSS
   useEffect(() => {
     if (contentRef.current) {
       const paragraphs = contentRef.current.querySelectorAll('p');
       paragraphs.forEach(p => {
-        // Gestiona hover
-        if (iaInstructionsMode) {
-          p.classList.add('ia-hover');
-        } else {
-          p.classList.remove('ia-hover');
-        }
         // Gestiona selecció permanent
         if (aiTargetParagraphId && p.dataset.paragraphId === aiTargetParagraphId) {
           p.classList.add('ia-selected');
@@ -48,7 +43,7 @@ const TemplateEditor: React.FC<{ initialTemplateData: any; mode: 'edit' | 'new' 
         }
       });
     }
-  }, [iaInstructionsMode, convertedHtml, aiTargetParagraphId]);
+  }, [convertedHtml, aiTargetParagraphId]);
 
   // Assegura que tots els <p> tinguin un data-paragraph-id únic i persistent
   useEffect(() => {
@@ -165,7 +160,7 @@ const TemplateEditor: React.FC<{ initialTemplateData: any; mode: 'edit' | 'new' 
           {convertedHtml ? (
             <div
               ref={contentRef}
-              className="prose max-w-5xl mx-auto bg-white p-4 rounded"
+              className={`prose max-w-5xl mx-auto bg-white p-4 rounded${iaInstructionsMode ? ' ia-mode-actiu' : ''}`}
               dangerouslySetInnerHTML={{ __html: convertedHtml }}
               onMouseUp={handleTextSelection}
               onClick={iaInstructionsMode ? handleContentClick : undefined}
