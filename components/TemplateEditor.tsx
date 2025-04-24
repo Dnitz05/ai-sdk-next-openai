@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef, ChangeEvent, MouseEvent, useMemo } from 'react';
-import ReactDOM from 'react-dom'; // Importa ReactDOM
+import ReactDOM from 'react-dom';
 import * as XLSX from 'xlsx';
 
 // Component React per editar el paràgraf inline amb botons al marge esquerre
@@ -44,6 +44,50 @@ const InlineParagraphEditor: React.FC<{
     </div>
   );
 };
+
+// Component auxiliar per gestionar el portal i l'existència del contenidor
+const PortalEditor = ({
+  editingParagraphId,
+  editingPrompt,
+  setEditingPrompt,
+  saveEditedParagraph,
+  cancelEditParagraph,
+}: {
+  editingParagraphId: string;
+  editingPrompt: string;
+  setEditingPrompt: (v: string) => void;
+  saveEditedParagraph: () => void;
+  cancelEditParagraph: () => void;
+}) => {
+  const [container, setContainer] = useState<HTMLElement | null>(null);
+
+  useEffect(() => {
+    // Espera que el contenidor existeixi al DOM
+    const el = document.getElementById(`react-edit-p-${editingParagraphId}`);
+    setContainer(el);
+  }, [editingParagraphId]);
+
+  if (!container) return null; // No renderitza el portal si el contenidor no existeix
+
+  return ReactDOM.createPortal(
+    <div style={{
+      position: 'absolute',
+      left: '-180px', // Ajusta segons necessitat
+      top: '30%', // Ajusta segons necessitat
+      zIndex: 20,
+      // El component InlineParagraphEditor ja té el display:flex
+    }}>
+      <InlineParagraphEditor
+        value={editingPrompt}
+        onChange={setEditingPrompt}
+        onSave={saveEditedParagraph}
+        onCancel={cancelEditParagraph}
+      />
+    </div>,
+    container
+  );
+};
+
 
 const TemplateEditor: React.FC<{ initialTemplateData: any; mode: 'edit' | 'new' }> = ({ initialTemplateData, mode }) => {
   // --- Estats bàsics ---
@@ -211,22 +255,14 @@ const TemplateEditor: React.FC<{ initialTemplateData: any; mode: 'edit' | 'new' 
           )}
         </div>
         {/* Portal per a l'editor inline, fora del foli */}
-        {editingParagraphId && document.getElementById(`react-edit-p-${editingParagraphId}`) && ReactDOM.createPortal(
-          <div style={{
-            position: 'absolute',
-            left: '-180px', // Ajusta segons necessitat
-            top: '30%', // Ajusta segons necessitat
-            zIndex: 20,
-            // El component InlineParagraphEditor ja té el display:flex
-          }}>
-            <InlineParagraphEditor
-              value={editingPrompt}
-              onChange={setEditingPrompt}
-              onSave={saveEditedParagraph}
-              onCancel={cancelEditParagraph}
-            />
-          </div>,
-          document.getElementById(`react-edit-p-${editingParagraphId}`)!
+        {editingParagraphId && (
+          <PortalEditor
+            editingParagraphId={editingParagraphId}
+            editingPrompt={editingPrompt}
+            setEditingPrompt={setEditingPrompt}
+            saveEditedParagraph={saveEditedParagraph}
+            cancelEditParagraph={cancelEditParagraph}
+          />
         )}
         {/* Sidebar */}
         <aside className="w-80 flex-shrink-0 my-0 relative">
