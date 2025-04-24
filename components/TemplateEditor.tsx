@@ -18,27 +18,42 @@ const InlineParagraphEditor = ({
   useEffect(() => {
     const container = document.getElementById(containerId);
     if (container) {
-      // Renderitza el textarea dins el div placeholder
       container.innerHTML = '';
+      // Contenidor principal: flex row
+      const wrapper = document.createElement('div');
+      wrapper.style.display = 'flex';
+      wrapper.style.alignItems = 'flex-start';
+
+      // Botons a l'esquerra
+      const btnsDiv = document.createElement('div');
+      btnsDiv.style.display = 'flex';
+      btnsDiv.style.flexDirection = 'column';
+      btnsDiv.style.gap = '0.5em';
+      btnsDiv.style.marginRight = '0.5em';
+
+      const btnSave = document.createElement('button');
+      btnSave.textContent = 'Desa';
+      btnSave.className = 'px-3 py-1 bg-blue-600 text-white rounded hover:bg-blue-700 text-sm mb-1';
+      btnSave.onclick = onSave;
+      btnsDiv.appendChild(btnSave);
+
+      const btnCancel = document.createElement('button');
+      btnCancel.textContent = 'Cancel·la';
+      btnCancel.className = 'px-3 py-1 bg-gray-300 text-gray-800 rounded hover:bg-gray-400 text-sm';
+      btnCancel.onclick = onCancel;
+      btnsDiv.appendChild(btnCancel);
+
+      // Textarea a la dreta
       const textarea = document.createElement('textarea');
       textarea.value = value;
       textarea.className = 'w-full border rounded p-2 text-sm mb-2';
       textarea.rows = 3;
       textarea.oninput = (e: any) => onChange(e.target.value);
-      container.appendChild(textarea);
 
-      // Botons
-      const btnSave = document.createElement('button');
-      btnSave.textContent = 'Desa';
-      btnSave.className = 'ml-2 px-3 py-1 bg-blue-600 text-white rounded hover:bg-blue-700 text-sm';
-      btnSave.onclick = onSave;
-      container.appendChild(btnSave);
+      wrapper.appendChild(btnsDiv);
+      wrapper.appendChild(textarea);
 
-      const btnCancel = document.createElement('button');
-      btnCancel.textContent = 'Cancel·la';
-      btnCancel.className = 'ml-2 px-3 py-1 bg-gray-300 text-gray-800 rounded hover:bg-gray-400 text-sm';
-      btnCancel.onclick = onCancel;
-      container.appendChild(btnCancel);
+      container.appendChild(wrapper);
 
       textarea.focus();
     }
