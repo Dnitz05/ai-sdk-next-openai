@@ -81,7 +81,11 @@ const TemplateEditor: React.FC<{ initialTemplateData: any; mode: 'edit' | 'new' 
       targetParagraph.focus();
       const commit = () => {
         targetParagraph.removeAttribute('contenteditable');
-        setConvertedHtml(contentRef.current!.innerHTML);
+        if (contentRef.current) {
+          contentRef.current.querySelectorAll('p.ia-selected').forEach(p => p.classList.remove('ia-selected'));
+          targetParagraph.classList.add('ia-selected');
+          setConvertedHtml(contentRef.current.innerHTML);
+        }
       };
       targetParagraph.addEventListener('blur', commit, { once: true });
       targetParagraph.addEventListener('keydown', (e: KeyboardEvent) => {
