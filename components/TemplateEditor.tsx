@@ -18,6 +18,28 @@ const TemplateEditor: React.FC<{ initialTemplateData: any; mode: 'edit' | 'new' 
   const [aiTargetParagraphId, setAiTargetParagraphId] = useState<string | null>(null);
   const [aiPrompt, setAiPrompt] = useState<string>('');
 
+  // Persist highlight when aiTargetParagraphId changes
+  useEffect(() => {
+    if (contentRef.current) {
+      contentRef.current.querySelectorAll('p.ia-selected').forEach(p => p.classList.remove('ia-selected'));
+      if (aiTargetParagraphId) {
+        const p = contentRef.current.querySelector(`p[data-paragraph-id="${aiTargetParagraphId}"]`);
+        p?.classList.add('ia-selected');
+      }
+    }
+  }, [aiTargetParagraphId]);
+
+  useEffect(() => {
+    if (contentRef.current) {
+      // Remove previous highlight
+      contentRef.current.querySelectorAll('p.ia-selected').forEach(p => p.classList.remove('ia-selected'));
+      if (aiTargetParagraphId) {
+        const p = contentRef.current.querySelector(`p[data-paragraph-id="${aiTargetParagraphId}"]`);
+        p?.classList.add('ia-selected');
+      }
+    }
+  }, [aiTargetParagraphId]);
+
   // Ensure unique paragraph IDs
   useEffect(() => {
     if (contentRef.current) {
@@ -85,8 +107,6 @@ const TemplateEditor: React.FC<{ initialTemplateData: any; mode: 'edit' | 'new' 
       const commit = () => {
         targetParagraph.removeAttribute('contenteditable');
         if (contentRef.current) {
-          contentRef.current.querySelectorAll('p.ia-selected').forEach(p => p.classList.remove('ia-selected'));
-          targetParagraph.classList.add('ia-selected');
           setConvertedHtml(contentRef.current.innerHTML);
         }
         // Genera prompt per a IA
