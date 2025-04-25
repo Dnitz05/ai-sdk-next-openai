@@ -50,14 +50,10 @@ const TemplateEditor: React.FC<TemplateEditorProps> = ({ initialTemplateData, mo
       const wrapRect = contentWrapperRef.current.getBoundingClientRect();
       setHoveredParagraphId(id);
       setHoverY(rect.top - wrapRect.top);
-    } else {
-      setHoveredParagraphId(null);
     }
   };
 
-  const handleMouseLeave = () => {
-    setHoveredParagraphId(null);
-  };
+  /* Removed handleMouseLeave to keep IA button visible when moving pointer to button */
 
   const adaptWithIA = (id: string) => {
     if (!contentRef.current) return;
@@ -114,8 +110,7 @@ const TemplateEditor: React.FC<TemplateEditorProps> = ({ initialTemplateData, mo
         <div
           ref={contentWrapperRef}
           className="relative flex-grow bg-white p-4 rounded shadow"
-          onMouseOver={handleMouseOver}
-          onMouseLeave={handleMouseLeave}
+          onMouseMove={handleMouseOver}
         >
           {convertedHtml ? (
             <div
