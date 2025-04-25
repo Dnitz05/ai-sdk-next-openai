@@ -14,6 +14,9 @@ const TemplateEditor: React.FC<{ initialTemplateData: any; mode: 'edit' | 'new' 
 
   // AI mode state
   const [iaInstructionsMode, setIaInstructionsMode] = useState(false);
+  // IA prompt: paragraph highlighted per enviar a la IA
+  const [aiTargetParagraphId, setAiTargetParagraphId] = useState<string | null>(null);
+  const [aiPrompt, setAiPrompt] = useState<string>('');
 
   // Ensure unique paragraph IDs
   useEffect(() => {
@@ -86,6 +89,11 @@ const TemplateEditor: React.FC<{ initialTemplateData: any; mode: 'edit' | 'new' 
           targetParagraph.classList.add('ia-selected');
           setConvertedHtml(contentRef.current.innerHTML);
         }
+        // Genera prompt per a IA
+        const newText = targetParagraph.textContent || '';
+        const prompt = `Refina automàticament aquest paràgraf: "${newText}"`;
+        setAiTargetParagraphId(targetParagraph.dataset.paragraphId!);
+        setAiPrompt(prompt);
       };
       targetParagraph.addEventListener('blur', commit, { once: true });
       targetParagraph.addEventListener('keydown', (e: KeyboardEvent) => {
@@ -157,7 +165,16 @@ const TemplateEditor: React.FC<{ initialTemplateData: any; mode: 'edit' | 'new' 
                   {iaInstructionsMode ? 'ACTIU' : 'Inactiu'}
                 </button>
               </h3>
-              {iaInstructionsMode && <p className="text-xs italic">Fes clic sobre un paràgraf per editar.</p>}
+              {iaInstructionsMode && (
+                <>
+                  <p className="text-xs italic">Fes clic sobre un paràgraf per editar.</p>
+                  {aiPrompt && (
+                    <div className="mt-2 p-2 bg-gray-50 text-xs border rounded text-gray-700">
+                      <strong>Prompt IA:</strong> {aiPrompt}
+                    </div>
+                  )}
+                </>
+              )}
             </div>
           </div>
         </aside>
