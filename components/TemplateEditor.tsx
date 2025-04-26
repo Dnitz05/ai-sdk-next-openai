@@ -105,7 +105,11 @@ const [iaMode, setIaMode] = useState(false);
       <div className="w-full max-w-4xl mx-auto mb-4">
         <h1 className="text-2xl font-bold text-gray-800">{templateTitle}</h1>
       </div>
-      <div className="flex w-full max-w-6xl mx-auto gap-x-6">
+      <div className="grid w-full max-w-6xl mx-auto grid-cols-[auto_1fr_auto] gap-x-6">
+        {/* Left sidebar placeholder */}
+        <aside className="w-80 flex-shrink-0">
+          <div className="sticky top-4 p-4 bg-white rounded shadow border" />
+        </aside>
         {/* Content area */}
         <div
           ref={contentWrapperRef}
