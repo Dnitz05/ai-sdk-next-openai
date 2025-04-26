@@ -124,16 +124,17 @@ const TemplateEditor: React.FC<TemplateEditorProps> = ({ initialTemplateData, mo
           )}
           {iaMode && hoveredParagraphId && (
             <button
-              className="absolute left-[-110px] px-2 py-1 bg-indigo-600 text-white text-xs rounded"
+              className="absolute left-[-110px] p-1 bg-indigo-600 text-white rounded-full hover:bg-indigo-500 focus:outline-none"
               style={{ top: hoverY }}
               onClick={() => adaptWithIA(hoveredParagraphId)}
+              aria-label="Adaptar amb IA"
             >
-              Adaptar amb IA
+              ✏️
             </button>
           )}
           {iaMode && activeParagraphId && iaPrompt && contentWrapperRef.current && (
             <div
-              className="absolute left-[-100%] -ml-8 p-2 bg-gray-50 border rounded shadow text-xs"
+              className="absolute left-[-90px] w-1/2 p-2 bg-gray-50 border rounded shadow text-xs"
               style={{
                 top:
                   contentRef.current!
