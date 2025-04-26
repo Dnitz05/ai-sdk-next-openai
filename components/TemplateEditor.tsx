@@ -102,10 +102,10 @@ const [iaMode, setIaMode] = useState(false);
 
   return (
     <main className="flex min-h-screen w-full flex-col items-center p-4 sm:p-8 bg-gray-100">
-      <div className="w-full max-w-4xl mb-4">
+      <div className="w-full max-w-4xl mx-auto mb-4">
         <h1 className="text-2xl font-bold text-gray-800">{templateTitle}</h1>
       </div>
-      <div className="flex w-full max-w-6xl gap-x-6">
+      <div className="flex w-full max-w-6xl mx-auto gap-x-6">
         {/* Content area */}
         <div
           ref={contentWrapperRef}
