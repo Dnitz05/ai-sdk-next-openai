@@ -18,7 +18,7 @@ const TemplateEditor: React.FC<TemplateEditorProps> = ({ initialTemplateData, mo
   const contentRef = useRef<HTMLDivElement>(null);
 
   // IA mode hover/adapt state
-puja a   const [iaMode, setIaMode] = useState(false);
+const [iaMode, setIaMode] = useState(false);
   const [hoveredParagraphId, setHoveredParagraphId] = useState<string | null>(null);
   const [hoverY, setHoverY] = useState<number>(0);
   const [activeParagraphId, setActiveParagraphId] = useState<string | null>(null);
