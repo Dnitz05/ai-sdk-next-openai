@@ -133,7 +133,7 @@ const TemplateEditor: React.FC<TemplateEditorProps> = ({ initialTemplateData, mo
           )}
           {iaMode && activeParagraphId && iaPrompt && contentWrapperRef.current && (
             <div
-              className="absolute right-[100%] mr-4 p-2 bg-gray-50 border rounded shadow text-xs"
+              className="absolute left-[-100%] -ml-8 p-2 bg-gray-50 border rounded shadow text-xs"
               style={{
                 top:
                   contentRef.current!
