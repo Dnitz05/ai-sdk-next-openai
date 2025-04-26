@@ -124,7 +124,7 @@ const TemplateEditor: React.FC<TemplateEditorProps> = ({ initialTemplateData, mo
           )}
           {iaMode && hoveredParagraphId && (
             <button
-              className="absolute left-[8px] p-1 bg-indigo-600 text-white rounded-full hover:bg-indigo-500 focus:outline-none"
+              className="absolute left-[-112px] p-1 bg-indigo-600 text-white rounded-full hover:bg-indigo-500 focus:outline-none"
               style={{ top: hoverY }}
               onClick={() => adaptWithIA(hoveredParagraphId)}
               aria-label="Adaptar amb IA"
@@ -134,7 +134,7 @@ const TemplateEditor: React.FC<TemplateEditorProps> = ({ initialTemplateData, mo
           )}
           {iaMode && activeParagraphId && iaPrompt && contentWrapperRef.current && (
             <div
-              className="absolute left-[8px] transform -translate-x-full w-1/2 p-2 bg-gray-50 border rounded shadow text-xs"
+              className="absolute left-[-102px] transform -translate-x-full w-1/2 p-2 bg-gray-50 border rounded shadow text-xs"
               style={{
                 top:
                   contentRef.current!
