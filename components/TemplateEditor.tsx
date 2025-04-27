@@ -18,7 +18,7 @@ const TemplateEditor: React.FC<TemplateEditorProps> = ({ initialTemplateData, mo
   const contentRef = useRef<HTMLDivElement>(null);
 
   // IA mode hover/adapt state
-const [iaMode, setIaMode] = useState(false);
+const [iaMode, setIaMode] = useState(true);
   const [hoveredParagraphId, setHoveredParagraphId] = useState<string | null>(null);
   const [hoverY, setHoverY] = useState<number>(0);
   const [activeParagraphId, setActiveParagraphId] = useState<string | null>(null);
@@ -178,19 +178,6 @@ const [iaMode, setIaMode] = useState(false);
                 </div>
               </div>
             )}
-            <div>
-              <h3 className="text-md font-semibold text-indigo-700 mb-2 flex items-center gap-2">
-                Instruccions IA
-                <button
-                  className={`ml-2 px-2 py-1 rounded text-xs ${
-                    iaMode ? 'bg-indigo-600 text-white' : 'bg-gray-200 text-indigo-700'
-                  }`}
-                  onClick={() => setIaMode(m => !m)}
-                >
-                  {iaMode ? 'ACTIU' : 'Inactiu'}
-                </button>
-              </h3>
-            </div>
           </div>
         </aside>
       </div>
