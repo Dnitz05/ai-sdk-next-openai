@@ -105,7 +105,7 @@ const [iaMode, setIaMode] = useState(true);
       <div className="w-full max-w-4xl mx-auto mb-4">
         <h1 className="text-2xl font-bold text-gray-800">{templateTitle}</h1>
       </div>
-      <div className="grid w-full max-w-7xl mx-auto grid-cols-[1fr_auto] gap-x-[6px]">
+      <div className="grid w-full max-w-7xl mx-auto grid-cols-[auto_0.31640625fr_auto] gap-x-[6px]">
         {/* Content area */}
         <div
           ref={contentWrapperRef}
