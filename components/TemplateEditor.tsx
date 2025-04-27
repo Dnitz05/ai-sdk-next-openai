@@ -105,8 +105,17 @@ const [iaMode, setIaMode] = useState(true);
       <div className="w-full max-w-4xl mx-auto mb-4">
         <h1 className="text-2xl font-bold text-gray-800">{templateTitle}</h1>
       </div>
-      <div className="grid w-full max-w-7xl mx-auto grid-cols-[auto_0.675fr_auto] gap-x-[6px]">
+      <div className="grid w-full max-w-7xl mx-auto grid-cols-[auto_0.99fr_auto] gap-x-[6px]">
+{/* Invisible left sidebar */}
 <aside className="w-48 flex-shrink-0">
+  <div className="sticky top-4 p-4 bg-white rounded shadow border invisible" />
+</aside>
+// Invisible left sidebar
+<aside className="w-48 flex-shrink-0">
+  <div className="sticky top-4 p-4 invisible" />
+</aside>
+{/* Invisible left sidebar */}
+         <aside className="w-48 flex-shrink-0 order-first">
            <div className="sticky top-4 p-4 invisible" />
          </aside>
         {/* Content area */}
@@ -150,11 +159,8 @@ const [iaMode, setIaMode] = useState(true);
             </div>
           )}
         </div>
-        <aside className="w-48 flex-shrink-0">
-          <div className="sticky top-4 p-4 invisible" />
-        </aside>
         {/* Sidebar */}
-        <aside className="w-48 flex-shrink-0">
+        <aside className="w-48 flex-shrink-0 order-last">
           <div className="sticky top-4 p-4 bg-white rounded shadow border">
             {(docxName || excelName) && (
               <div className="mb-4 p-2 bg-blue-50 border-blue-200 rounded text-xs text-blue-800">
