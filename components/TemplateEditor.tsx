@@ -128,17 +128,17 @@ const [iaMode, setIaMode] = useState(false);
           )}
           {iaMode && hoveredParagraphId && (
             <button
-              className="absolute left-[-52px] p-1 bg-indigo-600 text-white rounded-full hover:bg-indigo-500 focus:outline-none"
+              className="absolute left-[-46px] text-xs p-1 bg-indigo-600 text-white rounded-full hover:bg-indigo-500 focus:outline-none"
               style={{ top: hoverY }}
               onClick={() => adaptWithIA(hoveredParagraphId)}
-              aria-label="Adaptar amb IA"
+              aria-label="IA"
             >
-              ✏️
+              IA
             </button>
           )}
           {iaMode && activeParagraphId && iaPrompt && contentWrapperRef.current && (
             <div
-              className="absolute left-[-66px] transform -translate-x-full w-[35%] p-2 bg-gray-50 border rounded shadow text-xs"
+              className="absolute left-[-60px] transform -translate-x-full w-[35%] p-2 bg-gray-50 border rounded shadow text-xs"
               style={{
                 top:
                   contentRef.current!
