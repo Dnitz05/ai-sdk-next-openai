@@ -101,9 +101,11 @@ const [iaMode, setIaMode] = useState(true);
   };
 
   return (
-    <main className="flex min-h-screen w-full flex-col items-center bg-gray-100">
+    <main className="flex min-h-screen w-full flex-col items-center bg-gray-100 pl-[10px]">
       <div className="w-full max-w-4xl mx-auto mb-4">
-        <h1 className="text-2xl font-bold text-gray-800">{templateTitle}</h1>
+        <h1 className="text-lg font-semibold text-gray-800">
+          Plantilla: <span className="font-normal">{templateTitle}</span>
+        </h1>
       </div>
       <div className="grid w-full max-w-7xl mx-auto grid-cols-[auto_0.99fr_auto] gap-x-[6px]">
          <aside className="w-48 flex-shrink-0 order-first">
