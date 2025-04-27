@@ -105,7 +105,7 @@ const [iaMode, setIaMode] = useState(false);
       <div className="w-full max-w-4xl mx-auto mb-4">
         <h1 className="text-2xl font-bold text-gray-800">{templateTitle}</h1>
       </div>
-      <div className="grid w-full max-w-7xl mx-auto grid-cols-[auto_1fr_auto] gap-x-6">
+      <div className="grid w-full max-w-7xl mx-auto grid-cols-[auto_1.25fr_auto] gap-x-1">
         {/* Left sidebar placeholder */}
         <aside className="w-48 flex-shrink-0">
           <div className="sticky top-4 p-4 bg-white rounded shadow border" />
@@ -113,7 +113,7 @@ const [iaMode, setIaMode] = useState(false);
         {/* Content area */}
         <div
           ref={contentWrapperRef}
-          className="relative w-[60%] justify-self-center bg-white p-4 rounded shadow"
+          className="relative w-full justify-self-center bg-white p-4 rounded shadow"
           onMouseMove={handleMouseOver}
         >
           {convertedHtml ? (
