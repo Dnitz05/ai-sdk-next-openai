@@ -106,15 +106,6 @@ const [iaMode, setIaMode] = useState(true);
         <h1 className="text-2xl font-bold text-gray-800">{templateTitle}</h1>
       </div>
       <div className="grid w-full max-w-7xl mx-auto grid-cols-[auto_0.99fr_auto] gap-x-[6px]">
-{/* Invisible left sidebar */}
-<aside className="w-48 flex-shrink-0">
-  <div className="sticky top-4 p-4 bg-white rounded shadow border invisible" />
-</aside>
-// Invisible left sidebar
-<aside className="w-48 flex-shrink-0">
-  <div className="sticky top-4 p-4 invisible" />
-</aside>
-{/* Invisible left sidebar */}
          <aside className="w-48 flex-shrink-0 order-first">
            <div className="sticky top-4 p-4 invisible" />
          </aside>
