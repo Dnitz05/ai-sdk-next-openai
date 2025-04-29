@@ -107,7 +107,7 @@ const [iaMode, setIaMode] = useState(true);
           Plantilla: <span className="font-normal">{templateTitle}</span>
         </h1>
       </div>
-      <div className="grid w-full max-w-[64.8rem] mx-auto grid-cols-[auto_0.99fr_auto] gap-x-[6px]">
+      <div className="grid w-full max-w-7xl mx-auto grid-cols-[auto_0.99fr_auto] gap-x-[6px]">
          <aside className="w-48 flex-shrink-0 order-first">
            <div className="sticky top-4 p-4 invisible" />
          </aside>
