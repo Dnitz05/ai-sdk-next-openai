@@ -107,14 +107,14 @@ const [iaMode, setIaMode] = useState(true);
           Plantilla: <span className="font-normal">{templateTitle}</span>
         </h1>
       </div>
-      <div className="grid w-full max-w-7xl mx-auto grid-cols-[auto_0.99fr_auto] gap-x-[6px]">
+      <div className="grid w-full max-w-5xl mx-auto grid-cols-[auto_0.99fr_auto] gap-x-[6px]">
          <aside className="w-48 flex-shrink-0 order-first">
            <div className="sticky top-4 p-4 invisible" />
          </aside>
         {/* Content area */}
         <div
           ref={contentWrapperRef}
-          className="relative w-full justify-self-center bg-white px-10 py-10 border border-gray-300 rounded shadow-lg"
+          className="relative w-full justify-self-center bg-white p-12 border border-gray-300 rounded shadow-lg"
           onMouseMove={handleMouseOver}
         >
           {convertedHtml ? (
