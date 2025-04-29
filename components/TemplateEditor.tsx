@@ -49,9 +49,10 @@ const TemplateEditor: React.FC<TemplateEditorProps> = ({ initialTemplateData, mo
       const rect = p.getBoundingClientRect();
       const wrapRect = contentWrapperRef.current.getBoundingClientRect();
       setHoveredParagraphId(id);
-      // Calculate position at middle of paragraph height instead of top
-      const paragraphHeight = rect.height;
-      setHoverY(rect.top - wrapRect.top + paragraphHeight / 2 - 12); // Center vertically (12 is half the button height)
+      // Calculate exact middle position of paragraph, accounting for margins and transformations
+      const paragraphMiddle = rect.top + (rect.height / 2); // Get the exact middle of paragraph
+      const containerTop = wrapRect.top;
+      setHoverY(paragraphMiddle - containerTop); // Set position directly without any offsets
     }
   };
 
@@ -218,7 +219,10 @@ const TemplateEditor: React.FC<TemplateEditorProps> = ({ initialTemplateData, mo
               {iaMode && hoveredParagraphId && (
                 <button
                   className="absolute left-6 w-6 h-6 bg-indigo-600 text-white rounded-full hover:bg-indigo-500 focus:outline-none flex items-center justify-center text-xs p-0"
-                  style={{ top: hoverY + 40 }} /* Adjusted position to account for new layout */
+                  style={{ 
+                    top: hoverY, // Use the calculated position directly without any offset
+                    transform: 'translateY(-50%)' // Center the button vertically
+                  }}
                   onClick={() => adaptWithIA(hoveredParagraphId)}
                   aria-label="IA"
                 >
@@ -228,7 +232,7 @@ const TemplateEditor: React.FC<TemplateEditorProps> = ({ initialTemplateData, mo
               
               {iaMode && activeParagraphId && iaPrompt && contentWrapperRef.current && (
                 <div
-                  className="absolute left-6 transform translate-x-[-110%] w-[200px] p-2 bg-gray-50 border rounded shadow text-xs"
+                  className="absolute left-6 w-[200px] p-2 bg-gray-50 border rounded shadow text-xs"
                   style={{
                     top: contentRef.current 
                       ? contentRef.current.querySelector(`p[data-paragraph-id="${activeParagraphId}"]`)
@@ -237,10 +241,12 @@ const TemplateEditor: React.FC<TemplateEditorProps> = ({ initialTemplateData, mo
                             const paragraphRect = pElement.getBoundingClientRect();
                             const wrapperRect = contentWrapperRef.current.getBoundingClientRect();
                             const paragraphHeight = paragraphRect.height;
-                            return (paragraphRect.top - wrapperRect.top + paragraphHeight / 2 - 10) + 40; // Center vertically with paragraph
+                            // Calculate exact middle position just like the hover button
+                            return paragraphRect.top - wrapperRect.top + (paragraphHeight / 2);
                           })()
-                        : 40
-                      : 40
+                        : 0
+                      : 0,
+                    transform: 'translateX(-110%) translateY(-50%)' // Position left of the document and center vertically
                   }}
                 >
                   <strong>Prompt IA:</strong> {iaPrompt}
