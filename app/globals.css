@@ -6,18 +6,77 @@
 /* === INICI Estils Personalitzats per a Visor DOCX === */
 
 /* --- Ajustos Mida Font (Word-like) --- */
-.prose { font-size: 14px; line-height: 1.7; max-width: none; }
-.prose h1 { font-size: 1.5em; font-weight: 700; margin-top: 0; margin-bottom: 1em; line-height: 1.3; }
-.prose h2 { font-size: 1.3em; font-weight: 600; margin-top: 2em; margin-bottom: 0.8em; line-height: 1.3; }
-.prose h3 { font-size: 1.15em; font-weight: 600; margin-top: 1.8em; margin-bottom: 0.6em; line-height: 1.3; }
-.prose h4 { font-size: 1.05em; font-weight: 600; margin-top: 1.6em; margin-bottom: 0.5em; line-height: 1.3; }
-.prose p { margin-top: 0.8em; margin-bottom: 0.8em; }
+.prose { 
+  font-family: 'Calibri', 'Segoe UI', sans-serif; 
+  font-size: 11pt; 
+  line-height: 1.5; 
+  max-width: none; 
+  color: #222;
+}
+.prose h1 { 
+  font-size: 16pt; 
+  font-weight: 600; 
+  margin-top: 0; 
+  margin-bottom: 10pt; 
+  line-height: 1.2; 
+  color: #2b579a; /* Word heading blue */
+}
+.prose h2 { 
+  font-size: 13pt; 
+  font-weight: 600; 
+  margin-top: 12pt; 
+  margin-bottom: 3pt; 
+  line-height: 1.2; 
+  color: #2b579a; 
+}
+.prose h3 { 
+  font-size: 12pt; 
+  font-weight: 600; 
+  margin-top: 10pt; 
+  margin-bottom: 3pt; 
+  line-height: 1.2; 
+  color: #2b579a; 
+}
+.prose h4 { 
+  font-size: 11pt; 
+  font-weight: 600; 
+  margin-top: 8pt; 
+  margin-bottom: 2pt; 
+  line-height: 1.2; 
+  color: #2b579a; 
+}
+.prose p { 
+  margin-top: 0; 
+  margin-bottom: 8pt; 
+  line-height: 1.3;
+}
 
-/* --- Estils per a Taules --- */
-.prose table { border-collapse: collapse; width: 100%; margin-top: 1.25em; margin-bottom: 1.25em; max-width: 100%; display: block; overflow-x: auto; }
-.prose th, .prose td { border: 2px dotted #d1d5db; padding: 0.25em 0.3em; vertical-align: middle; overflow-wrap: break-word; }
-.prose th { text-align: left; background-color: #f9fafb; font-weight: 600; }
-.prose td > p { margin-top: 0; margin-bottom: 0; line-height: 1.3; }
+/* --- Estils per a Taules (Word-style) --- */
+.prose table { 
+  border-collapse: collapse; 
+  width: 100%; 
+  margin-top: 8pt; 
+  margin-bottom: 8pt; 
+  max-width: 100%; 
+  display: table; /* Changed from block to table for Word-like behavior */
+}
+.prose th, .prose td { 
+  border: 1px solid #d1d5db; 
+  padding: 4pt 5pt; 
+  vertical-align: middle; 
+  overflow-wrap: break-word; 
+}
+.prose th { 
+  text-align: left; 
+  background-color: #f3f6f9; 
+  font-weight: 600; 
+  color: #333;
+}
+.prose td > p { 
+  margin-top: 0; 
+  margin-bottom: 0; 
+  line-height: 1.15; 
+}
 /* === FINAL Estils Taules === */
 
 /* Estil per als placeholders vinculats a Excel (groc) */
