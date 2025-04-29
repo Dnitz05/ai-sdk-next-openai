@@ -114,13 +114,13 @@ const [iaMode, setIaMode] = useState(true);
         {/* Content area */}
         <div
           ref={contentWrapperRef}
-          className="relative w-full justify-self-center bg-white p-4 rounded shadow"
+          className="relative w-full justify-self-center bg-white p-12 border border-gray-300 rounded shadow-lg"
           onMouseMove={handleMouseOver}
         >
           {convertedHtml ? (
             <div
               ref={contentRef}
-              className={`prose max-w-none bg-white p-4 rounded${iaMode ? ' ia-mode-actiu' : ''}`}
+              className={`prose max-w-none${iaMode ? ' ia-mode-actiu' : ''}`}
               dangerouslySetInnerHTML={{ __html: convertedHtml }}
               onMouseUp={handleTextSelection}
             />
