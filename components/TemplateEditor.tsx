@@ -108,10 +108,9 @@ const [iaMode, setIaMode] = useState(true);
         </h1>
       </div>
       
-      {/* Document toolbar - Word-like menu bar with formatting options */}
-      <div className="w-full max-w-5xl mx-auto">
-        {/* Main menu bar */}
-        <div className="bg-white border-t border-x border-gray-200 rounded-t px-4 py-1.5 flex items-center space-x-4 text-sm shadow-sm">
+      <div className="w-full max-w-5xl mx-auto grid grid-cols-[180px_1fr_220px]">
+        {/* Document toolbar - Word-like menu bar that extends full width */}
+        <div className="col-span-3 bg-white border-t border-x border-gray-200 rounded-t px-4 py-1.5 flex items-center space-x-4 text-sm shadow-sm">
           <button className="px-2 py-1 text-gray-700 hover:bg-gray-100 rounded">
             Arxiu
           </button>
@@ -133,39 +132,9 @@ const [iaMode, setIaMode] = useState(true);
             </button>
           </div>
         </div>
-
-        {/* Formatting toolbar - Similar to Word formatting ribbon */}
-        <div className="bg-[#f3f2f1] border-x border-b border-gray-200 px-4 py-1 flex items-center space-x-2 text-xs">
-          <div className="flex items-center space-x-1 pr-2 border-r border-gray-300">
-            <select className="bg-white border border-gray-300 rounded px-1 py-0.5 text-xs">
-              <option>Calibri</option>
-              <option>Arial</option>
-              <option>Times New Roman</option>
-            </select>
-            <select className="bg-white border border-gray-300 rounded px-1 py-0.5 text-xs w-10">
-              <option>11</option>
-              <option>12</option>
-              <option>14</option>
-            </select>
-          </div>
-          <div className="flex items-center space-x-1 px-2">
-            <button className="p-1 hover:bg-gray-200 rounded" title="Negreta">B</button>
-            <button className="p-1 hover:bg-gray-200 rounded italic" title="Cursiva">I</button>
-            <button className="p-1 hover:bg-gray-200 rounded underline" title="Subratllat">U</button>
-          </div>
-          <div className="flex items-center space-x-1 px-2 border-l border-r border-gray-300">
-            <button className="p-1 hover:bg-gray-200 rounded" title="Alineació esquerra">≡</button>
-            <button className="p-1 hover:bg-gray-200 rounded" title="Centrat">≡</button>
-            <button className="p-1 hover:bg-gray-200 rounded" title="Alineació dreta">≡</button>
-          </div>
-          <div className="flex items-center space-x-1 px-2">
-            <button className="px-2 py-0.5 hover:bg-gray-200 rounded text-xs" title="Inserir taula">Taula</button>
-            <button className="px-2 py-0.5 hover:bg-gray-200 rounded text-xs" title="Inserir imatge">Imatge</button>
-          </div>
-        </div>
-      </div>
-      
-      <div className="grid w-full max-w-5xl mx-auto grid-cols-[180px_1fr_220px] bg-gray-100 border-x border-gray-200 shadow-md">
+        
+        {/* Main document area with 3 columns */}
+        <div className="col-span-3 grid grid-cols-[180px_1fr_220px] bg-gray-100 border-x border-b border-gray-200 shadow-md">
         {/* Left ruler - Similar to Word left margin */}
         <aside className="flex-shrink-0 border-r border-gray-200 py-2">
           <div className="sticky top-4 pt-2 flex flex-col items-end pr-1">
@@ -186,11 +155,11 @@ const [iaMode, setIaMode] = useState(true);
           </div>
         </aside>
         
-        {/* Content area - A4 paper style */}
+        {/* Content area - A4 paper style that auto-expands based on content */}
         <div className="flex justify-center py-6 bg-gray-100 min-h-[calc(100vh-140px)]">
           <div
             ref={contentWrapperRef}
-            className="relative w-[21cm] h-[29.7cm] bg-white mx-auto border border-gray-300 shadow-lg"
+            className="relative w-[21cm] bg-white mx-auto border border-gray-300 shadow-lg"
             style={{ minHeight: '29.7cm' }}
             onMouseMove={handleMouseOver}
           >
