@@ -114,7 +114,7 @@ const [iaMode, setIaMode] = useState(true);
         {/* Content area */}
         <div
           ref={contentWrapperRef}
-          className="relative w-full justify-self-center bg-white p-12 border border-gray-300 rounded shadow-lg"
+          className="relative w-full justify-self-center bg-white px-10 py-10 border border-gray-300 rounded shadow-lg"
           onMouseMove={handleMouseOver}
         >
           {convertedHtml ? (
