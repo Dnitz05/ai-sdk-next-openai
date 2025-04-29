@@ -49,7 +49,9 @@ const TemplateEditor: React.FC<TemplateEditorProps> = ({ initialTemplateData, mo
       const rect = p.getBoundingClientRect();
       const wrapRect = contentWrapperRef.current.getBoundingClientRect();
       setHoveredParagraphId(id);
-      setHoverY(rect.top - wrapRect.top);
+      // Calculate position at middle of paragraph height instead of top
+      const paragraphHeight = rect.height;
+      setHoverY(rect.top - wrapRect.top + paragraphHeight / 2 - 12); // Center vertically (12 is half the button height)
     }
   };
 
@@ -226,12 +228,17 @@ const TemplateEditor: React.FC<TemplateEditorProps> = ({ initialTemplateData, mo
               
               {iaMode && activeParagraphId && iaPrompt && contentWrapperRef.current && (
                 <div
-                  className="absolute left-6 top-20 transform translate-x-[-110%] w-[200px] p-2 bg-gray-50 border rounded shadow text-xs"
+                  className="absolute left-6 transform translate-x-[-110%] w-[200px] p-2 bg-gray-50 border rounded shadow text-xs"
                   style={{
                     top: contentRef.current 
                       ? contentRef.current.querySelector(`p[data-paragraph-id="${activeParagraphId}"]`)
-                        ? contentRef.current.querySelector(`p[data-paragraph-id="${activeParagraphId}"]`)!.getBoundingClientRect().top - 
-                          contentWrapperRef.current.getBoundingClientRect().top + 40
+                        ? (() => {
+                            const pElement = contentRef.current.querySelector(`p[data-paragraph-id="${activeParagraphId}"]`)!;
+                            const paragraphRect = pElement.getBoundingClientRect();
+                            const wrapperRect = contentWrapperRef.current.getBoundingClientRect();
+                            const paragraphHeight = paragraphRect.height;
+                            return (paragraphRect.top - wrapperRect.top + paragraphHeight / 2 - 10) + 40; // Center vertically with paragraph
+                          })()
                         : 40
                       : 40
                   }}
