@@ -140,22 +140,11 @@ const TemplateEditor: React.FC<TemplateEditorProps> = ({ initialTemplateData, mo
         
         {/* Main document area with 3 columns */}
         <div className="col-span-3 grid grid-cols-[180px_1fr_220px] bg-gray-100 border-x border-b border-gray-200 shadow-md">
-          {/* Left ruler - Similar to Word left margin */}
+          {/* Left ruler - now empty */}
           <aside className="flex-shrink-0 border-r border-gray-200 py-2">
             <div className="sticky top-4 pt-2 flex flex-col items-end pr-1">
-              <div className="w-full mb-2 flex justify-end">
-                <span className="text-gray-400 text-xs">Marges</span>
-              </div>
               <div className="h-80 border-r border-gray-300 pr-1">
-                <div className="h-6 flex items-center justify-end">
-                  <span className="text-gray-500 text-xs">1</span>
-                </div>
-                <div className="h-6 flex items-center justify-end">
-                  <span className="text-gray-500 text-xs">2</span>
-                </div>
-                <div className="h-6 flex items-center justify-end">
-                  <span className="text-gray-500 text-xs">3</span>
-                </div>
+                {/* Left rulers removed as requested */}
               </div>
             </div>
           </aside>
@@ -168,30 +157,10 @@ const TemplateEditor: React.FC<TemplateEditorProps> = ({ initialTemplateData, mo
               style={{ minHeight: '29.7cm' }}
               onMouseMove={handleMouseOver}
             >
-              <div className="absolute top-0 left-0 right-0 h-6 flex items-center justify-between px-2 border-b border-gray-100">
-                <div className="text-xs text-gray-400">Secció 1</div>
-                <div className="text-xs text-gray-400">Pàgina 1</div>
-              </div>
+              {/* Section and page text removed */}
+              {/* Horizontal ruler removed */}
               
-              {/* Top horizontal ruler (similar to Word) */}
-              <div className="absolute top-6 left-0 right-0 h-6 border-b border-gray-100 px-[2.54cm]">
-                <div className="flex items-center h-full">
-                  <div className="w-full flex justify-between text-[9px] text-gray-400">
-                    <span>|</span>
-                    <span>|</span>
-                    <span>|</span>
-                    <span>|</span>
-                    <span>|</span>
-                    <span>|</span>
-                    <span>|</span>
-                    <span>|</span>
-                    <span>|</span>
-                    <span>|</span>
-                  </div>
-                </div>
-              </div>
-              
-              <div className="p-[2.54cm] mt-6">
+              <div className="p-[2.54cm]">
                 {convertedHtml ? (
                   <div
                     ref={contentRef}
