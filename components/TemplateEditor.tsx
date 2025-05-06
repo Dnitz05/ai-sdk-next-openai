@@ -1,6 +1,20 @@
 import React, { useState, useEffect, useRef, MouseEvent } from 'react';
 import * as XLSX from 'xlsx';
 
+interface ParagraphIaData {
+  currentPrompt: string;
+  savedPrompt: string;
+  y: number;
+  height: number;
+  isActiveEditor: boolean;
+}
+
+interface ParagraphButtonVisual {
+  yButton: number;
+  showButton: boolean;
+  hasSavedPrompt: boolean;
+}
+
 interface TemplateEditorProps {
   initialTemplateData: any;
   mode: 'edit' | 'new';
@@ -17,13 +31,12 @@ const TemplateEditor: React.FC<TemplateEditorProps> = ({ initialTemplateData, mo
   const contentWrapperRef = useRef<HTMLDivElement>(null);
   const contentRef = useRef<HTMLDivElement>(null);
 
-  // IA mode hover/adapt state
+  // IA mode state
   const [iaMode, setIaMode] = useState(true);
-  const [hoveredParagraphId, setHoveredParagraphId] = useState<string | null>(null);
-  const [hoverY, setHoverY] = useState<number>(0);
-  const [activeParagraphId, setActiveParagraphId] = useState<string | null>(null);
-  const [iaPrompt, setIaPrompt] = useState<string>('');
-  const iaPromptInputRef = useRef<HTMLTextAreaElement>(null);
+  const [iaPromptsData, setIaPromptsData] = useState<Record<string, ParagraphIaData>>({});
+  const [paragraphButtonVisuals, setParagraphButtonVisuals] = useState<Record<string, ParagraphButtonVisual>>({});
+  const [hoveredPId, setHoveredPId] = useState<string | null>(null);
+  const iaTextAreaRefs = useRef<Record<string, HTMLTextAreaElement | null>>({});
 
   // assign unique ids to paragraphs
   useEffect(() => {
@@ -41,43 +54,90 @@ const TemplateEditor: React.FC<TemplateEditorProps> = ({ initialTemplateData, mo
     }
   }, [convertedHtml]);
 
+  // Effect to update IA button visuals based on hover, saved prompts, and iaMode
+  useEffect(() => {
+    if (!iaMode || !contentRef.current || !contentWrapperRef.current) {
+      setParagraphButtonVisuals({}); // Clear visuals if IA mode is off or refs not ready
+      return;
+    }
+
+    const newVisuals: Record<string, ParagraphButtonVisual> = {};
+    const ps = contentRef.current.querySelectorAll('p[data-paragraph-id]');
+    const wrapRect = contentWrapperRef.current.getBoundingClientRect();
+
+    ps.forEach(pElement => {
+      const pid = (pElement as HTMLElement).dataset.paragraphId!;
+      if (!pid) return;
+
+      const rect = pElement.getBoundingClientRect();
+      const yButton = (rect.top + rect.height / 2) - wrapRect.top;
+      const hasSavedPrompt = !!iaPromptsData[pid]?.savedPrompt;
+      const showButton = iaMode && (hasSavedPrompt || pid === hoveredPId);
+      
+      newVisuals[pid] = { yButton, showButton, hasSavedPrompt };
+    });
+    setParagraphButtonVisuals(newVisuals);
+
+  }, [iaMode, convertedHtml, hoveredPId, iaPromptsData, contentRef, contentWrapperRef]);
+
+
   const handleMouseOver = (e: MouseEvent<HTMLDivElement>) => {
     if (!iaMode) return;
     const target = e.target as HTMLElement;
-    const p = target.closest('p');
-    if (p && contentRef.current?.contains(p) && contentWrapperRef.current) {
-      const id = p.dataset.paragraphId!;
-      const rect = p.getBoundingClientRect();
-      const wrapRect = contentWrapperRef.current.getBoundingClientRect();
-      setHoveredParagraphId(id);
-      // Calculate exact middle position of paragraph, accounting for margins and transformations
-      const paragraphMiddle = rect.top + (rect.height / 2); // Get the exact middle of paragraph
-      const containerTop = wrapRect.top;
-      setHoverY(paragraphMiddle - containerTop); // Set position directly without any offsets
+    const p = target.closest('p[data-paragraph-id]');
+    if (p) {
+      setHoveredPId((p as HTMLElement).dataset.paragraphId!);
     }
   };
 
-  /* Removed handleMouseLeave to keep IA button visible when moving pointer to button */
+  const handleMouseLeave = () => {
+    setHoveredPId(null);
+  };
 
-  const adaptWithIA = (id: string) => {
-    if (!contentRef.current) return;
-    const p = contentRef.current.querySelector(`p[data-paragraph-id="${id}"]`);
-    if (!p) return;
-    // clear previous highlight
+  const adaptWithIA = (paragraphId: string) => {
+    if (!contentRef.current || !contentWrapperRef.current) return;
+    const pElement = contentRef.current.querySelector(`p[data-paragraph-id="${paragraphId}"]`);
+    if (!pElement) return;
+
+    // Clear previous highlights
     contentRef.current.querySelectorAll('p.ia-selected').forEach(el => el.classList.remove('ia-selected'));
-    p.classList.add('ia-selected');
-    setActiveParagraphId(id);
-    setIaPrompt(''); // Clear the prompt
-  };
+    pElement.classList.add('ia-selected');
 
-  useEffect(() => {
-    if (activeParagraphId && iaPromptInputRef.current) {
-      // Timeout to ensure the element is visible and focusable
-      setTimeout(() => {
-        iaPromptInputRef.current?.focus();
-      }, 0);
-    }
-  }, [activeParagraphId]);
+    const rect = pElement.getBoundingClientRect();
+    const wrapRect = contentWrapperRef.current.getBoundingClientRect();
+    const y = rect.top - wrapRect.top;
+    const height = rect.height;
+
+    setIaPromptsData(prevData => ({
+      ...prevData,
+      [paragraphId]: {
+        currentPrompt: prevData[paragraphId]?.savedPrompt || '', // Load saved or empty
+        savedPrompt: prevData[paragraphId]?.savedPrompt || '',
+        y,
+        height,
+        isActiveEditor: true,
+      }
+    }));
+
+    setTimeout(() => {
+      iaTextAreaRefs.current[paragraphId]?.focus();
+    }, 0);
+  };
+  
+  const handleSaveIaPrompt = (paragraphId: string) => {
+    setIaPromptsData(prev => {
+      const currentEntry = prev[paragraphId];
+      if (!currentEntry) return prev;
+      return {
+        ...prev,
+        [paragraphId]: {
+          ...currentEntry,
+          savedPrompt: currentEntry.currentPrompt,
+        },
+      };
+    });
+    // Future: API call to save prompt to backend
+  };
 
   // Excel mapping logic remains unchanged
   const handleTextSelection = () => {
@@ -142,7 +202,17 @@ const TemplateEditor: React.FC<TemplateEditorProps> = ({ initialTemplateData, mo
             Format
           </button>
           <div className="ml-auto">
-            <button className={`px-3 py-1 rounded text-sm ${iaMode ? 'bg-indigo-100 text-indigo-700' : 'bg-gray-100 text-gray-700'}`} onClick={() => setIaMode(!iaMode)}>
+            <button 
+              className={`px-3 py-1 rounded text-sm ${iaMode ? 'bg-indigo-100 text-indigo-700' : 'bg-gray-100 text-gray-700'}`} 
+              onClick={() => {
+                const newIaMode = !iaMode;
+                setIaMode(newIaMode);
+                if (!newIaMode) {
+                  setIaPromptsData({}); // Clear active editors
+                  setParagraphButtonVisuals({}); // Clear button visuals
+                }
+              }}
+            >
               {iaMode ? 'IA: Actiu' : 'IA: Inactiu'}
             </button>
           </div>
@@ -166,6 +236,7 @@ const TemplateEditor: React.FC<TemplateEditorProps> = ({ initialTemplateData, mo
               className="relative w-[21cm] bg-white mx-auto border border-gray-300 shadow-lg"
               style={{ minHeight: '29.7cm' }}
               onMouseMove={handleMouseOver}
+              onMouseLeave={handleMouseLeave}
             >
               {/* Section and page text removed */}
               {/* Horizontal ruler removed */}
@@ -195,50 +266,67 @@ const TemplateEditor: React.FC<TemplateEditorProps> = ({ initialTemplateData, mo
                 </div>
               </div>
               
-              {iaMode && hoveredParagraphId && (
-                <button
-                  className="absolute left-6 w-6 h-6 bg-indigo-600 text-white rounded-full hover:bg-indigo-500 focus:outline-none flex items-center justify-center text-xs p-0"
-                  style={{ 
-                    top: hoverY, // Use the calculated position directly without any offset
-                    transform: 'translateY(-50%)' // Center the button vertically
-                  }}
-                  onClick={() => adaptWithIA(hoveredParagraphId)}
-                  aria-label="IA"
-                >
-                  IA
-                </button>
-              )}
-              
-              {iaMode && activeParagraphId && contentWrapperRef.current && (
-                <div
-                  className="absolute left-6 w-[200px] p-2 bg-gray-50 border rounded shadow text-xs flex flex-col" // Added flex flex-col
-                  style={{
-                    top: contentRef.current
-                      ? contentRef.current.querySelector(`p[data-paragraph-id="${activeParagraphId}"]`)
-                        ? (() => {
-                          const pElement = contentRef.current.querySelector(`p[data-paragraph-id="${activeParagraphId}"]`)!;
-                          const paragraphRect = pElement.getBoundingClientRect();
-                          const wrapperRect = contentWrapperRef.current.getBoundingClientRect();
-                          const paragraphHeight = paragraphRect.height;
-                          return paragraphRect.top - wrapperRect.top + (paragraphHeight / 2);
-                        })()
-                        : 0
-                      : 0,
-                    transform: 'translateX(-110%) translateY(-50%)'
-                  }}
-                >
-                  <label htmlFor="iaPromptInput" className="block text-xs font-medium text-gray-700 mb-1">Prompt IA:</label>
-                  <textarea
-                    ref={iaPromptInputRef}
-                    id="iaPromptInput"
-                    value={iaPrompt}
-                    onChange={(e) => setIaPrompt(e.target.value)}
-                    className="w-full p-1 border border-gray-300 rounded shadow-sm focus:ring-indigo-500 focus:border-indigo-500 sm:text-xs"
-                    rows={3} // Default to 3 rows, can be adjusted
-                  />
-                  {/* You might want a button here to submit the prompt */}
-                </div>
-              )}
+              {/* Render IA buttons based on paragraphButtonVisuals */}
+              {iaMode && Object.entries(paragraphButtonVisuals).map(([pid, visual]) => {
+                if (!visual.showButton) return null;
+                return (
+                  <button
+                    key={`btn-${pid}`}
+                    className={`absolute left-6 w-6 h-6 text-white rounded-full focus:outline-none flex items-center justify-center text-xs p-0 transition-colors
+                                ${visual.hasSavedPrompt ? 'bg-green-600 hover:bg-green-500' : 'bg-indigo-600 hover:bg-indigo-500'}`}
+                    style={{ 
+                      top: visual.yButton,
+                      transform: 'translateY(-50%)'
+                    }}
+                    onClick={() => adaptWithIA(pid)}
+                    aria-label={`IA per paràgraf ${pid.substring(0,5)}`}
+                  >
+                    IA
+                  </button>
+                );
+              })}
+
+              {/* Render IA prompt editor boxes */}
+              {iaMode && contentWrapperRef.current && Object.entries(iaPromptsData).map(([pid, data]) => {
+                if (!data.isActiveEditor) return null;
+                return (
+                  <div
+                    key={`editor-${pid}`}
+                    className="absolute left-6 w-[220px] p-2 bg-gray-50 border border-gray-300 rounded shadow-lg text-xs flex flex-col" // Increased width slightly
+                    style={{
+                      top: data.y,
+                      height: data.height,
+                      transform: 'translateX(calc(-100% - 10px))', // Positioned to the left of the IA button, with a small gap
+                      boxSizing: 'border-box',
+                      overflow: 'hidden', // Prevent content spill
+                    }}
+                  >
+                    <label htmlFor={`iaPromptInput-${pid}`} className="block text-xs font-medium text-gray-700 mb-1 shrink-0">
+                      Prompt IA ({pid.substring(0,5)}...):
+                    </label>
+                    <textarea
+                      ref={el => { iaTextAreaRefs.current[pid] = el; }}
+                      id={`iaPromptInput-${pid}`}
+                      value={data.currentPrompt}
+                      onChange={(e) => {
+                        const newText = e.target.value;
+                        setIaPromptsData(prev => ({
+                          ...prev,
+                          [pid]: { ...prev[pid], currentPrompt: newText }
+                        }));
+                      }}
+                      className="w-full p-1 border border-gray-300 rounded shadow-sm focus:ring-indigo-500 focus:border-indigo-500 sm:text-xs grow"
+                      style={{ resize: 'none', overflowY: 'auto', minHeight: '30px' }} // Ensure textarea is usable even if paragraph is tiny
+                    />
+                    <button
+                      onClick={() => handleSaveIaPrompt(pid)}
+                      className="mt-1 px-2 py-1 bg-indigo-600 text-white text-xs rounded hover:bg-indigo-700 shrink-0"
+                    >
+                      Desar Prompt
+                    </button>
+                  </div>
+                );
+              })}
             </div>
           </div>
         
