@@ -61,13 +61,59 @@ export async function POST(request: NextRequest) {
 
     if (messages && messages.length > 0) { console.warn("Missatges de Mammoth:", messages); }
 
-    // ---- Neteja d'HTML amb Cheerio (sense canvis) ----
+    // ---- Neteja d'HTML amb Cheerio i optimització de taules ----
     console.log("Netejant HTML generat per Mammoth...");
     const $ = cheerio.load(rawHtml);
-    $('td').each((_i, tdElement) => { const $td = $(tdElement); const $children = $td.children(); if ($children.length === 1 && $children.is('p')) { $td.html($children.html() || ''); } });
-    $('p > h1, p > h2, p > h3, p > h4, p > h5, p > h6, p > table, p > ul, p > ol, p > div').each((_i, blockElement) => { const $block = $(blockElement); const $parentParagraph = $block.parent('p'); if ($parentParagraph.length > 0) { if (($parentParagraph.text() || '').trim() === ($block.text() || '').trim()) { $parentParagraph.replaceWith($block); } else { $parentParagraph.before($block); } } });
+    
+    // Eliminar paràgrafs buits dins de cel·les
+    $('td').each((_i, tdElement) => { 
+      const $td = $(tdElement); 
+      const $children = $td.children(); 
+      if ($children.length === 1 && $children.is('p')) { 
+        $td.html($children.html() || ''); 
+      } 
+    });
+    
+    // Corregir elements de bloc dins de paràgrafs
+    $('p > h1, p > h2, p > h3, p > h4, p > h5, p > h6, p > table, p > ul, p > ol, p > div').each((_i, blockElement) => { 
+      const $block = $(blockElement); 
+      const $parentParagraph = $block.parent('p'); 
+      if ($parentParagraph.length > 0) { 
+        if (($parentParagraph.text() || '').trim() === ($block.text() || '').trim()) { 
+          $parentParagraph.replaceWith($block); 
+        } else { 
+          $parentParagraph.before($block); 
+        } 
+      } 
+    });
+    
+    // Optimització de taules: reduir l'altura per a què siguin més compactes
+    console.log("Aplicant optimització a les taules...");
+    
+    // Aplicar estils directament a les taules per fer-les més compactes
+    $('table').each((_i, tableElement) => {
+      const $table = $(tableElement);
+      
+      // Aplicar estil a la taula principal
+      $table.attr('style', 'border-collapse: collapse; width: 100%;');
+      
+      // Optimitzar files
+      $table.find('tr').each((_j, trElement) => {
+        $(trElement).attr('style', 'height: auto; line-height: 1;');
+      });
+      
+      // Optimitzar cel·les
+      $table.find('td, th').each((_k, cellElement) => {
+        const $cell = $(cellElement);
+        // Mantenir altres estils que puguin existir i afegir els nostres
+        const existingStyle = $cell.attr('style') || '';
+        const compactStyle = 'padding: 2px 4px; line-height: 1.1; vertical-align: middle;';
+        $cell.attr('style', existingStyle + compactStyle);
+      });
+    });
+    
     const cleanedHtml = $('body').html() || '';
-    console.log("Neteja d'HTML completada.");
+    console.log("Neteja d'HTML i optimització de taules completada.");
     // ---------------------------------------------
 
     // Retornem l'HTML netejat i els missatges
