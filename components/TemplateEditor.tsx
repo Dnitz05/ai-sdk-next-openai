@@ -20,6 +20,8 @@ interface TemplateEditorProps {
   mode: 'edit' | 'new';
 }
 
+const MIN_EDITOR_BOX_HEIGHT = 90; // px - Adjusted for label, button, padding, and some textarea space
+
 const TemplateEditor: React.FC<TemplateEditorProps> = ({ initialTemplateData, mode }) => {
   const templateTitle = initialTemplateData?.config_name || '';
   const docxName = initialTemplateData?.base_docx_name || '';
@@ -295,10 +297,10 @@ const TemplateEditor: React.FC<TemplateEditorProps> = ({ initialTemplateData, mo
                     className="absolute left-6 w-[220px] p-2 bg-gray-50 border border-gray-300 rounded shadow-lg text-xs flex flex-col" // Increased width slightly
                     style={{
                       top: data.y,
-                      height: data.height,
+                      height: `${Math.max(MIN_EDITOR_BOX_HEIGHT, data.height)}px`,
                       transform: 'translateX(calc(-100% - 10px))', // Positioned to the left of the IA button, with a small gap
                       boxSizing: 'border-box',
-                      overflow: 'hidden', // Prevent content spill
+                      // overflow: 'hidden', // Removed to prevent cutting off content
                     }}
                   >
                     <label htmlFor={`iaPromptInput-${pid}`} className="block text-xs font-medium text-gray-700 mb-1 shrink-0">
