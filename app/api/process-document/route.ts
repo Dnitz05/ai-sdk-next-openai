@@ -106,14 +106,28 @@ export async function POST(request: NextRequest) {
       $table.find('td, th').each((_k, cellElement) => {
         const $cell = $(cellElement);
         // Mantenir altres estils que puguin existir i afegir els nostres
-        const existingStyle = $cell.attr('style') || '';
-        const compactStyle = 'padding: 2px 4px; line-height: 1.1; vertical-align: middle;';
-        $cell.attr('style', existingStyle + compactStyle);
+        let existingStyle = $cell.attr('style') || '';
+        // Eliminar propietats de line-height i padding existents per evitar conflictes
+        existingStyle = existingStyle.replace(/line-height\s*:[^;]+;?/g, '');
+        existingStyle = existingStyle.replace(/padding\s*:[^;]+;?/g, '');
+
+        const compactStyle = 'padding: 1px 3px; line-height: normal; vertical-align: middle;';
+        $cell.attr('style', (existingStyle.trim() + ' ' + compactStyle).trim());
+
+        // Assegurar que els paràgrafs dins de les cel·les també tinguin interlineat sencillo i sense marge
+        $cell.find('p').each((_l, pElement) => {
+          const $p = $(pElement);
+          let pExistingStyle = $p.attr('style') || '';
+          // Eliminar propietats de line-height i margin existents
+          pExistingStyle = pExistingStyle.replace(/line-height\s*:[^;]+;?/g, '');
+          pExistingStyle = pExistingStyle.replace(/margin\s*:[^;]+;?/g, '');
+          $p.attr('style', (pExistingStyle.trim() + ' margin: 0; line-height: normal;').trim());
+        });
       });
     });
     
     const cleanedHtml = $('body').html() || '';
-    console.log("Neteja d'HTML i optimització de taules completada.");
+    console.log("Neteja d'HTML i optimització de taules (interlineat sencillo) completada.");
     // ---------------------------------------------
 
     // Retornem l'HTML netejat i els missatges
