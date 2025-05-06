@@ -17,7 +17,7 @@ export default function RootLayout({
 }) {
   return (
     <html lang="ca">
-      <body className={inter.className}>
+      <body className={`${inter.className} bg-gray-100`}>
         <SessionProvider>
           <AppNavbar />
           {children}

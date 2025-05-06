@@ -23,6 +23,7 @@ const TemplateEditor: React.FC<TemplateEditorProps> = ({ initialTemplateData, mo
   const [hoverY, setHoverY] = useState<number>(0);
   const [activeParagraphId, setActiveParagraphId] = useState<string | null>(null);
   const [iaPrompt, setIaPrompt] = useState<string>('');
+  const iaPromptInputRef = useRef<HTMLTextAreaElement>(null);
 
   // assign unique ids to paragraphs
   useEffect(() => {
@@ -66,8 +67,17 @@ const TemplateEditor: React.FC<TemplateEditorProps> = ({ initialTemplateData, mo
     contentRef.current.querySelectorAll('p.ia-selected').forEach(el => el.classList.remove('ia-selected'));
     p.classList.add('ia-selected');
     setActiveParagraphId(id);
-    setIaPrompt(`Refina automàticament aquest paràgraf: "${p.textContent}"`);
+    setIaPrompt(''); // Clear the prompt
   };
+
+  useEffect(() => {
+    if (activeParagraphId && iaPromptInputRef.current) {
+      // Timeout to ensure the element is visible and focusable
+      setTimeout(() => {
+        iaPromptInputRef.current?.focus();
+      }, 0);
+    }
+  }, [activeParagraphId]);
 
   // Excel mapping logic remains unchanged
   const handleTextSelection = () => {
@@ -199,26 +209,34 @@ const TemplateEditor: React.FC<TemplateEditorProps> = ({ initialTemplateData, mo
                 </button>
               )}
               
-              {iaMode && activeParagraphId && iaPrompt && contentWrapperRef.current && (
+              {iaMode && activeParagraphId && contentWrapperRef.current && (
                 <div
-                  className="absolute left-6 w-[200px] p-2 bg-gray-50 border rounded shadow text-xs"
+                  className="absolute left-6 w-[200px] p-2 bg-gray-50 border rounded shadow text-xs flex flex-col" // Added flex flex-col
                   style={{
-                    top: contentRef.current 
+                    top: contentRef.current
                       ? contentRef.current.querySelector(`p[data-paragraph-id="${activeParagraphId}"]`)
                         ? (() => {
-                            const pElement = contentRef.current.querySelector(`p[data-paragraph-id="${activeParagraphId}"]`)!;
-                            const paragraphRect = pElement.getBoundingClientRect();
-                            const wrapperRect = contentWrapperRef.current.getBoundingClientRect();
-                            const paragraphHeight = paragraphRect.height;
-                            // Calculate exact middle position just like the hover button
-                            return paragraphRect.top - wrapperRect.top + (paragraphHeight / 2);
-                          })()
+                          const pElement = contentRef.current.querySelector(`p[data-paragraph-id="${activeParagraphId}"]`)!;
+                          const paragraphRect = pElement.getBoundingClientRect();
+                          const wrapperRect = contentWrapperRef.current.getBoundingClientRect();
+                          const paragraphHeight = paragraphRect.height;
+                          return paragraphRect.top - wrapperRect.top + (paragraphHeight / 2);
+                        })()
                         : 0
                       : 0,
-                    transform: 'translateX(-110%) translateY(-50%)' // Position left of the document and center vertically
+                    transform: 'translateX(-110%) translateY(-50%)'
                   }}
                 >
-                  <strong>Prompt IA:</strong> {iaPrompt}
+                  <label htmlFor="iaPromptInput" className="block text-xs font-medium text-gray-700 mb-1">Prompt IA:</label>
+                  <textarea
+                    ref={iaPromptInputRef}
+                    id="iaPromptInput"
+                    value={iaPrompt}
+                    onChange={(e) => setIaPrompt(e.target.value)}
+                    className="w-full p-1 border border-gray-300 rounded shadow-sm focus:ring-indigo-500 focus:border-indigo-500 sm:text-xs"
+                    rows={3} // Default to 3 rows, can be adjusted
+                  />
+                  {/* You might want a button here to submit the prompt */}
                 </div>
               )}
             </div>
