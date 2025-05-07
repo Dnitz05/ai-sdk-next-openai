@@ -303,9 +303,18 @@ const TemplateEditor: React.FC<TemplateEditorProps> = ({ initialTemplateData, mo
                       // overflow: 'hidden', // Removed to prevent cutting off content
                     }}
                   >
-                    <label htmlFor={`iaPromptInput-${pid}`} className="block text-xs font-medium text-gray-700 mb-1 shrink-0">
-                      Prompt IA ({pid.substring(0,5)}...):
-                    </label>
+                    <div className="flex justify-between items-center mb-1 shrink-0">
+                      <label htmlFor={`iaPromptInput-${pid}`} className="text-xs font-medium text-gray-700">
+                        Prompt IA ({pid.substring(0,5)}...):
+                      </label>
+                      <button
+                        onClick={() => handleSaveIaPrompt(pid)}
+                        className="ml-2 px-2 py-0.5 bg-indigo-600 text-white text-xs rounded hover:bg-indigo-700"
+                        style={{ lineHeight: 'normal' }} // Adjust line height for small button
+                      >
+                        Desar
+                      </button>
+                    </div>
                     <textarea
                       ref={el => { iaTextAreaRefs.current[pid] = el; }}
                       id={`iaPromptInput-${pid}`}
@@ -320,12 +329,7 @@ const TemplateEditor: React.FC<TemplateEditorProps> = ({ initialTemplateData, mo
                       className="w-full p-1 border border-gray-300 rounded shadow-sm focus:ring-indigo-500 focus:border-indigo-500 sm:text-xs grow"
                       style={{ resize: 'none', overflowY: 'auto', minHeight: '30px' }} // Ensure textarea is usable even if paragraph is tiny
                     />
-                    <button
-                      onClick={() => handleSaveIaPrompt(pid)}
-                      className="mt-1 px-2 py-1 bg-indigo-600 text-white text-xs rounded hover:bg-indigo-700 shrink-0"
-                    >
-                      Desar Prompt
-                    </button>
+                    {/* Save button moved to the top row */}
                   </div>
                 );
               })}
