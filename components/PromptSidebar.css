@@ -99,14 +99,14 @@
   background-color: #f59e0b;
 }
 
-/* Visual connector */
+/* Visual connector - updated to dotted line */
 .prompt-connector {
   position: absolute;
   right: -1px;
   top: 50%;
   width: 8px;
-  height: 1px;
-  background-color: #9ca3af;
+  height: 0;
+  border-top: 1px dashed #9ca3af;
   transform: translateY(-50%);
 }
 

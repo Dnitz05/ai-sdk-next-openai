@@ -83,12 +83,7 @@ const TemplateEditor: React.FC<TemplateEditorProps> = ({ initialTemplateData, mo
       setPrompts(updatedPrompts);
     }
     
-    // Legacy code for backward compatibility
-    if (!iaMode || !contentRef.current || !contentWrapperRef.current) {
-      setParagraphButtonVisuals({}); // Clear visuals if IA mode is off or refs not ready
-      return;
-    }
-
+    // Update paragraph button visuals
     const newVisuals: Record<string, ParagraphButtonVisual> = {};
     const ps = contentRef.current.querySelectorAll('p[data-paragraph-id]');
     const wrapRect = contentWrapperRef.current.getBoundingClientRect();
@@ -99,16 +94,17 @@ const TemplateEditor: React.FC<TemplateEditorProps> = ({ initialTemplateData, mo
 
       const rect = pElement.getBoundingClientRect();
       const yButton = (rect.top + rect.height / 2) - wrapRect.top;
-      const hasSavedPrompt = !!iaPromptsData[pid]?.savedPrompt;
-      const showButton = iaMode && (hasSavedPrompt || pid === hoveredPId);
+      const hasSavedPrompt = !!prompts.find(p => p.paragraphId === pid && p.status === 'saved');
+      // Always show buttons for all paragraphs when in IA mode
+      const showButton = iaMode;
       
       newVisuals[pid] = { yButton, showButton, hasSavedPrompt };
     });
     setParagraphButtonVisuals(newVisuals);
     
-  }, [iaMode, convertedHtml, hoveredPId, iaPromptsData, prompts, contentRef, contentWrapperRef]);
+  }, [iaMode, convertedHtml, prompts, contentRef, contentWrapperRef]);
 
-  // Handle mouse over paragraph to show IA button
+  // Handle mouse over paragraph to track hovered paragraph
   const handleMouseOver = (e: MouseEvent<HTMLDivElement>) => {
     if (!iaMode) return;
     const target = e.target as HTMLElement;
@@ -381,17 +377,9 @@ const TemplateEditor: React.FC<TemplateEditorProps> = ({ initialTemplateData, mo
                 {convertedHtml ? (
                   <div
                     ref={contentRef}
-                    className={`prose max-w-none${iaMode ? ' ia-mode-actiu' : ''}`}
+                    className="prose max-w-none"
                     dangerouslySetInnerHTML={{ __html: convertedHtml }}
                     onMouseUp={handleTextSelection}
-                    onClick={iaMode ? (e) => {
-                      const target = e.target as HTMLElement;
-                      const p = target.closest('p[data-paragraph-id]');
-                      if (p) {
-                        handleParagraphClick((p as HTMLElement).dataset.paragraphId!);
-                      }
-                    } : undefined}
-                    style={{ cursor: iaMode ? 'pointer' : 'auto' }}
                   />
                 ) : (
                   <p className="text-gray-400 italic text-center py-10">Carrega un DOCX per començar.</p>
@@ -410,7 +398,36 @@ const TemplateEditor: React.FC<TemplateEditorProps> = ({ initialTemplateData, mo
                 </div>
               </div>
               
-              {/* Visual connectors between prompts and paragraphs */}
+              {/* Circular IA buttons for each paragraph */}
+              {iaMode && Object.entries(paragraphButtonVisuals).map(([pid, visual]) => {
+                if (!visual.showButton) return null;
+                
+                // Check if this paragraph has an associated prompt
+                const hasPrompt = prompts.some(p => p.paragraphId === pid);
+                const isActive = prompts.some(p => p.paragraphId === pid && p.id === activePromptId);
+                
+                return (
+                  <button
+                    key={`btn-${pid}`}
+                    className={`absolute left-6 w-6 h-6 text-white rounded-full focus:outline-none flex items-center justify-center text-xs p-0 transition-colors
+                              ${isActive 
+                                ? 'bg-indigo-600 ring-2 ring-indigo-300' 
+                                : hasPrompt 
+                                  ? 'bg-green-600 hover:bg-green-500' 
+                                  : 'bg-indigo-600 hover:bg-indigo-500'}`}
+                    style={{ 
+                      top: visual.yButton,
+                      transform: 'translateY(-50%)'
+                    }}
+                    onClick={() => handleParagraphClick(pid)}
+                    aria-label={`IA per paràgraf ${pid.substring(0,5)}`}
+                  >
+                    IA
+                  </button>
+                );
+              })}
+              
+              {/* Dotted line connectors between prompts and paragraphs */}
               {iaMode && prompts.map(prompt => {
                 const paragraph = findParagraphElement(prompt.paragraphId, contentRef);
                 if (!paragraph || !contentWrapperRef.current) return null;
@@ -422,10 +439,10 @@ const TemplateEditor: React.FC<TemplateEditorProps> = ({ initialTemplateData, mo
                 return (
                   <div
                     key={`connector-${prompt.id}`}
-                    className="absolute left-0 h-0.5 bg-gray-300"
+                    className="absolute left-0 h-0.5 border-t border-dashed border-gray-400"
                     style={{
                       top: y,
-                      width: '10px',
+                      width: '20px',
                       transform: 'translateY(-50%)'
                     }}
                   />
@@ -506,7 +523,7 @@ const TemplateEditor: React.FC<TemplateEditorProps> = ({ initialTemplateData, mo
                 <div className="p-3">
                   <div className="text-xs text-gray-700 space-y-2">
                     <p>Per inserir un marcador d'Excel al text, selecciona una capçalera i després selecciona el text que vols vincular.</p>
-                    <p>Fes clic sobre un paràgraf per afegir o editar un prompt d'IA.</p>
+                    <p>Fes clic al botó circular al costat d'un paràgraf per afegir o editar un prompt d'IA.</p>
                     <p>Els prompts es mostren a la barra lateral esquerra, ordenats segons la posició al document.</p>
                   </div>
                 </div>
@@ -521,11 +538,6 @@ const TemplateEditor: React.FC<TemplateEditorProps> = ({ initialTemplateData, mo
         .highlight-paragraph {
           background-color: rgba(79, 70, 229, 0.1);
           transition: background-color 0.3s ease;
-        }
-        
-        .ia-mode-actiu p[data-paragraph-id]:hover {
-          background-color: rgba(79, 70, 229, 0.05);
-          cursor: pointer;
         }
         
         .ia-selected {

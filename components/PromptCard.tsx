@@ -202,10 +202,13 @@ const PromptCard: React.FC<PromptCardProps> = ({
         ></div>
       </div>
       
-      {/* Visual connector to paragraph */}
+      {/* Visual connector to paragraph - dotted line */}
       <div 
-        className="prompt-connector absolute right-0 top-1/2 w-2 h-0.5 bg-gray-300"
-        style={{ transform: 'translateY(-50%)' }}
+        className="prompt-connector absolute right-0 top-1/2 border-t border-dashed border-gray-400"
+        style={{ 
+          width: '10px',
+          transform: 'translateY(-50%)'
+        }}
       ></div>
     </div>
   );
