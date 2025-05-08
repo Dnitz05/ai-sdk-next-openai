@@ -59,6 +59,12 @@ const PromptCard: React.FC<PromptCardProps> = ({
 
   // Handle save action
   const handleSave = () => {
+    // If content is empty, delete the prompt instead of saving it
+    if (content.trim() === '') {
+      onDelete(prompt.id);
+      return;
+    }
+    
     onUpdate({
       ...prompt,
       content,
@@ -70,8 +76,26 @@ const PromptCard: React.FC<PromptCardProps> = ({
 
   // Handle cancel action
   const handleCancel = () => {
+    // If the prompt was new (empty content) and user cancels, delete it
+    if (prompt.content.trim() === '' && content.trim() === '') {
+      onDelete(prompt.id);
+      return;
+    }
+    
     setContent(prompt.content);
     setIsEditing(false);
+  };
+
+  // Handle blur event on textarea
+  const handleBlur = () => {
+    // If content is empty, delete the prompt
+    if (content.trim() === '') {
+      onDelete(prompt.id);
+      return;
+    }
+    
+    // Otherwise save the content
+    handleSave();
   };
 
   // Handle expand/collapse toggle
@@ -172,6 +196,7 @@ const PromptCard: React.FC<PromptCardProps> = ({
               ref={textareaRef}
               value={content}
               onChange={(e) => setContent(e.target.value)}
+              onBlur={handleBlur}
               className="w-full p-1.5 text-sm border border-gray-300 rounded focus:ring-indigo-500 focus:border-indigo-500"
               style={{ 
                 resize: 'none',
