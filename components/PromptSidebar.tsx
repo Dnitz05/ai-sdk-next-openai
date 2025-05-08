@@ -10,6 +10,7 @@ export interface IAPrompt {
   updatedAt: Date;
   position: number;
   isExpanded: boolean;
+  isEditing?: boolean; // Added isEditing property as optional
 }
 
 interface PromptSidebarProps {

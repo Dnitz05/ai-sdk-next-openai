@@ -94,15 +94,16 @@ const TemplateEditor: React.FC<TemplateEditorProps> = ({ initialTemplateData, mo
 
       const rect = pElement.getBoundingClientRect();
       const yButton = (rect.top + rect.height / 2) - wrapRect.top;
-      const hasSavedPrompt = !!prompts.find(p => p.paragraphId === pid && p.status === 'saved');
-      // Always show buttons for all paragraphs when in IA mode
-      const showButton = iaMode;
+      const hasSavedPrompt = !!prompts.find(p => p.paragraphId === pid && (p.status === 'saved' || p.status === 'draft'));
+      
+      // Show button only if paragraph is hovered or has a prompt
+      const showButton = iaMode && (hoveredPId === pid || hasSavedPrompt);
       
       newVisuals[pid] = { yButton, showButton, hasSavedPrompt };
     });
     setParagraphButtonVisuals(newVisuals);
     
-  }, [iaMode, convertedHtml, prompts, contentRef, contentWrapperRef]);
+  }, [iaMode, convertedHtml, prompts, contentRef, contentWrapperRef, hoveredPId]);
 
   // Handle mouse over paragraph to track hovered paragraph
   const handleMouseOver = (e: MouseEvent<HTMLDivElement>) => {
@@ -145,8 +146,14 @@ const TemplateEditor: React.FC<TemplateEditorProps> = ({ initialTemplateData, mo
         contentWrapperRef
       );
       
-      setPrompts(prev => [...prev, newPrompt]);
-      setActivePromptId(newPrompt.id);
+      // Set isEditing to true for the new prompt to open the text box immediately
+      const newPromptWithEditing = {
+        ...newPrompt,
+        isEditing: true
+      };
+      
+      setPrompts(prev => [...prev, newPromptWithEditing]);
+      setActivePromptId(newPromptWithEditing.id);
     }
     
     // Legacy code for backward compatibility
@@ -398,7 +405,7 @@ const TemplateEditor: React.FC<TemplateEditorProps> = ({ initialTemplateData, mo
                 </div>
               </div>
               
-              {/* Circular IA buttons for each paragraph */}
+              {/* Circular IA buttons for each paragraph - only shown on hover or if has prompt */}
               {iaMode && Object.entries(paragraphButtonVisuals).map(([pid, visual]) => {
                 if (!visual.showButton) return null;
                 
@@ -417,7 +424,9 @@ const TemplateEditor: React.FC<TemplateEditorProps> = ({ initialTemplateData, mo
                                   : 'bg-indigo-600 hover:bg-indigo-500'}`}
                     style={{ 
                       top: visual.yButton,
-                      transform: 'translateY(-50%)'
+                      transform: 'translateY(-50%)',
+                      opacity: hoveredPId === pid || hasPrompt || isActive ? 1 : 0.8,
+                      transition: 'opacity 0.2s ease'
                     }}
                     onClick={() => handleParagraphClick(pid)}
                     aria-label={`IA per paràgraf ${pid.substring(0,5)}`}
@@ -523,7 +532,7 @@ const TemplateEditor: React.FC<TemplateEditorProps> = ({ initialTemplateData, mo
                 <div className="p-3">
                   <div className="text-xs text-gray-700 space-y-2">
                     <p>Per inserir un marcador d'Excel al text, selecciona una capçalera i després selecciona el text que vols vincular.</p>
-                    <p>Fes clic al botó circular al costat d'un paràgraf per afegir o editar un prompt d'IA.</p>
+                    <p>Passa el ratolí sobre un paràgraf per veure el botó d'IA i fes-hi clic per afegir o editar un prompt.</p>
                     <p>Els prompts es mostren a la barra lateral esquerra, ordenats segons la posició al document.</p>
                   </div>
                 </div>

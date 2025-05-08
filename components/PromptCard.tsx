@@ -16,17 +16,46 @@ const PromptCard: React.FC<PromptCardProps> = ({
   onDelete,
   onSelect
 }) => {
-  const [isEditing, setIsEditing] = useState(false);
+  // Use the isEditing property from the prompt if it exists, otherwise use local state
+  const [isEditing, setIsEditing] = useState(prompt.isEditing || false);
   const [content, setContent] = useState(prompt.content);
   const [isConfirmingDelete, setIsConfirmingDelete] = useState(false);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
-  // Focus textarea when editing starts
+  // Focus textarea when editing starts or when the component mounts with isEditing=true
   useEffect(() => {
     if (isEditing && textareaRef.current) {
       textareaRef.current.focus();
+      
+      // Place cursor at the end of the text
+      const length = textareaRef.current.value.length;
+      textareaRef.current.setSelectionRange(length, length);
     }
   }, [isEditing]);
+
+  // Check if the prompt has the isEditing property and update local state
+  useEffect(() => {
+    if (prompt.isEditing) {
+      setIsEditing(true);
+      // Clear the isEditing flag in the prompt to avoid reopening on re-render
+      onUpdate({
+        ...prompt,
+        isEditing: false
+      });
+    }
+  }, [prompt.isEditing, prompt.id]);
+
+  // Auto-resize textarea based on content
+  useEffect(() => {
+    if (textareaRef.current) {
+      // Reset height to auto to get the correct scrollHeight
+      textareaRef.current.style.height = 'auto';
+      
+      // Set the height to scrollHeight to fit the content
+      const scrollHeight = textareaRef.current.scrollHeight;
+      textareaRef.current.style.height = `${Math.min(scrollHeight, 200)}px`;
+    }
+  }, [content, isEditing]);
 
   // Handle save action
   const handleSave = () => {
@@ -81,7 +110,7 @@ const PromptCard: React.FC<PromptCardProps> = ({
             : 'border-gray-200 bg-white'
       } shadow-sm transition-all duration-200 overflow-hidden`}
       style={{ 
-        maxHeight: prompt.isExpanded ? '500px' : '100px',
+        maxHeight: prompt.isExpanded ? '500px' : isEditing ? '300px' : '100px',
         position: 'relative'
       }}
     >
@@ -144,8 +173,13 @@ const PromptCard: React.FC<PromptCardProps> = ({
               value={content}
               onChange={(e) => setContent(e.target.value)}
               className="w-full p-1.5 text-sm border border-gray-300 rounded focus:ring-indigo-500 focus:border-indigo-500"
-              rows={4}
-              style={{ resize: 'vertical' }}
+              style={{ 
+                resize: 'none',
+                minHeight: '60px',
+                maxHeight: '200px',
+                overflow: 'auto'
+              }}
+              placeholder="Escriu el teu prompt d'IA aquí..."
             />
             <div className="flex justify-end space-x-2 mt-2">
               <button
@@ -188,6 +222,14 @@ const PromptCard: React.FC<PromptCardProps> = ({
                 ? `${prompt.content.substring(0, 100)}...` 
                 : prompt.content
             }
+            {!prompt.isExpanded && prompt.content.length > 100 && (
+              <button 
+                onClick={toggleExpand}
+                className="text-xs text-indigo-600 hover:text-indigo-800 ml-1"
+              >
+                Veure més
+              </button>
+            )}
           </div>
         )}
       </div>
