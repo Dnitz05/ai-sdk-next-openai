@@ -144,7 +144,12 @@ const PromptCard: React.FC<PromptCardProps> = ({
           className="paragraph-indicator flex items-center text-xs font-medium cursor-pointer"
           onClick={onSelect}
         >
-          <span className={`w-2 h-2 rounded-full mr-1.5 ${isActive ? 'bg-indigo-500' : 'bg-gray-400'}`}></span>
+          {/* Display prompt order number in a circle */}
+          <span className={`w-4 h-4 rounded-full mr-1.5 flex items-center justify-center text-white text-xs font-bold ${
+            isActive ? 'bg-indigo-600' : 'bg-gray-500'
+          }`}>
+            {prompt.order || ''}
+          </span>
           <span>¶ {paragraphIdentifier}</span>
         </div>
         

@@ -11,6 +11,7 @@ export interface IAPrompt {
   position: number;
   isExpanded: boolean;
   isEditing?: boolean; // Added isEditing property as optional
+  order?: number; // Added order property for sequential numbering
 }
 
 interface PromptSidebarProps {

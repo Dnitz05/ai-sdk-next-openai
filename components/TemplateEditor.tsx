@@ -50,6 +50,9 @@ const TemplateEditor: React.FC<TemplateEditorProps> = ({ initialTemplateData, mo
   const [activePromptId, setActivePromptId] = useState<string | null>(null);
   const [hoveredPId, setHoveredPId] = useState<string | null>(null);
   
+  // Counter for sequential prompt numbering
+  const [nextPromptNumber, setNextPromptNumber] = useState<number>(1);
+  
   // Legacy state kept for backward compatibility
   const [iaPromptsData, setIaPromptsData] = useState<Record<string, ParagraphIaData>>({});
   const [paragraphButtonVisuals, setParagraphButtonVisuals] = useState<Record<string, ParagraphButtonVisual>>({});
@@ -147,10 +150,15 @@ const TemplateEditor: React.FC<TemplateEditorProps> = ({ initialTemplateData, mo
       );
       
       // Set isEditing to true for the new prompt to open the text box immediately
+      // and assign a sequential order number
       const newPromptWithEditing = {
         ...newPrompt,
-        isEditing: true
+        isEditing: true,
+        order: nextPromptNumber
       };
+      
+      // Increment the counter for the next prompt
+      setNextPromptNumber(prev => prev + 1);
       
       setPrompts(prev => [...prev, newPromptWithEditing]);
       setActivePromptId(newPromptWithEditing.id);
@@ -340,6 +348,7 @@ const TemplateEditor: React.FC<TemplateEditorProps> = ({ initialTemplateData, mo
                   setIaPromptsData({}); // Clear active editors
                   setParagraphButtonVisuals({}); // Clear button visuals
                   setPrompts([]); // Clear prompts
+                  setNextPromptNumber(1); // Reset prompt counter
                 }
               }}
             >
@@ -410,8 +419,12 @@ const TemplateEditor: React.FC<TemplateEditorProps> = ({ initialTemplateData, mo
                 if (!visual.showButton) return null;
                 
                 // Check if this paragraph has an associated prompt
-                const hasPrompt = prompts.some(p => p.paragraphId === pid);
-                const isActive = prompts.some(p => p.paragraphId === pid && p.id === activePromptId);
+                const promptForParagraph = prompts.find(p => p.paragraphId === pid);
+                const hasPrompt = !!promptForParagraph;
+                const isActive = promptForParagraph?.id === activePromptId;
+                
+                // Get the prompt number for display
+                const promptNumber = promptForParagraph?.order || '';
                 
                 return (
                   <button
@@ -431,7 +444,7 @@ const TemplateEditor: React.FC<TemplateEditorProps> = ({ initialTemplateData, mo
                     onClick={() => handleParagraphClick(pid)}
                     aria-label={`IA per paràgraf ${pid.substring(0,5)}`}
                   >
-                    IA
+                    {hasPrompt ? promptNumber : ''}
                   </button>
                 );
               })}
