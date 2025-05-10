@@ -121,9 +121,6 @@ const PromptCard: React.FC<PromptCardProps> = ({
     setIsConfirmingDelete(false);
   };
 
-  // Get paragraph number or ID for display
-  const paragraphIdentifier = prompt.paragraphId.substring(0, 5);
-
   // Determine if the order number should be displayed
   // Only show the order number if the prompt has been saved with content
   const showOrderNumber = prompt.status === 'saved' && prompt.order !== undefined;
@@ -158,7 +155,7 @@ const PromptCard: React.FC<PromptCardProps> = ({
           ) : (
             <span className="w-4 h-4 mr-1.5"></span> // Empty placeholder to maintain spacing
           )}
-          <span>¶ {paragraphIdentifier}</span>
+          {/* Removed the paragraph identifier text */}
         </div>
         
         <div className="prompt-controls flex space-x-1">
