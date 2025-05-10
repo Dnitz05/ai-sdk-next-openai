@@ -36,6 +36,16 @@ const TemplateEditor: React.FC<TemplateEditorProps> = ({ initialTemplateData, mo
   const docxName = initialTemplateData?.base_docx_name || '';
   const excelName = initialTemplateData?.excel_file_name || '';
   const excelHeaders: string[] = initialTemplateData?.excel_headers || [];
+  
+  // Use creation and modification dates from initialTemplateData if available,
+  // otherwise use default historical dates
+  const createdDate = initialTemplateData?.created_at 
+    ? new Date(initialTemplateData.created_at) 
+    : new Date(2024, 0, 15); // January 15, 2024 as default
+  
+  const modifiedDate = initialTemplateData?.updated_at 
+    ? new Date(initialTemplateData.updated_at) 
+    : new Date(2024, 3, 5); // April 5, 2024 as default
 
   const [selectedExcelHeader, setSelectedExcelHeader] = useState<string | null>(null);
   const [convertedHtml, setConvertedHtml] = useState<string>(initialTemplateData?.final_html || '');
@@ -496,19 +506,15 @@ const TemplateEditor: React.FC<TemplateEditorProps> = ({ initialTemplateData, mo
                 </div>
               )}
               
-              {/* Document info */}
+              {/* Document info - with historical dates */}
               <div className="flex items-center gap-3">
                 <div className="flex items-center">
                   <span className="text-gray-500 mr-1">Creat:</span>
-                  <span>{new Date().toLocaleDateString()}</span>
+                  <span>{createdDate.toLocaleDateString()}</span>
                 </div>
                 <div className="flex items-center">
                   <span className="text-gray-500 mr-1">Modificat:</span>
-                  <span>{new Date().toLocaleDateString()}</span>
-                </div>
-                <div className="flex items-center">
-                  <span className="text-gray-500 mr-1">Mida:</span>
-                  <span>{convertedHtml ? Math.round(convertedHtml.length / 1024) : 0} KB</span>
+                  <span>{modifiedDate.toLocaleDateString()}</span>
                 </div>
               </div>
             </div>
