@@ -4,12 +4,23 @@ import { createServerSupabaseClient } from '@/lib/supabase/serverClient'
 import { createClient } from '@supabase/supabase-js'
 import { cookies } from 'next/headers'
 
+// Interfície unificada per a les instruccions d'IA
+interface IAInstruction {
+  id: string;
+  paragraphId?: string;
+  content?: string;
+  prompt?: string;
+  status?: string;
+  order?: number;
+}
+
 interface SaveConfigPayload {
   baseDocxName: string | null
   config_name?: string
   excelInfo: { fileName: string | null; headers: string[] | null } | null
   linkMappings: { id: string; excelHeader: string; selectedText: string }[]
-  aiInstructions: { id: string; prompt: string; originalText?: string }[]
+  aiInstructions: IAInstruction[] // Antic format: { id: string; prompt: string; originalText?: string }[]
+  ai_instructions?: IAInstruction[] // Nou format que pot arribar directament
   finalHtml: string
 }
 
@@ -85,7 +96,7 @@ const supabase = await createServerSupabaseClient()
     console.log("Cliente de servicio creado, preparando datos...")
 
     // 5. Serializar campos JSON con mayor seguridad
-    let linkMappings: any[], aiInstructions: any[]
+    let linkMappings: any[], aiInstructions: IAInstruction[]
     try {
       // Manejar arrays vacíos
       if (!configurationData.linkMappings || !Array.isArray(configurationData.linkMappings)) {
@@ -94,10 +105,23 @@ const supabase = await createServerSupabaseClient()
         linkMappings = configurationData.linkMappings
       }
       
-      if (!configurationData.aiInstructions || !Array.isArray(configurationData.aiInstructions)) {
-        aiInstructions = []
+      // Processar ai_instructions o aiInstructions, donant prioritat a ai_instructions si existeix
+      if (Array.isArray(configurationData.ai_instructions)) {
+        // Nou format: ja té l'estructura correcta
+        aiInstructions = configurationData.ai_instructions
+      } else if (Array.isArray(configurationData.aiInstructions)) {
+        // Antic format: cal transformar-lo
+        aiInstructions = configurationData.aiInstructions.map((instr: any) => ({
+          id: instr.id || `ia-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
+          paragraphId: instr.originalText || '',
+          content: instr.prompt || '',
+          prompt: instr.prompt || '',
+          status: instr.status || 'saved',
+          order: instr.order || 0
+        }))
       } else {
-        aiInstructions = configurationData.aiInstructions
+        // Si no hi ha cap dels dos, inicialitzar buit
+        aiInstructions = []
       }
     } catch (e) {
       console.error("Error procesando datos JSON:", e)

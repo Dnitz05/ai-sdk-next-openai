@@ -438,10 +438,14 @@ const TemplateEditor: React.FC<TemplateEditorProps> = ({ initialTemplateData, mo
             headers: excelHeaders
           },
           linkMappings: linkMappings,
-          aiInstructions: prompts.map(p => ({
+          // Utilitzar el mateix format tant per la creació com per l'edició
+          ai_instructions: prompts.map(p => ({
             id: p.id,
-            prompt: p.content,
-            originalText: p.paragraphId // Store paragraph ID as reference
+            paragraphId: p.paragraphId,
+            content: p.content,
+            prompt: p.content,  // Per compatibilitat
+            status: p.status || 'saved',
+            order: p.order || 0
           })),
           finalHtml: convertedHtml
         };
