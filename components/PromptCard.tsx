@@ -157,27 +157,18 @@ const PromptCard: React.FC<PromptCardProps> = ({
         </div>
         
         <div className="prompt-controls flex space-x-1">
-          <button 
-            onClick={toggleExpand}
-            className="p-1 text-gray-500 hover:text-gray-700 rounded"
-            title={prompt.isExpanded ? "Col·lapsar" : "Expandir"}
-          >
-            <svg xmlns="http://www.w3.org/2000/svg" className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-              {prompt.isExpanded 
-                ? <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 15l7-7 7 7" />
-                : <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
-              }
-            </svg>
-          </button>
-          
-          {!isEditing && (
+          {/* Only show expand button if content is long enough to need expansion */}
+          {prompt.content.length > 100 && (
             <button 
-              onClick={() => setIsEditing(true)}
-              className="p-1 text-gray-500 hover:text-indigo-600 rounded"
-              title="Editar"
+              onClick={toggleExpand}
+              className="p-1 text-gray-500 hover:text-gray-700 rounded"
+              title={prompt.isExpanded ? "Col·lapsar" : "Expandir"}
             >
               <svg xmlns="http://www.w3.org/2000/svg" className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" />
+                {prompt.isExpanded 
+                  ? <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 15l7-7 7 7" />
+                  : <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                }
               </svg>
             </button>
           )}
@@ -248,7 +239,11 @@ const PromptCard: React.FC<PromptCardProps> = ({
             </div>
           </div>
         ) : (
-          <div className="prompt-text text-sm text-gray-700 whitespace-pre-wrap">
+          <div 
+            className="prompt-text text-sm text-gray-700 whitespace-pre-wrap cursor-pointer hover:bg-gray-50 p-1 rounded"
+            onClick={() => !isConfirmingDelete && setIsEditing(true)}
+            title="Fes clic per editar"
+          >
             {prompt.isExpanded 
               ? prompt.content 
               : prompt.content.length > 100 
@@ -257,7 +252,10 @@ const PromptCard: React.FC<PromptCardProps> = ({
             }
             {!prompt.isExpanded && prompt.content.length > 100 && (
               <button 
-                onClick={toggleExpand}
+                onClick={(e) => {
+                  e.stopPropagation(); // Prevent triggering edit mode
+                  toggleExpand();
+                }}
                 className="text-xs text-indigo-600 hover:text-indigo-800 ml-1"
               >
                 Veure més
