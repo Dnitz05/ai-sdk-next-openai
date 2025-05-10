@@ -424,8 +424,43 @@ const TemplateEditor: React.FC<TemplateEditorProps> = ({ initialTemplateData, mo
                 <button 
                   className="px-3 py-1 rounded text-sm bg-green-600 text-white hover:bg-green-700 flex items-center"
                   onClick={() => {
-                    // In a real app, this would create a duplicate in the backend
-                    alert(`S'ha creat una còpia: "Còpia de ${templateTitleValue}"`);
+                    // Create a duplicate template
+                    const duplicateTitle = `Còpia de ${templateTitleValue}`;
+                    
+                    // In a real app, this would be an API call to create a duplicate in the backend
+                    // and then redirect to the new template's edit page
+                    
+                    // Simulate creating a duplicate by updating the current template
+                    setTemplateTitleValue(duplicateTitle);
+                    
+                    // Reset the prompts for the new template
+                    setPrompts([]);
+                    setNextPromptNumber(1);
+                    setActivePromptId(null);
+                    setIaPromptsData({});
+                    setParagraphButtonVisuals({});
+                    
+                    // Mark as having unsaved changes
+                    setHasUnsavedChanges(true);
+                    
+                    // Show a success message
+                    const successMessage = `S'ha creat una còpia: "${duplicateTitle}"`;
+                    const messageElement = document.createElement('div');
+                    messageElement.className = 'fixed top-4 right-4 bg-green-100 border border-green-400 text-green-700 px-4 py-3 rounded z-50';
+                    messageElement.innerHTML = `
+                      <div class="flex items-center">
+                        <svg class="h-5 w-5 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7" />
+                        </svg>
+                        <span>${successMessage}</span>
+                      </div>
+                    `;
+                    document.body.appendChild(messageElement);
+                    
+                    // Remove the message after 3 seconds
+                    setTimeout(() => {
+                      document.body.removeChild(messageElement);
+                    }, 3000);
                   }}
                   title="Duplicar plantilla"
                 >
