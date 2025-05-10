@@ -35,7 +35,10 @@ const TemplateEditor: React.FC<TemplateEditorProps> = ({ initialTemplateData, mo
   const templateTitle = initialTemplateData?.config_name || '';
   const docxName = initialTemplateData?.base_docx_name || '';
   const excelName = initialTemplateData?.excel_file_name || '';
-  const excelHeaders: string[] = initialTemplateData?.excel_headers || [];
+  const initialExcelHeaders: string[] = initialTemplateData?.excel_headers || [];
+  
+  // State for Excel headers so they can be updated
+  const [excelHeaders, setExcelHeaders] = useState<string[]>(initialExcelHeaders);
   
   // Use creation and modification dates from initialTemplateData if available,
   // otherwise use default historical dates
@@ -361,73 +364,175 @@ const TemplateEditor: React.FC<TemplateEditorProps> = ({ initialTemplateData, mo
   };
 
   // Handle file selection
-  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const files = e.target.files;
     if (!files || files.length === 0) return;
     
     const file = files[0];
     const fileType = e.target.getAttribute('data-file-type');
     
-    if (fileType === 'docx') {
-      // In a real app, this would upload the DOCX file and process it
-      // For now, just update the name
-      setDocxNameValue(file.name);
-      setHasUnsavedChanges(true);
-      
-      // Show success message
-      const successMessage = `Arxiu DOCX seleccionat: ${file.name}`;
-      const messageElement = document.createElement('div');
-      messageElement.className = 'fixed top-4 right-4 bg-green-100 border border-green-400 text-green-700 px-4 py-3 rounded z-50';
-      messageElement.innerHTML = `
-        <div class="flex items-center">
-          <svg class="h-5 w-5 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7" />
-          </svg>
-          <span>${successMessage}</span>
-        </div>
-      `;
-      document.body.appendChild(messageElement);
-      setTimeout(() => document.body.removeChild(messageElement), 3000);
-    } else if (fileType === 'excel') {
-      // In a real app, this would upload the Excel file and extract headers
-      // For now, just update the name and add some dummy headers
-      setExcelNameValue(file.name);
-      setHasUnsavedChanges(true);
-      
-      // Add some dummy Excel headers for demonstration
-      const dummyHeaders = [
-        'Nom', 'Cognom', 'Email', 'Telèfon', 'Adreça', 
-        'Ciutat', 'Codi Postal', 'País', 'Data Naixement'
-      ];
-      
-      // Update the Excel headers in the component state
-      // In a real app, these would be extracted from the actual Excel file
-      const updatedExcelHeaders = [...dummyHeaders];
-      
-      // Update the Excel headers state
-      // This would typically be done by parsing the Excel file
-      // For now, we're just using dummy data
-      const excelHeadersState = updatedExcelHeaders;
-      
-      // Show success message
-      const successMessage = `Arxiu Excel seleccionat: ${file.name}`;
-      const messageElement = document.createElement('div');
-      messageElement.className = 'fixed top-4 right-4 bg-green-100 border border-green-400 text-green-700 px-4 py-3 rounded z-50';
-      messageElement.innerHTML = `
-        <div class="flex items-center">
-          <svg class="h-5 w-5 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7" />
-          </svg>
-          <span>${successMessage}</span>
-        </div>
-      `;
-      document.body.appendChild(messageElement);
-      setTimeout(() => document.body.removeChild(messageElement), 3000);
-    }
+    // Show loading message
+    const loadingMessage = document.createElement('div');
+    loadingMessage.className = 'fixed top-4 right-4 bg-blue-100 border border-blue-400 text-blue-700 px-4 py-3 rounded z-50';
+    loadingMessage.innerHTML = `
+      <div class="flex items-center">
+        <svg class="animate-spin h-5 w-5 mr-2" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+          <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+          <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+        </svg>
+        <span>Processant arxiu...</span>
+      </div>
+    `;
+    document.body.appendChild(loadingMessage);
     
-    // Reset the file input
-    if (fileInputRef.current) {
-      fileInputRef.current.value = '';
+    try {
+      if (fileType === 'docx') {
+        // Process DOCX file using the API
+        setDocxNameValue(file.name);
+        setHasUnsavedChanges(true);
+        
+        // Create FormData to send the file
+        const formData = new FormData();
+        formData.append('file', file);
+        
+        // Send the file to the process-document API
+        const response = await fetch('/api/process-document', {
+          method: 'POST',
+          body: formData,
+        });
+        
+        if (!response.ok) {
+          throw new Error(`Error processant el DOCX: ${response.statusText}`);
+        }
+        
+        const data = await response.json();
+        
+        // Update the HTML content with the processed HTML
+        setConvertedHtml(data.html);
+        
+        // Show success message
+        document.body.removeChild(loadingMessage);
+        const successMessage = `Arxiu DOCX processat: ${file.name}`;
+        const messageElement = document.createElement('div');
+        messageElement.className = 'fixed top-4 right-4 bg-green-100 border border-green-400 text-green-700 px-4 py-3 rounded z-50';
+        messageElement.innerHTML = `
+          <div class="flex items-center">
+            <svg class="h-5 w-5 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7" />
+            </svg>
+            <span>${successMessage}</span>
+          </div>
+        `;
+        document.body.appendChild(messageElement);
+        setTimeout(() => document.body.removeChild(messageElement), 3000);
+        
+      } else if (fileType === 'excel') {
+        // Process Excel file using XLSX library
+        setExcelNameValue(file.name);
+        setHasUnsavedChanges(true);
+        
+        // Read the Excel file
+        const reader = new FileReader();
+        reader.onload = (e) => {
+          try {
+            const data = new Uint8Array(e.target?.result as ArrayBuffer);
+            const workbook = XLSX.read(data, { type: 'array' });
+            
+            // Get the first sheet
+            const firstSheetName = workbook.SheetNames[0];
+            const worksheet = workbook.Sheets[firstSheetName];
+            
+            // Convert to JSON
+            const jsonData = XLSX.utils.sheet_to_json(worksheet, { header: 1 });
+            
+            // Extract headers from the first row
+            const headers = jsonData[0] as string[];
+            
+            // Update the Excel headers state
+            // This is the real implementation that extracts headers from the Excel file
+            if (headers && headers.length > 0) {
+              // Update the excelHeaders state with the extracted headers
+              const updatedExcelHeaders = [...headers];
+              // Actually update the state with the extracted headers
+              setExcelHeaders(updatedExcelHeaders);
+              
+              // Show success message
+              document.body.removeChild(loadingMessage);
+              const successMessage = `Arxiu Excel processat: ${file.name}`;
+              const messageElement = document.createElement('div');
+              messageElement.className = 'fixed top-4 right-4 bg-green-100 border border-green-400 text-green-700 px-4 py-3 rounded z-50';
+              messageElement.innerHTML = `
+                <div class="flex items-center">
+                  <svg class="h-5 w-5 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7" />
+                  </svg>
+                  <span>${successMessage}</span>
+                </div>
+              `;
+              document.body.appendChild(messageElement);
+              setTimeout(() => document.body.removeChild(messageElement), 3000);
+            } else {
+              throw new Error('No s\'han trobat capçaleres a l\'arxiu Excel');
+            }
+          } catch (error) {
+            document.body.removeChild(loadingMessage);
+            const errorMessage = `Error processant Excel: ${error instanceof Error ? error.message : 'Error desconegut'}`;
+            const messageElement = document.createElement('div');
+            messageElement.className = 'fixed top-4 right-4 bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded z-50';
+            messageElement.innerHTML = `
+              <div class="flex items-center">
+                <svg class="h-5 w-5 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
+                </svg>
+                <span>${errorMessage}</span>
+              </div>
+            `;
+            document.body.appendChild(messageElement);
+            setTimeout(() => document.body.removeChild(messageElement), 5000);
+          }
+        };
+        
+        reader.onerror = () => {
+          document.body.removeChild(loadingMessage);
+          const errorMessage = 'Error llegint l\'arxiu Excel';
+          const messageElement = document.createElement('div');
+          messageElement.className = 'fixed top-4 right-4 bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded z-50';
+          messageElement.innerHTML = `
+            <div class="flex items-center">
+              <svg class="h-5 w-5 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
+              </svg>
+              <span>${errorMessage}</span>
+            </div>
+          `;
+          document.body.appendChild(messageElement);
+          setTimeout(() => document.body.removeChild(messageElement), 5000);
+        };
+        
+        // Read the file as an array buffer
+        reader.readAsArrayBuffer(file);
+      }
+    } catch (error) {
+      // Handle errors
+      document.body.removeChild(loadingMessage);
+      const errorMessage = `Error processant l'arxiu: ${error instanceof Error ? error.message : 'Error desconegut'}`;
+      const messageElement = document.createElement('div');
+      messageElement.className = 'fixed top-4 right-4 bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded z-50';
+      messageElement.innerHTML = `
+        <div class="flex items-center">
+          <svg class="h-5 w-5 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
+          </svg>
+          <span>${errorMessage}</span>
+        </div>
+      `;
+      document.body.appendChild(messageElement);
+      setTimeout(() => document.body.removeChild(messageElement), 5000);
+    } finally {
+      // Reset the file input
+      if (fileInputRef.current) {
+        fileInputRef.current.value = '';
+      }
     }
   };
 
