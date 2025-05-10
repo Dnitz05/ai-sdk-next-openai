@@ -333,10 +333,12 @@ const TemplateEditor: React.FC<TemplateEditorProps> = ({ initialTemplateData, mo
         </h1>
       </div>
       
-      {/* Main grid layout - Updated to include prompt sidebar with equal width sidebars */}
-      <div className="w-full max-w-6xl mx-auto grid grid-cols-[280px_1fr_280px]">
-        {/* Document toolbar - Word-like menu bar that extends full width */}
-        <div className="col-span-3 bg-white border-t border-x border-gray-200 rounded-t px-4 py-1.5 flex items-center space-x-4 text-sm shadow-sm">
+      {/* Main container with flex to ensure perfect centering */}
+      <div className="w-full flex justify-center">
+        {/* Grid layout for the content - with equal width sidebars */}
+        <div className="grid grid-cols-[280px_1fr_280px]">
+          {/* Document toolbar - Word-like menu bar that extends full width */}
+          <div className="col-span-3 bg-white border-t border-x border-gray-200 rounded-t px-4 py-1.5 flex items-center space-x-4 text-sm shadow-sm">
           <button className="px-2 py-1 text-gray-700 hover:bg-gray-100 rounded">
             Arxiu
           </button>
@@ -369,10 +371,10 @@ const TemplateEditor: React.FC<TemplateEditorProps> = ({ initialTemplateData, mo
               {iaMode ? 'IA: Actiu' : 'IA: Inactiu'}
             </button>
           </div>
-        </div>
-        
-        {/* Main document area with 3 columns - equal width sidebars */}
-        <div className="col-span-3 grid grid-cols-[280px_1fr_280px] bg-gray-100 border-x border-b border-gray-200 shadow-md">
+          </div>
+          
+          {/* Main document area with 3 columns - equal width sidebars */}
+          <div className="col-span-3 grid grid-cols-[280px_1fr_280px] bg-gray-100 border-x border-b border-gray-200 shadow-md">
           {/* Left sidebar - Prompt sidebar */}
           {iaMode ? (
             <PromptSidebar
@@ -568,6 +570,7 @@ const TemplateEditor: React.FC<TemplateEditorProps> = ({ initialTemplateData, mo
               </div>
             </div>
           </aside>
+          </div>
         </div>
       </div>
       
