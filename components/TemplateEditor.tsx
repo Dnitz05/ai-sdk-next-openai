@@ -378,9 +378,10 @@ const TemplateEditor: React.FC<TemplateEditorProps> = ({ initialTemplateData, mo
           ai_instructions: prompts.map(p => ({
             id: p.id,
             paragraphId: p.paragraphId,
-            content: p.content,
+            prompt: p.content,   // Camp 'prompt' per compatibilitat amb format esperat
+            content: p.content,  // Camp 'content' també per redundància
             status: p.status,
-            order: p.order
+            order: p.order || 0  // Assegurar-se que order mai és undefined
           }))
         };
         
