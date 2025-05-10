@@ -5,11 +5,11 @@
   width: 280px;
   height: 100%;
   overflow-y: auto;
-  background-color: #f8f9fa;
+  background-color: #f3f2f1;
   border-right: 1px solid #e9ecef;
   position: relative;
   scrollbar-width: thin;
-  scrollbar-color: #cbd5e0 #f8f9fa;
+  scrollbar-color: #cbd5e0 #f3f2f1;
 }
 
 .prompt-sidebar::-webkit-scrollbar {
@@ -17,7 +17,7 @@
 }
 
 .prompt-sidebar::-webkit-scrollbar-track {
-  background: #f8f9fa;
+  background: #f3f2f1;
 }
 
 .prompt-sidebar::-webkit-scrollbar-thumb {
@@ -30,7 +30,7 @@
   position: relative;
   margin-bottom: 1rem;
   background: white;
-  border-radius: 6px;
+  border-radius: 4px;
   box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
   transition: all 0.2s ease;
   overflow: hidden;
@@ -52,8 +52,8 @@
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 0.5rem;
-  background-color: #f8f9fa;
+  padding: 0.5rem 0.75rem;
+  background-color: #f9f9f9;
   border-bottom: 1px solid #e9ecef;
 }
 

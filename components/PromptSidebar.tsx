@@ -66,34 +66,42 @@ const PromptSidebar: React.FC<PromptSidebarProps> = ({
   return (
     <div 
       ref={sidebarRef}
-      className="prompt-sidebar h-full overflow-y-auto bg-gray-50 border-r border-gray-200"
+      className="prompt-sidebar h-full overflow-y-auto bg-[#f3f2f1] border-r border-gray-200"
       style={{ width: '280px', position: 'relative' }}
     >
-      <div className="p-3 border-b border-gray-200 bg-white sticky top-0 z-10">
-        <h3 className="text-sm font-semibold text-gray-700">Prompts IA</h3>
-        <p className="text-xs text-gray-500 mt-1">
-          {prompts.length} prompts associats
-        </p>
-      </div>
-
-      <div className="prompt-list p-3 space-y-4">
-        {sortedPrompts.length > 0 ? (
-          sortedPrompts.map(prompt => (
-            <PromptCard
-              key={prompt.id}
-              prompt={prompt}
-              isActive={activePromptId === prompt.id}
-              onUpdate={onPromptUpdate}
-              onDelete={onPromptDelete}
-              onSelect={() => onPromptSelect(prompt.paragraphId)}
-            />
-          ))
-        ) : (
-          <div className="text-center py-6 text-gray-400 text-sm">
-            <p>No hi ha prompts IA</p>
-            <p className="text-xs mt-1">Fes clic a un paràgraf per afegir-ne un</p>
+      <div className="sticky top-4 p-4">
+        <div className="bg-white rounded shadow border mb-4">
+          <div className="border-b border-gray-200 px-3 py-2 bg-[#f9f9f9]">
+            <h3 className="text-sm font-semibold text-gray-700">Prompts IA</h3>
           </div>
-        )}
+          <div className="p-3">
+            <p className="text-xs text-gray-500 mb-2">
+              {prompts.length} prompts associats
+            </p>
+          </div>
+        </div>
+
+        <div className="prompt-list space-y-4">
+          {sortedPrompts.length > 0 ? (
+            sortedPrompts.map(prompt => (
+              <PromptCard
+                key={prompt.id}
+                prompt={prompt}
+                isActive={activePromptId === prompt.id}
+                onUpdate={onPromptUpdate}
+                onDelete={onPromptDelete}
+                onSelect={() => onPromptSelect(prompt.paragraphId)}
+              />
+            ))
+          ) : (
+            <div className="bg-white rounded shadow border p-4">
+              <div className="text-center py-4 text-gray-400 text-sm">
+                <p>No hi ha prompts IA</p>
+                <p className="text-xs mt-1">Fes clic a un paràgraf per afegir-ne un</p>
+              </div>
+            </div>
+          )}
+        </div>
       </div>
     </div>
   );

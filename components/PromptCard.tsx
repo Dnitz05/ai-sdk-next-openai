@@ -127,20 +127,18 @@ const PromptCard: React.FC<PromptCardProps> = ({
 
   return (
     <div 
-      className={`prompt-card rounded-md border ${
+      className={`prompt-card rounded border shadow ${
         isActive 
-          ? 'border-indigo-500 bg-indigo-50' 
-          : prompt.status === 'saved' 
-            ? 'border-green-200 bg-white' 
-            : 'border-gray-200 bg-white'
-      } shadow-sm transition-all duration-200 overflow-hidden`}
+          ? 'border-indigo-500' 
+          : 'border-gray-200'
+      } bg-white transition-all duration-200 overflow-hidden`}
       style={{ 
         maxHeight: prompt.isExpanded ? '500px' : isEditing ? '300px' : '100px',
         position: 'relative'
       }}
     >
       {/* Card header with controls */}
-      <div className="prompt-header flex items-center justify-between p-2 bg-gray-50 border-b border-gray-200">
+      <div className="prompt-header flex items-center justify-between px-3 py-2 bg-[#f9f9f9] border-b border-gray-200">
         <div 
           className="paragraph-indicator flex items-center text-xs font-medium cursor-pointer"
           onClick={onSelect}
