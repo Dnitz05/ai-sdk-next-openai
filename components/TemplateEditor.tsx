@@ -242,6 +242,16 @@ const TemplateEditor: React.FC<TemplateEditorProps> = ({ initialTemplateData, mo
       setNextPromptNumber(prev => prev + 1);
     }
     
+    // Si ja està en estat 'saved' però no té número d'ordre, assignar-n'hi un
+    if (
+      updatedPrompt.status === 'saved' && 
+      !updatedPrompt.order &&
+      updatedPrompt.content.trim() !== ''
+    ) {
+      updatedPrompt.order = nextPromptNumber;
+      setNextPromptNumber(prev => prev + 1);
+    }
+    
     setPrompts(prev => 
       prev.map(p => p.id === updatedPrompt.id ? updatedPrompt : p)
     );
