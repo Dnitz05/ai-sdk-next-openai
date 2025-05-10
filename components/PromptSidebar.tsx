@@ -60,8 +60,12 @@ const PromptSidebar: React.FC<PromptSidebarProps> = ({
     };
   }, [documentRef, contentWrapperRef]);
 
-  // Sort prompts by position
-  const sortedPrompts = [...prompts].sort((a, b) => a.position - b.position);
+  // Sort prompts by order first, then position
+  const sortedPrompts = [...prompts].sort((a, b) => {
+    const oa = a.order ?? Infinity;  // els 'draft' (sense #) queden al final
+    const ob = b.order ?? Infinity;
+    return oa === ob ? a.position - b.position : oa - ob;
+  });
 
   return (
     <div 
