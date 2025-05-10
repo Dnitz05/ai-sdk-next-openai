@@ -124,6 +124,10 @@ const PromptCard: React.FC<PromptCardProps> = ({
   // Get paragraph number or ID for display
   const paragraphIdentifier = prompt.paragraphId.substring(0, 5);
 
+  // Determine if the order number should be displayed
+  // Only show the order number if the prompt has been saved with content
+  const showOrderNumber = prompt.status === 'saved' && prompt.order !== undefined;
+
   return (
     <div 
       className={`prompt-card rounded-md border ${
@@ -144,12 +148,16 @@ const PromptCard: React.FC<PromptCardProps> = ({
           className="paragraph-indicator flex items-center text-xs font-medium cursor-pointer"
           onClick={onSelect}
         >
-          {/* Display prompt order number in a circle */}
-          <span className={`w-4 h-4 rounded-full mr-1.5 flex items-center justify-center text-white text-xs font-bold ${
-            isActive ? 'bg-indigo-600' : 'bg-gray-500'
-          }`}>
-            {prompt.order || ''}
-          </span>
+          {/* Display prompt order number in a circle only if it has been saved with content */}
+          {showOrderNumber ? (
+            <span className={`w-4 h-4 rounded-full mr-1.5 flex items-center justify-center text-white text-xs font-bold ${
+              isActive ? 'bg-indigo-600' : 'bg-gray-500'
+            }`}>
+              {prompt.order}
+            </span>
+          ) : (
+            <span className="w-4 h-4 mr-1.5"></span> // Empty placeholder to maintain spacing
+          )}
           <span>¶ {paragraphIdentifier}</span>
         </div>
         

@@ -150,15 +150,11 @@ const TemplateEditor: React.FC<TemplateEditorProps> = ({ initialTemplateData, mo
       );
       
       // Set isEditing to true for the new prompt to open the text box immediately
-      // and assign a sequential order number
+      // but don't assign an order number yet - it will be assigned when saved
       const newPromptWithEditing = {
         ...newPrompt,
-        isEditing: true,
-        order: nextPromptNumber
+        isEditing: true
       };
-      
-      // Increment the counter for the next prompt
-      setNextPromptNumber(prev => prev + 1);
       
       setPrompts(prev => [...prev, newPromptWithEditing]);
       setActivePromptId(newPromptWithEditing.id);
@@ -188,6 +184,24 @@ const TemplateEditor: React.FC<TemplateEditorProps> = ({ initialTemplateData, mo
   
   // Handle updating a prompt
   const handlePromptUpdate = (updatedPrompt: IAPrompt) => {
+    // Check if this is a save operation (status changing to 'saved')
+    const existingPrompt = prompts.find(p => p.id === updatedPrompt.id);
+    
+    // If the prompt is being saved for the first time (status changing from draft to saved)
+    // and it doesn't have an order number yet, assign one
+    if (
+      existingPrompt && 
+      existingPrompt.status !== 'saved' && 
+      updatedPrompt.status === 'saved' && 
+      !existingPrompt.order && 
+      updatedPrompt.content.trim() !== ''
+    ) {
+      // Assign the next available order number
+      updatedPrompt.order = nextPromptNumber;
+      // Increment the counter for the next prompt
+      setNextPromptNumber(prev => prev + 1);
+    }
+    
     setPrompts(prev => 
       prev.map(p => p.id === updatedPrompt.id ? updatedPrompt : p)
     );
@@ -423,7 +437,8 @@ const TemplateEditor: React.FC<TemplateEditorProps> = ({ initialTemplateData, mo
                 const hasPrompt = !!promptForParagraph;
                 const isActive = promptForParagraph?.id === activePromptId;
                 
-                // Get the prompt number for display
+                // Get the prompt number for display - only show if prompt has an order number
+                // (which means it has been saved with content)
                 const promptNumber = promptForParagraph?.order || '';
                 
                 return (
@@ -444,7 +459,8 @@ const TemplateEditor: React.FC<TemplateEditorProps> = ({ initialTemplateData, mo
                     onClick={() => handleParagraphClick(pid)}
                     aria-label={`IA per paràgraf ${pid.substring(0,5)}`}
                   >
-                    {hasPrompt ? promptNumber : ''}
+                    {/* Only show number if prompt has been saved with content */}
+                    {hasPrompt && promptForParagraph?.status === 'saved' && promptNumber ? promptNumber : ''}
                   </button>
                 );
               })}
