@@ -60,17 +60,41 @@ export async function PUT(request: NextRequest) {
     'excel_file_name',
     'final_html',
     'excel_headers',
-    'link_mappings',
-    'ai_instructions'
+    'link_mappings'
   ];
   const updateData: Record<string, any> = {};
   for (const key of fields) {
     if (key in body) updateData[key] = body[key];
   }
+  
+  // Interfície per a les instruccions d'IA
+  interface IAInstruction {
+    id?: string;
+    paragraphId?: string;
+    content?: string;
+    prompt?: string;
+    status?: string;
+    order?: number;
+  }
+  
+  // Processament especial per a 'ai_instructions' per assegurar que es desa correctament
+  if ('ai_instructions' in body && Array.isArray(body.ai_instructions)) {
+    // Assegurar que el format sigui correcte i tots els camps necessaris hi siguin
+    updateData.ai_instructions = body.ai_instructions.map((instr: IAInstruction) => ({
+      id: instr.id || `ia-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
+      paragraphId: instr.paragraphId || '',
+      prompt: instr.content || instr.prompt || '',  // Suporta ambdós formats
+      content: instr.content || instr.prompt || '',  // Duplicar per compatibilitat
+      status: instr.status || 'saved',
+      order: instr.order || 0
+    }));
+  }
 
   // LOG del body rebut i del payload d'update
-  console.log('[API UPDATE-TEMPLATE] body rebut:', body);
-  console.log('[API UPDATE-TEMPLATE] updateData:', updateData);
+  console.log('[API UPDATE-TEMPLATE] body rebut:', JSON.stringify(body).substring(0, 200) + '...');
+  console.log('[API UPDATE-TEMPLATE] ai_instructions processades:', 
+    JSON.stringify(updateData.ai_instructions).substring(0, 200) + '...');
+  console.log('[API UPDATE-TEMPLATE] updateData preparat');
 
   // 3. Actualitzar plantilla utilitzant el service client (bypass RLS)
   console.log('[API UPDATE-TEMPLATE] Intentant actualitzar plantilla amb ID:', id, 'per usuari:', userId);
