@@ -384,11 +384,19 @@ const TemplateEditor: React.FC<TemplateEditorProps> = ({ initialTemplateData, mo
           }))
         };
         
-        console.log('Actualitzant plantilla amb ID:', initialTemplateData.id);
-        console.log('Dades a enviar:', JSON.stringify(updateData, null, 2));
+        if (!initialTemplateData?.id) {
+          console.error('Error: ID de plantilla inicial no trobat per actualitzar.');
+          alert('Error crític: No es pot actualitzar la plantilla sense ID.');
+          return;
+        }
+        
+        const templateUrl = `/api/update-template/${initialTemplateData.id}`;
+        console.log('Actualitzant plantilla amb ID:', initialTemplateData.id, 'a URL:', templateUrl);
+        console.log('Dades (updateData) a enviar:', JSON.stringify(updateData, null, 2));
+        console.log('Token d\'accés (primeres/últimes 10 lletres):', `${accessToken.substring(0, 10)}...${accessToken.substring(accessToken.length - 10)}`);
         
         // Make API call to update the template
-        const response = await fetch(`/api/update-template/${initialTemplateData.id}`, {
+        const response = await fetch(templateUrl, {
           method: 'PUT',
           headers: {
             'Content-Type': 'application/json',
@@ -398,11 +406,19 @@ const TemplateEditor: React.FC<TemplateEditorProps> = ({ initialTemplateData, mo
           credentials: 'include' // Include cookies
         });
         
-        const responseData = await response.json();
+        let responseData;
+        try {
+          responseData = await response.json();
+        } catch (e) {
+          // If response.json() fails, log the raw response text
+          const responseText = await response.text();
+          console.error('Error al parsejar JSON de la resposta. Text de la resposta:', responseText);
+          throw new Error(`Error del servidor (no JSON): ${response.status} - ${responseText || response.statusText}`);
+        }
         
         if (!response.ok) {
-          console.error('Error de resposta:', response.status, responseData);
-          throw new Error(responseData.error || 'Error actualitzant la plantilla');
+          console.error('Error de resposta des del servidor:', response.status, responseData);
+          throw new Error(responseData?.error || responseData?.details || responseData?.message || 'Error actualitzant la plantilla des del servidor');
         }
         
         // Update state
@@ -429,11 +445,12 @@ const TemplateEditor: React.FC<TemplateEditorProps> = ({ initialTemplateData, mo
           finalHtml: convertedHtml
         };
         
-        console.log('Creant nova plantilla');
-        console.log('Dades a enviar:', JSON.stringify(saveData, null, 2));
+        const createUrl = '/api/save-configuration';
+        console.log('Creant nova plantilla a URL:', createUrl);
+        console.log('Dades (saveData) a enviar:', JSON.stringify(saveData, null, 2));
         
         // Make API call to create a new template
-        const response = await fetch('/api/save-configuration', {
+        const response = await fetch(createUrl, {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json'
@@ -442,11 +459,18 @@ const TemplateEditor: React.FC<TemplateEditorProps> = ({ initialTemplateData, mo
           credentials: 'include' // Include cookies for server-side authentication
         });
         
-        const responseData = await response.json();
+        let responseData;
+        try {
+          responseData = await response.json();
+        } catch (e) {
+          const responseText = await response.text();
+          console.error('Error al parsejar JSON de la resposta (creació). Text de la resposta:', responseText);
+          throw new Error(`Error del servidor (no JSON creació): ${response.status} - ${responseText || response.statusText}`);
+        }
         
         if (!response.ok) {
-          console.error('Error de resposta:', response.status, responseData);
-          throw new Error(responseData.error || 'Error creant la plantilla');
+          console.error('Error de resposta des del servidor (creació):', response.status, responseData);
+          throw new Error(responseData?.error || responseData?.details || responseData?.message || 'Error creant la plantilla des del servidor');
         }
         
         // Update state
