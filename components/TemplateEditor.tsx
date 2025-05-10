@@ -42,8 +42,8 @@ const TemplateEditor: React.FC<TemplateEditorProps> = ({ initialTemplateData, mo
   const contentWrapperRef = useRef<HTMLDivElement>(null);
   const contentRef = useRef<HTMLDivElement>(null);
 
-  // IA mode state
-  const [iaMode, setIaMode] = useState(true);
+  // IA mode is always active
+  const iaMode = true; // Always true, no toggle needed
   
   // New prompt management state
   const [prompts, setPrompts] = useState<IAPrompt[]>([]); 
@@ -326,75 +326,80 @@ const TemplateEditor: React.FC<TemplateEditorProps> = ({ initialTemplateData, mo
 
   return (
     <main className="flex min-h-screen w-full flex-col items-center bg-gray-50 pt-4">
-      {/* Document title */}
-      <div className="w-full max-w-5xl mx-auto mb-3 px-4 flex items-center">
-        <h1 className="text-lg font-semibold text-gray-800">
-          Plantilla: <span className="font-normal">{templateTitle}</span>
-        </h1>
-      </div>
+      {/* Document title - removed as it will be part of the new header */}
       
       {/* Main container with flex to ensure perfect centering */}
       <div className="w-full flex justify-center">
         {/* Grid layout for the content - with equal width sidebars */}
         <div className="grid grid-cols-[280px_1fr_280px]">
-          {/* Document toolbar - Word-like menu bar that extends full width */}
-          <div className="col-span-3 bg-white border-t border-x border-gray-200 rounded-t px-4 py-1.5 flex items-center space-x-4 text-sm shadow-sm">
-          <button className="px-2 py-1 text-gray-700 hover:bg-gray-100 rounded">
-            Arxiu
-          </button>
-          <button className="px-2 py-1 text-gray-700 hover:bg-gray-100 rounded">
-            Editar
-          </button>
-          <button className="px-2 py-1 text-gray-700 hover:bg-gray-100 rounded">
-            Visualitzar
-          </button>
-          <button className="px-2 py-1 text-gray-700 hover:bg-gray-100 rounded">
-            Inserir
-          </button>
-          <button className="px-2 py-1 text-gray-700 hover:bg-gray-100 rounded">
-            Format
-          </button>
-          <div className="ml-auto">
-            <button 
-              className={`px-3 py-1 rounded text-sm ${iaMode ? 'bg-indigo-100 text-indigo-700' : 'bg-gray-100 text-gray-700'}`} 
-              onClick={() => {
-                const newIaMode = !iaMode;
-                setIaMode(newIaMode);
-                if (!newIaMode) {
-                  setIaPromptsData({}); // Clear active editors
-                  setParagraphButtonVisuals({}); // Clear button visuals
-                  setPrompts([]); // Clear prompts
-                  setNextPromptNumber(1); // Reset prompt counter
-                }
-              }}
-            >
-              {iaMode ? 'IA: Actiu' : 'IA: Inactiu'}
-            </button>
-          </div>
+          {/* New document header with document properties */}
+          <div className="col-span-3 bg-white border-t border-x border-gray-200 rounded-t shadow-sm">
+            {/* Main header with title */}
+            <div className="px-4 py-3 flex items-center border-b border-gray-200">
+              <h1 className="text-lg font-semibold text-gray-800">
+                {templateTitle}
+              </h1>
+              <div className="ml-auto flex items-center">
+                <span className="px-3 py-1 rounded text-sm bg-indigo-100 text-indigo-700">
+                  IA: Actiu
+                </span>
+              </div>
+            </div>
+            
+            {/* Document properties section */}
+            <div className="px-4 py-2 flex flex-wrap items-center text-xs text-gray-600 gap-x-6">
+              {/* Related files */}
+              {(docxName || excelName) && (
+                <div className="flex items-center gap-3">
+                  {docxName && (
+                    <div className="flex items-center">
+                      <svg className="w-3 h-3 mr-1 text-blue-600" fill="currentColor" viewBox="0 0 20 20">
+                        <path d="M9 2a2 2 0 00-2 2v8a2 2 0 002 2h6a2 2 0 002-2V6.414A2 2 0 0016.414 5L14 2.586A2 2 0 0012.586 2H9z"></path>
+                      </svg>
+                      <span>{docxName}</span>
+                    </div>
+                  )}
+                  {excelName && (
+                    <div className="flex items-center">
+                      <svg className="w-3 h-3 mr-1 text-green-600" fill="currentColor" viewBox="0 0 20 20">
+                        <path d="M9 2a2 2 0 00-2 2v8a2 2 0 002 2h6a2 2 0 002-2V6.414A2 2 0 0016.414 5L14 2.586A2 2 0 0012.586 2H9z"></path>
+                      </svg>
+                      <span>{excelName}</span>
+                    </div>
+                  )}
+                </div>
+              )}
+              
+              {/* Document info */}
+              <div className="flex items-center gap-3">
+                <div className="flex items-center">
+                  <span className="text-gray-500 mr-1">Creat:</span>
+                  <span>{new Date().toLocaleDateString()}</span>
+                </div>
+                <div className="flex items-center">
+                  <span className="text-gray-500 mr-1">Modificat:</span>
+                  <span>{new Date().toLocaleDateString()}</span>
+                </div>
+                <div className="flex items-center">
+                  <span className="text-gray-500 mr-1">Mida:</span>
+                  <span>{convertedHtml ? Math.round(convertedHtml.length / 1024) : 0} KB</span>
+                </div>
+              </div>
+            </div>
           </div>
           
           {/* Main document area with 3 columns - equal width sidebars */}
           <div className="col-span-3 grid grid-cols-[280px_1fr_280px] bg-gray-100 border-x border-b border-gray-200 shadow-md">
-          {/* Left sidebar - Prompt sidebar */}
-          {iaMode ? (
-            <PromptSidebar
-              prompts={prompts}
-              documentRef={contentRef}
-              contentWrapperRef={contentWrapperRef}
-              onPromptUpdate={handlePromptUpdate}
-              onPromptDelete={handlePromptDelete}
-              onPromptSelect={handlePromptSelect}
-              activePromptId={activePromptId}
-            />
-          ) : (
-            <aside className="flex-shrink-0 border-r border-gray-200 py-2 bg-gray-50">
-              <div className="sticky top-4 pt-2 flex flex-col items-end pr-1">
-                <div className="h-80 border-r border-gray-300 pr-1">
-                  {/* Empty when IA mode is off */}
-                </div>
-              </div>
-            </aside>
-          )}
+          {/* Left sidebar - Prompt sidebar - always visible */}
+          <PromptSidebar
+            prompts={prompts}
+            documentRef={contentRef}
+            contentWrapperRef={contentWrapperRef}
+            onPromptUpdate={handlePromptUpdate}
+            onPromptDelete={handlePromptDelete}
+            onPromptSelect={handlePromptSelect}
+            activePromptId={activePromptId}
+          />
         
           {/* Content area - A4 paper style that auto-expands based on content */}
           <div className="flex justify-center py-6 bg-gray-100 min-h-[calc(100vh-140px)]">
@@ -491,44 +496,9 @@ const TemplateEditor: React.FC<TemplateEditorProps> = ({ initialTemplateData, mo
             </div>
           </div>
         
-          {/* Sidebar - Word-like document properties panel - width updated to match left sidebar */}
+          {/* Sidebar - Excel headers and help panel - width updated to match left sidebar */}
           <aside className="w-[280px] flex-shrink-0 border-l border-gray-200 bg-[#f3f2f1]">
             <div className="sticky top-4 p-4">
-              <div className="bg-white rounded shadow border mb-4">
-                <div className="border-b border-gray-200 px-3 py-2 bg-[#f9f9f9]">
-                  <h3 className="text-sm font-semibold text-gray-700">Propietats del document</h3>
-                </div>
-                
-                <div className="p-3">
-                  {(docxName || excelName) && (
-                    <div className="mb-3 text-xs">
-                      <div className="font-medium text-gray-600 mb-1">Arxius relacionats:</div>
-                      <div className="text-gray-700">
-                        {docxName && <div className="flex items-center mb-1">
-                          <svg className="w-3 h-3 mr-1 text-blue-600" fill="currentColor" viewBox="0 0 20 20"><path d="M9 2a2 2 0 00-2 2v8a2 2 0 002 2h6a2 2 0 002-2V6.414A2 2 0 0016.414 5L14 2.586A2 2 0 0012.586 2H9z"></path></svg>
-                          {docxName}
-                        </div>}
-                        {excelName && <div className="flex items-center">
-                          <svg className="w-3 h-3 mr-1 text-green-600" fill="currentColor" viewBox="0 0 20 20"><path d="M9 2a2 2 0 00-2 2v8a2 2 0 002 2h6a2 2 0 002-2V6.414A2 2 0 0016.414 5L14 2.586A2 2 0 0012.586 2H9z"></path></svg>
-                          {excelName}
-                        </div>}
-                      </div>
-                    </div>
-                  )}
-                  
-                  <div className="text-xs mb-3">
-                    <div className="font-medium text-gray-600 mb-1">Informació del document:</div>
-                    <div className="grid grid-cols-2 gap-x-2 gap-y-1 text-gray-700">
-                      <div className="text-gray-500">Creat:</div>
-                      <div>{new Date().toLocaleDateString()}</div>
-                      <div className="text-gray-500">Modificat:</div>
-                      <div>{new Date().toLocaleDateString()}</div>
-                      <div className="text-gray-500">Mida:</div>
-                      <div>{convertedHtml ? Math.round(convertedHtml.length / 1024) : 0} KB</div>
-                    </div>
-                  </div>
-                </div>
-              </div>
               
               {/* Excel headers panel */}
               {excelHeaders.length > 0 && (
