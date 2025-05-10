@@ -333,8 +333,8 @@ const TemplateEditor: React.FC<TemplateEditorProps> = ({ initialTemplateData, mo
         </h1>
       </div>
       
-      {/* Main grid layout - Updated to include prompt sidebar */}
-      <div className="w-full max-w-6xl mx-auto grid grid-cols-[280px_1fr_220px]">
+      {/* Main grid layout - Updated to include prompt sidebar with equal width sidebars */}
+      <div className="w-full max-w-6xl mx-auto grid grid-cols-[280px_1fr_280px]">
         {/* Document toolbar - Word-like menu bar that extends full width */}
         <div className="col-span-3 bg-white border-t border-x border-gray-200 rounded-t px-4 py-1.5 flex items-center space-x-4 text-sm shadow-sm">
           <button className="px-2 py-1 text-gray-700 hover:bg-gray-100 rounded">
@@ -371,8 +371,8 @@ const TemplateEditor: React.FC<TemplateEditorProps> = ({ initialTemplateData, mo
           </div>
         </div>
         
-        {/* Main document area with 3 columns */}
-        <div className="col-span-3 grid grid-cols-[280px_1fr_220px] bg-gray-100 border-x border-b border-gray-200 shadow-md">
+        {/* Main document area with 3 columns - equal width sidebars */}
+        <div className="col-span-3 grid grid-cols-[280px_1fr_280px] bg-gray-100 border-x border-b border-gray-200 shadow-md">
           {/* Left sidebar - Prompt sidebar */}
           {iaMode ? (
             <PromptSidebar
@@ -489,8 +489,8 @@ const TemplateEditor: React.FC<TemplateEditorProps> = ({ initialTemplateData, mo
             </div>
           </div>
         
-          {/* Sidebar - Word-like document properties panel */}
-          <aside className="w-[220px] flex-shrink-0 border-l border-gray-200 bg-[#f3f2f1]">
+          {/* Sidebar - Word-like document properties panel - width updated to match left sidebar */}
+          <aside className="w-[280px] flex-shrink-0 border-l border-gray-200 bg-[#f3f2f1]">
             <div className="sticky top-4 p-4">
               <div className="bg-white rounded shadow border mb-4">
                 <div className="border-b border-gray-200 px-3 py-2 bg-[#f9f9f9]">
