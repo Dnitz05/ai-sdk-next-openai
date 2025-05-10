@@ -1,13 +1,41 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createUserSupabaseClient } from '@/lib/supabase/userClient';
+import { createClient } from '@supabase/supabase-js';
 
 export async function PUT(request: NextRequest) {
+  // 1. Verificar autenticació amb el token JWT
   const authHeader = request.headers.get('authorization') || request.headers.get('Authorization');
   if (!authHeader || !authHeader.startsWith('Bearer ')) {
     return NextResponse.json({ error: 'No autenticat. Falten credencials.' }, { status: 401 });
   }
   const accessToken = authHeader.replace('Bearer ', '').trim();
-  const supabase = createUserSupabaseClient(accessToken);
+  
+  // Utilitzem primer el client d'usuari per verificar la identitat
+  const userClient = createUserSupabaseClient(accessToken);
+  
+  // Obtenim informació de l'usuari per verificar que està autenticat
+  const { data: userData, error: userError } = await userClient.auth.getUser();
+  if (userError || !userData?.user) {
+    console.error("[API UPDATE-TEMPLATE] Error verificant usuari:", userError);
+    return NextResponse.json({ error: 'Usuari no autenticat o token invàlid.', details: userError?.message }, { status: 401 });
+  }
+  
+  // Guarda l'ID de l'usuari per a verificacions posteriors
+  const userId = userData.user.id;
+  console.log("[API UPDATE-TEMPLATE] Usuari autenticat:", userId);
+  
+  // 2. Crear client amb service role key per bypasejar RLS
+  // (com fa save-configuration/route.ts)
+  const serviceClient = createClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.SUPABASE_SERVICE_ROLE_KEY!,
+    {
+      auth: {
+        persistSession: false,
+        autoRefreshToken: false
+      }
+    }
+  );
 
   // Extreu l'id de la URL
   // Log de l'URL per ajudar en la depuració
@@ -44,10 +72,17 @@ export async function PUT(request: NextRequest) {
   console.log('[API UPDATE-TEMPLATE] body rebut:', body);
   console.log('[API UPDATE-TEMPLATE] updateData:', updateData);
 
-  const { data, error } = await supabase
+  // 3. Actualitzar plantilla utilitzant el service client (bypass RLS)
+  console.log('[API UPDATE-TEMPLATE] Intentant actualitzar plantilla amb ID:', id, 'per usuari:', userId);
+  
+  // Afegim el camp user_id a les dades per actualitzar per assegurar que només modifica plantilles del propi usuari
+  updateData.user_id = userId;
+  
+  const { data, error } = await serviceClient
     .from('plantilla_configs')
     .update(updateData)
     .eq('id', id)
+    .eq('user_id', userId) // Assegurem que només s'actualitza si pertany a l'usuari
     .select()
     .single();
 
@@ -55,9 +90,7 @@ export async function PUT(request: NextRequest) {
     console.error('[API UPDATE-TEMPLATE] error:', error);
     
     try {
-      // Obtenir informació de l'usuari per al debug (separar del pipeline principal)
-      const userResponse = await supabase.auth.getUser();
-      const userId = userResponse.data?.user?.id;
+      // Informació d'usuari ja la tenim, no cal consultar-la de nou
       
       // Preparar informació detallada de l'error per a la resposta
       const errorDetails = {
@@ -65,7 +98,7 @@ export async function PUT(request: NextRequest) {
         message: error.message,
         details: error.details,
         hint: error.hint,
-        userId: userId || 'not-authenticated',
+        userId: userId,
         request_id: request.headers.get('x-request-id') || 'unknown'
       };
       
