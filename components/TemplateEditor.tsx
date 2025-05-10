@@ -52,9 +52,16 @@ const TemplateEditor: React.FC<TemplateEditorProps> = ({ initialTemplateData, mo
   const [hasUnsavedChanges, setHasUnsavedChanges] = useState<boolean>(false);
   const [isEditingTitle, setIsEditingTitle] = useState<boolean>(false);
   const [templateTitleValue, setTemplateTitleValue] = useState<string>(templateTitle);
+  const [isEditingDocx, setIsEditingDocx] = useState<boolean>(false);
+  const [docxNameValue, setDocxNameValue] = useState<string>(docxName);
+  const [isEditingExcel, setIsEditingExcel] = useState<boolean>(false);
+  const [excelNameValue, setExcelNameValue] = useState<string>(excelName);
   const contentWrapperRef = useRef<HTMLDivElement>(null);
   const contentRef = useRef<HTMLDivElement>(null);
   const titleInputRef = useRef<HTMLInputElement>(null);
+  const docxInputRef = useRef<HTMLInputElement>(null);
+  const excelInputRef = useRef<HTMLInputElement>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   // IA mode is always active
   const iaMode = true; // Always true, no toggle needed
@@ -353,8 +360,86 @@ const TemplateEditor: React.FC<TemplateEditorProps> = ({ initialTemplateData, mo
     }
   };
 
+  // Handle file selection
+  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = e.target.files;
+    if (!files || files.length === 0) return;
+    
+    const file = files[0];
+    const fileType = e.target.getAttribute('data-file-type');
+    
+    if (fileType === 'docx') {
+      // In a real app, this would upload the DOCX file and process it
+      // For now, just update the name
+      setDocxNameValue(file.name);
+      setHasUnsavedChanges(true);
+      
+      // Show success message
+      const successMessage = `Arxiu DOCX seleccionat: ${file.name}`;
+      const messageElement = document.createElement('div');
+      messageElement.className = 'fixed top-4 right-4 bg-green-100 border border-green-400 text-green-700 px-4 py-3 rounded z-50';
+      messageElement.innerHTML = `
+        <div class="flex items-center">
+          <svg class="h-5 w-5 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7" />
+          </svg>
+          <span>${successMessage}</span>
+        </div>
+      `;
+      document.body.appendChild(messageElement);
+      setTimeout(() => document.body.removeChild(messageElement), 3000);
+    } else if (fileType === 'excel') {
+      // In a real app, this would upload the Excel file and extract headers
+      // For now, just update the name and add some dummy headers
+      setExcelNameValue(file.name);
+      setHasUnsavedChanges(true);
+      
+      // Add some dummy Excel headers for demonstration
+      const dummyHeaders = [
+        'Nom', 'Cognom', 'Email', 'Telèfon', 'Adreça', 
+        'Ciutat', 'Codi Postal', 'País', 'Data Naixement'
+      ];
+      
+      // Update the Excel headers in the component state
+      // In a real app, these would be extracted from the actual Excel file
+      const updatedExcelHeaders = [...dummyHeaders];
+      
+      // Update the Excel headers state
+      // This would typically be done by parsing the Excel file
+      // For now, we're just using dummy data
+      const excelHeadersState = updatedExcelHeaders;
+      
+      // Show success message
+      const successMessage = `Arxiu Excel seleccionat: ${file.name}`;
+      const messageElement = document.createElement('div');
+      messageElement.className = 'fixed top-4 right-4 bg-green-100 border border-green-400 text-green-700 px-4 py-3 rounded z-50';
+      messageElement.innerHTML = `
+        <div class="flex items-center">
+          <svg class="h-5 w-5 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7" />
+          </svg>
+          <span>${successMessage}</span>
+        </div>
+      `;
+      document.body.appendChild(messageElement);
+      setTimeout(() => document.body.removeChild(messageElement), 3000);
+    }
+    
+    // Reset the file input
+    if (fileInputRef.current) {
+      fileInputRef.current.value = '';
+    }
+  };
+
   return (
     <main className="flex min-h-screen w-full flex-col items-center bg-gray-50 pt-4">
+      {/* Hidden file input for file selection */}
+      <input 
+        type="file" 
+        ref={fileInputRef}
+        className="hidden"
+        onChange={handleFileChange}
+      />
       {/* Document title - removed as it will be part of the new header */}
       
       {/* Main container with flex to ensure perfect centering */}
@@ -484,27 +569,150 @@ const TemplateEditor: React.FC<TemplateEditorProps> = ({ initialTemplateData, mo
             
             {/* Document properties section */}
             <div className="px-4 py-2 flex flex-wrap items-center text-xs text-gray-600 gap-x-6">
-              {/* Related files */}
-              {(docxName || excelName) && (
-                <div className="flex items-center gap-3">
-                  {docxName && (
+              {/* Related files - now editable */}
+              <div className="flex items-center gap-3">
+                {/* DOCX file */}
+                <div className="flex items-center">
+                  <svg className="w-3 h-3 mr-1 text-blue-600" fill="currentColor" viewBox="0 0 20 20">
+                    <path d="M9 2a2 2 0 00-2 2v8a2 2 0 002 2h6a2 2 0 002-2V6.414A2 2 0 0016.414 5L14 2.586A2 2 0 0012.586 2H9z"></path>
+                  </svg>
+                  
+                  {isEditingDocx ? (
                     <div className="flex items-center">
-                      <svg className="w-3 h-3 mr-1 text-blue-600" fill="currentColor" viewBox="0 0 20 20">
-                        <path d="M9 2a2 2 0 00-2 2v8a2 2 0 002 2h6a2 2 0 002-2V6.414A2 2 0 0016.414 5L14 2.586A2 2 0 0012.586 2H9z"></path>
-                      </svg>
-                      <span>{docxName}</span>
+                      <input
+                        ref={docxInputRef}
+                        type="text"
+                        value={docxNameValue}
+                        onChange={(e) => setDocxNameValue(e.target.value)}
+                        className="text-xs border border-gray-300 rounded px-1 py-0.5 focus:outline-none focus:ring-1 focus:ring-indigo-500 w-32"
+                        onBlur={() => {
+                          setIsEditingDocx(false);
+                          setHasUnsavedChanges(true);
+                        }}
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter') {
+                            setIsEditingDocx(false);
+                            setHasUnsavedChanges(true);
+                          }
+                        }}
+                      />
+                      <button
+                        className="ml-1 p-0.5 text-gray-500 hover:text-gray-700 rounded"
+                        onClick={() => setIsEditingDocx(false)}
+                        title="Cancel·lar"
+                      >
+                        <svg xmlns="http://www.w3.org/2000/svg" className="h-3 w-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                        </svg>
+                      </button>
                     </div>
-                  )}
-                  {excelName && (
-                    <div className="flex items-center">
-                      <svg className="w-3 h-3 mr-1 text-green-600" fill="currentColor" viewBox="0 0 20 20">
-                        <path d="M9 2a2 2 0 00-2 2v8a2 2 0 002 2h6a2 2 0 002-2V6.414A2 2 0 0016.414 5L14 2.586A2 2 0 0012.586 2H9z"></path>
-                      </svg>
-                      <span>{excelName}</span>
+                  ) : (
+                    <div className="flex items-center group">
+                      <span 
+                        className="cursor-pointer group-hover:text-indigo-600"
+                        onClick={() => setIsEditingDocx(true)}
+                      >
+                        {docxNameValue || "Cap DOCX seleccionat"}
+                      </span>
+                      <button
+                        className="ml-1 p-0.5 text-gray-400 opacity-0 group-hover:opacity-100 hover:text-indigo-600 transition-opacity"
+                        onClick={() => setIsEditingDocx(true)}
+                        title="Editar nom"
+                      >
+                        <svg xmlns="http://www.w3.org/2000/svg" className="h-3 w-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" />
+                        </svg>
+                      </button>
+                      <button
+                        className="ml-1 p-0.5 text-gray-400 opacity-0 group-hover:opacity-100 hover:text-indigo-600 transition-opacity"
+                        onClick={() => {
+                          if (fileInputRef.current) {
+                            fileInputRef.current.setAttribute('accept', '.docx');
+                            fileInputRef.current.setAttribute('data-file-type', 'docx');
+                            fileInputRef.current.click();
+                          }
+                        }}
+                        title="Seleccionar nou DOCX"
+                      >
+                        <svg xmlns="http://www.w3.org/2000/svg" className="h-3 w-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.172 7l-6.586 6.586a2 2 0 102.828 2.828l6.414-6.586a4 4 0 00-5.656-5.656l-6.415 6.585a6 6 0 108.486 8.486L20.5 13" />
+                        </svg>
+                      </button>
                     </div>
                   )}
                 </div>
-              )}
+                
+                {/* Excel file */}
+                <div className="flex items-center">
+                  <svg className="w-3 h-3 mr-1 text-green-600" fill="currentColor" viewBox="0 0 20 20">
+                    <path d="M9 2a2 2 0 00-2 2v8a2 2 0 002 2h6a2 2 0 002-2V6.414A2 2 0 0016.414 5L14 2.586A2 2 0 0012.586 2H9z"></path>
+                  </svg>
+                  
+                  {isEditingExcel ? (
+                    <div className="flex items-center">
+                      <input
+                        ref={excelInputRef}
+                        type="text"
+                        value={excelNameValue}
+                        onChange={(e) => setExcelNameValue(e.target.value)}
+                        className="text-xs border border-gray-300 rounded px-1 py-0.5 focus:outline-none focus:ring-1 focus:ring-indigo-500 w-32"
+                        onBlur={() => {
+                          setIsEditingExcel(false);
+                          setHasUnsavedChanges(true);
+                        }}
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter') {
+                            setIsEditingExcel(false);
+                            setHasUnsavedChanges(true);
+                          }
+                        }}
+                      />
+                      <button
+                        className="ml-1 p-0.5 text-gray-500 hover:text-gray-700 rounded"
+                        onClick={() => setIsEditingExcel(false)}
+                        title="Cancel·lar"
+                      >
+                        <svg xmlns="http://www.w3.org/2000/svg" className="h-3 w-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                        </svg>
+                      </button>
+                    </div>
+                  ) : (
+                    <div className="flex items-center group">
+                      <span 
+                        className="cursor-pointer group-hover:text-indigo-600"
+                        onClick={() => setIsEditingExcel(true)}
+                      >
+                        {excelNameValue || "Cap Excel seleccionat"}
+                      </span>
+                      <button
+                        className="ml-1 p-0.5 text-gray-400 opacity-0 group-hover:opacity-100 hover:text-indigo-600 transition-opacity"
+                        onClick={() => setIsEditingExcel(true)}
+                        title="Editar nom"
+                      >
+                        <svg xmlns="http://www.w3.org/2000/svg" className="h-3 w-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" />
+                        </svg>
+                      </button>
+                      <button
+                        className="ml-1 p-0.5 text-gray-400 opacity-0 group-hover:opacity-100 hover:text-indigo-600 transition-opacity"
+                        onClick={() => {
+                          if (fileInputRef.current) {
+                            fileInputRef.current.setAttribute('accept', '.xlsx,.xls');
+                            fileInputRef.current.setAttribute('data-file-type', 'excel');
+                            fileInputRef.current.click();
+                          }
+                        }}
+                        title="Seleccionar nou Excel"
+                      >
+                        <svg xmlns="http://www.w3.org/2000/svg" className="h-3 w-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.172 7l-6.586 6.586a2 2 0 102.828 2.828l6.414-6.586a4 4 0 00-5.656-5.656l-6.415 6.585a6 6 0 108.486 8.486L20.5 13" />
+                        </svg>
+                      </button>
+                    </div>
+                  )}
+                </div>
+              </div>
               
               {/* Document info - with historical dates */}
               <div className="flex items-center gap-3">
