@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef, MouseEvent } from 'react';
 import * as XLSX from 'xlsx';
 import PromptSidebar, { IAPrompt } from './PromptSidebar';
+import { createBrowserSupabaseClient } from '@/lib/supabase/browserClient';
 import { 
   calculatePromptPositions, 
   scrollToParagraph, 
@@ -329,6 +330,124 @@ const TemplateEditor: React.FC<TemplateEditorProps> = ({ initialTemplateData, mo
     // Future: API call to save prompt to backend
   };
 
+  // Function to save the template to the backend
+  const saveTemplate = async () => {
+    try {
+      // Obtain authentication token
+      const supabase = createBrowserSupabaseClient();
+      const { data: sessionData } = await supabase.auth.getSession();
+      const accessToken = sessionData?.session?.access_token;
+      
+      if (!accessToken) {
+        alert('Error d\'autenticació. Torna a iniciar sessió.');
+        return;
+      }
+      
+      // Extract Excel mappings from the HTML
+      const linkMappings: Array<{id: string; excelHeader: string; selectedText: string}> = [];
+      if (contentRef.current) {
+        const linkedSpans = contentRef.current.querySelectorAll('span.linked-placeholder');
+        linkedSpans.forEach(span => {
+          const htmlSpan = span as HTMLSpanElement;
+          const excelHeader = htmlSpan.dataset.excelHeader;
+          const linkId = htmlSpan.dataset.linkId;
+          const selectedText = htmlSpan.textContent;
+          
+          if (excelHeader && linkId && selectedText) {
+            linkMappings.push({
+              id: linkId,
+              excelHeader,
+              selectedText
+            });
+          }
+        });
+      }
+      
+      // Prepare data based on the expected format for each endpoint
+      if (mode === 'edit' && initialTemplateData?.id) {
+        // FORMAT FOR UPDATE-TEMPLATE
+        const updateData = {
+          config_name: templateTitleValue,
+          base_docx_name: docxNameValue,
+          excel_file_name: excelNameValue,
+          final_html: convertedHtml,
+          excel_headers: excelHeaders,
+          link_mappings: linkMappings,
+          ai_instructions: prompts.map(p => ({
+            id: p.id,
+            paragraphId: p.paragraphId,
+            content: p.content,
+            status: p.status,
+            order: p.order
+          }))
+        };
+        
+        // Make API call to update the template
+        const response = await fetch(`/api/update-template/${initialTemplateData.id}`, {
+          method: 'PUT',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${accessToken}`
+          },
+          body: JSON.stringify(updateData)
+        });
+        
+        if (!response.ok) {
+          const errorData = await response.json();
+          throw new Error(errorData.error || 'Error actualitzant la plantilla');
+        }
+        
+        // Update state
+        setHasUnsavedChanges(false);
+        
+        // Show success message
+        alert('Plantilla actualitzada correctament');
+        
+      } else {
+        // FORMAT FOR SAVE-CONFIGURATION (new template)
+        const saveData = {
+          baseDocxName: docxNameValue,
+          config_name: templateTitleValue,
+          excelInfo: {
+            fileName: excelNameValue,
+            headers: excelHeaders
+          },
+          linkMappings: linkMappings,
+          aiInstructions: prompts.map(p => ({
+            id: p.id,
+            prompt: p.content,
+            originalText: p.paragraphId // Store paragraph ID as reference
+          })),
+          finalHtml: convertedHtml
+        };
+        
+        // Make API call to create a new template
+        const response = await fetch('/api/save-configuration', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json'
+            // No Authorization header needed as it uses cookies
+          },
+          body: JSON.stringify(saveData)
+        });
+        
+        if (!response.ok) {
+          const errorData = await response.json();
+          throw new Error(errorData.error || 'Error creant la plantilla');
+        }
+        
+        // Update state
+        setHasUnsavedChanges(false);
+        
+        // Show success message
+        alert('Plantilla creada correctament');
+      }
+    } catch (error) {
+      console.error('Error desant la plantilla:', error);
+      alert(`Error desant la plantilla: ${error instanceof Error ? error.message : 'Error desconegut'}`);
+    }
+  };
+
   // Excel mapping logic remains unchanged
   const handleTextSelection = () => {
     if (!convertedHtml || !selectedExcelHeader) return;
@@ -609,11 +728,7 @@ const TemplateEditor: React.FC<TemplateEditorProps> = ({ initialTemplateData, mo
                       : 'bg-gray-200 text-gray-500 cursor-not-allowed'
                   }`}
                   disabled={!hasUnsavedChanges}
-                  onClick={() => {
-                    // In a real app, this would save to the backend
-                    setHasUnsavedChanges(false);
-                    alert('Plantilla desada correctament');
-                  }}
+                  onClick={saveTemplate}
                   title="Desar plantilla"
                 >
                   <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
