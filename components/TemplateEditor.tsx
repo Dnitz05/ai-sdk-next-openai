@@ -333,16 +333,6 @@ const TemplateEditor: React.FC<TemplateEditorProps> = ({ initialTemplateData, mo
   // Function to save the template to the backend
   const saveTemplate = async () => {
     try {
-      // Obtain authentication token
-      const supabase = createBrowserSupabaseClient();
-      const { data: sessionData } = await supabase.auth.getSession();
-      const accessToken = sessionData?.session?.access_token;
-      
-      if (!accessToken) {
-        alert('Error d\'autenticació. Torna a iniciar sessió.');
-        return;
-      }
-      
       // Extract Excel mappings from the HTML
       const linkMappings: Array<{id: string; excelHeader: string; selectedText: string}> = [];
       if (contentRef.current) {
@@ -365,6 +355,18 @@ const TemplateEditor: React.FC<TemplateEditorProps> = ({ initialTemplateData, mo
       
       // Prepare data based on the expected format for each endpoint
       if (mode === 'edit' && initialTemplateData?.id) {
+        // Obtain authentication token for edit mode
+        const supabase = createBrowserSupabaseClient();
+        const { data: sessionData, error: sessionError } = await supabase.auth.getSession();
+        
+        if (sessionError || !sessionData?.session?.access_token) {
+          console.error('Error d\'autenticació:', sessionError);
+          alert('Error d\'autenticació. Torna a iniciar sessió.');
+          return;
+        }
+        
+        const accessToken = sessionData.session.access_token;
+        
         // FORMAT FOR UPDATE-TEMPLATE
         const updateData = {
           config_name: templateTitleValue,
@@ -382,6 +384,9 @@ const TemplateEditor: React.FC<TemplateEditorProps> = ({ initialTemplateData, mo
           }))
         };
         
+        console.log('Actualitzant plantilla amb ID:', initialTemplateData.id);
+        console.log('Dades a enviar:', JSON.stringify(updateData, null, 2));
+        
         // Make API call to update the template
         const response = await fetch(`/api/update-template/${initialTemplateData.id}`, {
           method: 'PUT',
@@ -389,12 +394,15 @@ const TemplateEditor: React.FC<TemplateEditorProps> = ({ initialTemplateData, mo
             'Content-Type': 'application/json',
             'Authorization': `Bearer ${accessToken}`
           },
-          body: JSON.stringify(updateData)
+          body: JSON.stringify(updateData),
+          credentials: 'include' // Include cookies
         });
         
+        const responseData = await response.json();
+        
         if (!response.ok) {
-          const errorData = await response.json();
-          throw new Error(errorData.error || 'Error actualitzant la plantilla');
+          console.error('Error de resposta:', response.status, responseData);
+          throw new Error(responseData.error || 'Error actualitzant la plantilla');
         }
         
         // Update state
@@ -421,19 +429,24 @@ const TemplateEditor: React.FC<TemplateEditorProps> = ({ initialTemplateData, mo
           finalHtml: convertedHtml
         };
         
+        console.log('Creant nova plantilla');
+        console.log('Dades a enviar:', JSON.stringify(saveData, null, 2));
+        
         // Make API call to create a new template
         const response = await fetch('/api/save-configuration', {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json'
-            // No Authorization header needed as it uses cookies
           },
-          body: JSON.stringify(saveData)
+          body: JSON.stringify(saveData),
+          credentials: 'include' // Include cookies for server-side authentication
         });
         
+        const responseData = await response.json();
+        
         if (!response.ok) {
-          const errorData = await response.json();
-          throw new Error(errorData.error || 'Error creant la plantilla');
+          console.error('Error de resposta:', response.status, responseData);
+          throw new Error(responseData.error || 'Error creant la plantilla');
         }
         
         // Update state
