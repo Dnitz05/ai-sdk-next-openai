@@ -39,8 +39,12 @@ const TemplateEditor: React.FC<TemplateEditorProps> = ({ initialTemplateData, mo
 
   const [selectedExcelHeader, setSelectedExcelHeader] = useState<string | null>(null);
   const [convertedHtml, setConvertedHtml] = useState<string>(initialTemplateData?.final_html || '');
+  const [hasUnsavedChanges, setHasUnsavedChanges] = useState<boolean>(false);
+  const [isEditingTitle, setIsEditingTitle] = useState<boolean>(false);
+  const [templateTitleValue, setTemplateTitleValue] = useState<string>(templateTitle);
   const contentWrapperRef = useRef<HTMLDivElement>(null);
   const contentRef = useRef<HTMLDivElement>(null);
+  const titleInputRef = useRef<HTMLInputElement>(null);
 
   // IA mode is always active
   const iaMode = true; // Always true, no toggle needed
@@ -74,9 +78,24 @@ const TemplateEditor: React.FC<TemplateEditorProps> = ({ initialTemplateData, mo
     }
   }, [convertedHtml]);
 
+  // Effect to detect changes in the document
+  useEffect(() => {
+    // This is a simple implementation - in a real app, you would compare with the saved version
+    // or track changes more precisely
+    setHasUnsavedChanges(true);
+  }, [convertedHtml, prompts]);
+
+  // Effect to focus the title input when editing
+  useEffect(() => {
+    if (isEditingTitle && titleInputRef.current) {
+      titleInputRef.current.focus();
+      titleInputRef.current.select();
+    }
+  }, [isEditingTitle]);
+
   // Effect to update prompt positions based on paragraph positions
   useEffect(() => {
-    if (!iaMode || !contentRef.current || !contentWrapperRef.current) return;
+    if (!contentRef.current || !contentWrapperRef.current) return;
     
     // Calculate updated positions for prompts
     const updatedPrompts = calculatePromptPositions(prompts, contentRef, contentWrapperRef);
@@ -334,15 +353,87 @@ const TemplateEditor: React.FC<TemplateEditorProps> = ({ initialTemplateData, mo
         <div className="grid grid-cols-[280px_1fr_280px]">
           {/* New document header with document properties */}
           <div className="col-span-3 bg-white border-t border-x border-gray-200 rounded-t shadow-sm">
-            {/* Main header with title */}
+            {/* Main header with title and action buttons */}
             <div className="px-4 py-3 flex items-center border-b border-gray-200">
-              <h1 className="text-lg font-semibold text-gray-800">
-                {templateTitle}
-              </h1>
-              <div className="ml-auto flex items-center">
-                <span className="px-3 py-1 rounded text-sm bg-indigo-100 text-indigo-700">
-                  IA: Actiu
-                </span>
+              {isEditingTitle ? (
+                <div className="flex items-center">
+                  <input
+                    ref={titleInputRef}
+                    type="text"
+                    value={templateTitleValue}
+                    onChange={(e) => setTemplateTitleValue(e.target.value)}
+                    className="text-lg font-semibold text-gray-800 border border-gray-300 rounded px-2 py-1 focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                    onBlur={() => {
+                      setIsEditingTitle(false);
+                      setHasUnsavedChanges(true);
+                    }}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter') {
+                        setIsEditingTitle(false);
+                        setHasUnsavedChanges(true);
+                      }
+                    }}
+                  />
+                  <button
+                    className="ml-2 p-1 text-gray-500 hover:text-gray-700 rounded"
+                    onClick={() => setIsEditingTitle(false)}
+                    title="Cancel·lar"
+                  >
+                    <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                    </svg>
+                  </button>
+                </div>
+              ) : (
+                <h1 
+                  className="text-lg font-semibold text-gray-800 flex items-center cursor-pointer group"
+                  onClick={() => setIsEditingTitle(true)}
+                >
+                  {templateTitleValue}
+                  <svg 
+                    xmlns="http://www.w3.org/2000/svg" 
+                    className="h-4 w-4 ml-2 text-gray-400 opacity-0 group-hover:opacity-100 transition-opacity" 
+                    fill="none" 
+                    viewBox="0 0 24 24" 
+                    stroke="currentColor"
+                  >
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" />
+                  </svg>
+                </h1>
+              )}
+              <div className="ml-auto flex items-center space-x-2">
+                <button 
+                  className={`px-3 py-1 rounded text-sm flex items-center ${
+                    hasUnsavedChanges 
+                      ? 'bg-indigo-600 text-white hover:bg-indigo-700' 
+                      : 'bg-gray-200 text-gray-500 cursor-not-allowed'
+                  }`}
+                  disabled={!hasUnsavedChanges}
+                  onClick={() => {
+                    // In a real app, this would save to the backend
+                    setHasUnsavedChanges(false);
+                    alert('Plantilla desada correctament');
+                  }}
+                  title="Desar plantilla"
+                >
+                  <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7H5a2 2 0 00-2 2v9a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-3m-1 4l-3 3m0 0l-3-3m3 3V4" />
+                  </svg>
+                  Desar
+                </button>
+                <button 
+                  className="px-3 py-1 rounded text-sm bg-green-600 text-white hover:bg-green-700 flex items-center"
+                  onClick={() => {
+                    // In a real app, this would create a duplicate in the backend
+                    alert(`S'ha creat una còpia: "Còpia de ${templateTitleValue}"`);
+                  }}
+                  title="Duplicar plantilla"
+                >
+                  <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" />
+                  </svg>
+                  Duplicar
+                </button>
               </div>
             </div>
             
