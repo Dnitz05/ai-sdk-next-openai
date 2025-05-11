@@ -56,10 +56,11 @@ const TemplateEditor: React.FC<TemplateEditorProps> = ({ initialTemplateData, mo
   const [hasUnsavedChanges, setHasUnsavedChanges] = useState<boolean>(false);
   const [isEditingTitle, setIsEditingTitle] = useState<boolean>(false);
   const [templateTitleValue, setTemplateTitleValue] = useState<string>(templateTitle);
-  const [isEditingDocx, setIsEditingDocx] = useState<boolean>(false);
   const [docxNameValue, setDocxNameValue] = useState<string>(docxName);
-  const [isEditingExcel, setIsEditingExcel] = useState<boolean>(false);
   const [excelNameValue, setExcelNameValue] = useState<string>(excelName);
+  // Dummy state to disable rename functionality
+  const [isEditingDocx, setIsEditingDocx] = useState<boolean>(false);
+  const [isEditingExcel, setIsEditingExcel] = useState<boolean>(false);
   const contentWrapperRef = useRef<HTMLDivElement>(null);
   const contentRef = useRef<HTMLDivElement>(null);
   const titleInputRef = useRef<HTMLInputElement>(null);
@@ -918,10 +919,7 @@ const TemplateEditor: React.FC<TemplateEditorProps> = ({ initialTemplateData, mo
                     </div>
                   ) : (
                     <div className="flex items-center group">
-                      <span 
-                        className="cursor-pointer group-hover:text-indigo-600"
-                        onClick={() => setIsEditingDocx(true)}
-                      >
+                      <span className="text-xs">
                         {docxNameValue || "Cap DOCX seleccionat"}
                       </span>
                       <button
