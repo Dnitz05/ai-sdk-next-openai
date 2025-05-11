@@ -77,6 +77,28 @@ const TemplateEditor: React.FC<TemplateEditorProps> = ({ initialTemplateData, mo
   
   // Counter for sequential prompt numbering
   const [nextPromptNumber, setNextPromptNumber] = useState<number>(1);
+
+  // Load existing prompts when editing an existing template
+  useEffect(() => {
+    if (mode === 'edit' && initialTemplateData?.ai_instructions) {
+      const loaded: IAPrompt[] = initialTemplateData.ai_instructions.map((instr: any) => ({
+        id: instr.id,
+        paragraphId: instr.paragraphId,
+        content: instr.content,
+        status: instr.status || 'saved',
+        createdAt: new Date(),     // Placeholder date
+        updatedAt: new Date(),     // Placeholder date
+        position: 0,               // Will be recalculated
+        isExpanded: false,
+        order: instr.order
+      }));
+      setPrompts(loaded);
+      // Ensure nextPromptNumber starts after the highest existing order
+      setNextPromptNumber(
+        loaded.reduce((max, p) => Math.max(max, p.order ?? 0), 0) + 1
+      );
+    }
+  }, [mode, initialTemplateData]);
   
   // Legacy state kept for backward compatibility
   const [iaPromptsData, setIaPromptsData] = useState<Record<string, ParagraphIaData>>({});
@@ -448,8 +470,24 @@ const TemplateEditor: React.FC<TemplateEditorProps> = ({ initialTemplateData, mo
             headers: excelHeaders
           },
           linkMappings: linkMappings,
+          aiInstructions: prompts.map((p) => ({
+            id: p.id,
+            paragraphId: p.paragraphId,
+            content: p.content,
+            prompt: p.content,  // Per compatibilitat
+            status: p.status || 'saved',
+            order: p.order || 0
+          })),
           // Utilitzar el mateix format tant per la creació com per l'edició
           ai_instructions: prompts.map(p => ({
+          ai_instructions: prompts.map(p => ({
+            id: p.id,
+            paragraphId: p.paragraphId,
+            content: p.content,
+            prompt: p.content,  // Per compatibilitat
+            status: p.status || 'saved',
+            order: p.order || 0
+          })),
             id: p.id,
             paragraphId: p.paragraphId,
             content: p.content,
