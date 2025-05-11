@@ -65,9 +65,11 @@ const PromptCard: React.FC<PromptCardProps> = ({
       return;
     }
     
+    // El contingut ja s'hauria d'haver propagat.
+    // Aquí principalment canviem l'status a 'saved' i actualitzem el timestamp.
     onUpdate({
       ...prompt,
-      content,
+      content, // Assegura que s'envia el contingut actual de l'estat local
       status: 'saved',
       updatedAt: new Date()
     });
@@ -194,7 +196,19 @@ const PromptCard: React.FC<PromptCardProps> = ({
             <textarea
               ref={textareaRef}
               value={content}
-              onChange={(e) => setContent(e.target.value)}
+              onChange={(e) => {
+                const newContent = e.target.value;
+                setContent(newContent);
+                // Propagate changes immediately to TemplateEditor with 'draft' status
+                // or keep 'saved' if it was already saved and just being edited.
+                // The key is that the content is updated in the parent.
+                onUpdate({
+                  ...prompt,
+                  content: newContent,
+                  // status: prompt.status === 'saved' ? 'saved' : 'draft', // Keep status or set to draft
+                  updatedAt: new Date() // Update timestamp on any change
+                });
+              }}
               onBlur={handleBlur}
               className="w-full p-1.5 text-sm border border-gray-300 rounded focus:ring-indigo-500 focus:border-indigo-500"
               style={{ 
