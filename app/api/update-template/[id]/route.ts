@@ -80,14 +80,20 @@ export async function PUT(request: NextRequest) {
   // Processament especial per a 'ai_instructions' per assegurar que es desa correctament
   if ('ai_instructions' in body && Array.isArray(body.ai_instructions)) {
     // Assegurar que el format sigui correcte i tots els camps necessaris hi siguin
-    updateData.ai_instructions = body.ai_instructions.map((instr: IAInstruction) => ({
-      id: instr.id || `ia-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
-      paragraphId: instr.paragraphId || '',
-      prompt: instr.content || instr.prompt || '',  // Suporta ambdós formats
-      content: instr.content || instr.prompt || '',  // Duplicar per compatibilitat
-      status: instr.status || 'saved',
-      order: instr.order || 0
-    }));
+    console.log('[API UPDATE-TEMPLATE] Processant ai_instructions. Rebut:', JSON.stringify(body.ai_instructions));
+    updateData.ai_instructions = body.ai_instructions.map((instr: IAInstruction, index: number) => {
+      console.log(`[API UPDATE-TEMPLATE] Instrucció IA [${index}] rebuda:`, JSON.stringify(instr));
+      const processedInstr = {
+        id: instr.id || `ia-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
+        paragraphId: instr.paragraphId || '',
+        prompt: instr.content || instr.prompt || '',  // Suporta ambdós formats
+        content: instr.content || instr.prompt || '',  // Duplicar per compatibilitat
+        status: instr.status || 'saved',
+        order: instr.order || 0
+      };
+      console.log(`[API UPDATE-TEMPLATE] Instrucció IA [${index}] processada:`, JSON.stringify(processedInstr));
+      return processedInstr;
+    });
   }
 
   // LOG del body rebut i del payload d'update
