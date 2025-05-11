@@ -58,14 +58,9 @@ const TemplateEditor: React.FC<TemplateEditorProps> = ({ initialTemplateData, mo
   const [templateTitleValue, setTemplateTitleValue] = useState<string>(templateTitle);
   const [docxNameValue, setDocxNameValue] = useState<string>(docxName);
   const [excelNameValue, setExcelNameValue] = useState<string>(excelName);
-  // Dummy state to disable rename functionality
-  const [isEditingDocx, setIsEditingDocx] = useState<boolean>(false);
-  const [isEditingExcel, setIsEditingExcel] = useState<boolean>(false);
   const contentWrapperRef = useRef<HTMLDivElement>(null);
   const contentRef = useRef<HTMLDivElement>(null);
   const titleInputRef = useRef<HTMLInputElement>(null);
-  const docxInputRef = useRef<HTMLInputElement>(null);
-  const excelInputRef = useRef<HTMLInputElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   // IA mode is always active
@@ -784,15 +779,6 @@ const TemplateEditor: React.FC<TemplateEditorProps> = ({ initialTemplateData, mo
                       }
                     }}
                   />
-                  <button
-                    className="ml-2 p-1 text-gray-500 hover:text-gray-700 rounded"
-                    onClick={() => setIsEditingTitle(false)}
-                    title="Cancel·lar"
-                  >
-                    <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                    </svg>
-                  </button>
                 </div>
               ) : (
                 <h1 
@@ -888,66 +874,26 @@ const TemplateEditor: React.FC<TemplateEditorProps> = ({ initialTemplateData, mo
                     <path d="M9 2a2 2 0 00-2 2v8a2 2 0 002 2h6a2 2 0 002-2V6.414A2 2 0 0016.414 5L14 2.586A2 2 0 0012.586 2H9z"></path>
                   </svg>
                   
-                  {isEditingDocx ? (
                     <div className="flex items-center">
-                      <input
-                        ref={docxInputRef}
-                        type="text"
-                        value={docxNameValue}
-                        onChange={(e) => setDocxNameValue(e.target.value)}
-                        className="text-xs border border-gray-300 rounded px-1 py-0.5 focus:outline-none focus:ring-1 focus:ring-indigo-500 w-32"
-                        onBlur={() => {
-                          setIsEditingDocx(false);
-                          setHasUnsavedChanges(true);
-                        }}
-                        onKeyDown={(e) => {
-                          if (e.key === 'Enter') {
-                            setIsEditingDocx(false);
-                            setHasUnsavedChanges(true);
-                          }
-                        }}
-                      />
-                      <button
-                        className="ml-1 p-0.5 text-gray-500 hover:text-gray-700 rounded"
-                        onClick={() => setIsEditingDocx(false)}
-                        title="Cancel·lar"
-                      >
-                        <svg xmlns="http://www.w3.org/2000/svg" className="h-3 w-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                        </svg>
-                      </button>
-                    </div>
-                  ) : (
-                    <div className="flex items-center group">
-                      <span className="text-xs">
+                      <span className="text-xs mr-1">
                         {docxNameValue || "Cap DOCX seleccionat"}
                       </span>
                       <button
-                        className="ml-1 p-0.5 text-gray-400 opacity-0 group-hover:opacity-100 hover:text-indigo-600 transition-opacity"
-                        onClick={() => setIsEditingDocx(true)}
-                        title="Editar nom"
-                      >
-                        <svg xmlns="http://www.w3.org/2000/svg" className="h-3 w-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" />
-                        </svg>
-                      </button>
-                      <button
-                        className="ml-1 p-0.5 text-gray-400 opacity-0 group-hover:opacity-100 hover:text-indigo-600 transition-opacity"
+                        className="p-0.5 text-gray-500 hover:text-indigo-600"
                         onClick={() => {
                           if (fileInputRef.current) {
                             fileInputRef.current.setAttribute('accept', '.docx');
-                            fileInputRef.current.setAttribute('data-file-type', 'docx');
+                            fileInputRef.current.dataset.fileType = 'docx'; // Use dataset for custom attributes
                             fileInputRef.current.click();
                           }
                         }}
-                        title="Seleccionar nou DOCX"
+                        title="Pujar nou DOCX"
                       >
                         <svg xmlns="http://www.w3.org/2000/svg" className="h-3 w-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.172 7l-6.586 6.586a2 2 0 102.828 2.828l6.414-6.586a4 4 0 00-5.656-5.656l-6.415 6.585a6 6 0 108.486 8.486L20.5 13" />
                         </svg>
                       </button>
                     </div>
-                  )}
                 </div>
                 
                 {/* Excel file */}
@@ -956,69 +902,26 @@ const TemplateEditor: React.FC<TemplateEditorProps> = ({ initialTemplateData, mo
                     <path d="M9 2a2 2 0 00-2 2v8a2 2 0 002 2h6a2 2 0 002-2V6.414A2 2 0 0016.414 5L14 2.586A2 2 0 0012.586 2H9z"></path>
                   </svg>
                   
-                  {isEditingExcel ? (
                     <div className="flex items-center">
-                      <input
-                        ref={excelInputRef}
-                        type="text"
-                        value={excelNameValue}
-                        onChange={(e) => setExcelNameValue(e.target.value)}
-                        className="text-xs border border-gray-300 rounded px-1 py-0.5 focus:outline-none focus:ring-1 focus:ring-indigo-500 w-32"
-                        onBlur={() => {
-                          setIsEditingExcel(false);
-                          setHasUnsavedChanges(true);
-                        }}
-                        onKeyDown={(e) => {
-                          if (e.key === 'Enter') {
-                            setIsEditingExcel(false);
-                            setHasUnsavedChanges(true);
-                          }
-                        }}
-                      />
-                      <button
-                        className="ml-1 p-0.5 text-gray-500 hover:text-gray-700 rounded"
-                        onClick={() => setIsEditingExcel(false)}
-                        title="Cancel·lar"
-                      >
-                        <svg xmlns="http://www.w3.org/2000/svg" className="h-3 w-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                        </svg>
-                      </button>
-                    </div>
-                  ) : (
-                    <div className="flex items-center group">
-                      <span 
-                        className="cursor-pointer group-hover:text-indigo-600"
-                        onClick={() => setIsEditingExcel(true)}
-                      >
+                      <span className="text-xs mr-1">
                         {excelNameValue || "Cap Excel seleccionat"}
                       </span>
                       <button
-                        className="ml-1 p-0.5 text-gray-400 opacity-0 group-hover:opacity-100 hover:text-indigo-600 transition-opacity"
-                        onClick={() => setIsEditingExcel(true)}
-                        title="Editar nom"
-                      >
-                        <svg xmlns="http://www.w3.org/2000/svg" className="h-3 w-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" />
-                        </svg>
-                      </button>
-                      <button
-                        className="ml-1 p-0.5 text-gray-400 opacity-0 group-hover:opacity-100 hover:text-indigo-600 transition-opacity"
+                        className="p-0.5 text-gray-500 hover:text-indigo-600"
                         onClick={() => {
                           if (fileInputRef.current) {
                             fileInputRef.current.setAttribute('accept', '.xlsx,.xls');
-                            fileInputRef.current.setAttribute('data-file-type', 'excel');
+                            fileInputRef.current.dataset.fileType = 'excel'; // Use dataset for custom attributes
                             fileInputRef.current.click();
                           }
                         }}
-                        title="Seleccionar nou Excel"
+                        title="Pujar nou Excel"
                       >
                         <svg xmlns="http://www.w3.org/2000/svg" className="h-3 w-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.172 7l-6.586 6.586a2 2 0 102.828 2.828l6.414-6.586a4 4 0 00-5.656-5.656l-6.415 6.585a6 6 0 108.486 8.486L20.5 13" />
                         </svg>
                       </button>
                     </div>
-                  )}
                 </div>
               </div>
               
