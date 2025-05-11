@@ -79,10 +79,11 @@ export async function PUT(request: NextRequest) {
   
   // Processament especial per a 'ai_instructions' per assegurar que es desa correctament
   if ('ai_instructions' in body && Array.isArray(body.ai_instructions)) {
+    console.log('[API UPDATE-TEMPLATE] DINS BLOC IF per ai_instructions. body.ai_instructions:', JSON.stringify(body.ai_instructions)); // LOG SIMPLIFICAT
     // Assegurar que el format sigui correcte i tots els camps necessaris hi siguin
-    console.log('[API UPDATE-TEMPLATE] Processant ai_instructions. Rebut:', JSON.stringify(body.ai_instructions));
+    // console.log('[API UPDATE-TEMPLATE] Processant ai_instructions. Rebut:', JSON.stringify(body.ai_instructions)); // Comentat temporalment
     updateData.ai_instructions = body.ai_instructions.map((instr: IAInstruction, index: number) => {
-      console.log(`[API UPDATE-TEMPLATE] Instrucció IA [${index}] rebuda:`, JSON.stringify(instr));
+      // console.log(`[API UPDATE-TEMPLATE] Instrucció IA [${index}] rebuda:`, JSON.stringify(instr)); // Comentat temporalment
       const processedInstr = {
         id: instr.id || `ia-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
         paragraphId: instr.paragraphId || '',
@@ -91,9 +92,11 @@ export async function PUT(request: NextRequest) {
         status: instr.status || 'saved',
         order: instr.order || 0
       };
-      console.log(`[API UPDATE-TEMPLATE] Instrucció IA [${index}] processada:`, JSON.stringify(processedInstr));
+      // console.log(`[API UPDATE-TEMPLATE] Instrucció IA [${index}] processada:`, JSON.stringify(processedInstr)); // Comentat temporalment
       return processedInstr;
     });
+  } else {
+    console.log('[API UPDATE-TEMPLATE] NO ES VA ENTRAR AL BLOC IF per ai_instructions. "ai_instructions" in body?:', 'ai_instructions' in body, 'Array.isArray(body.ai_instructions)?:', Array.isArray(body.ai_instructions) );
   }
 
   // LOG del body rebut i del payload d'update
