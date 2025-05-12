@@ -5,15 +5,47 @@ import { createServerSupabaseClient } from '@/lib/supabase/serverClient';
 export async function POST(request: NextRequest) {
   console.log("API /api/upload-original-docx rebuda petició POST");
 
-  // Obtenir l'usuari autenticat via Supabase (mateix patró que save-configuration)
-  const supabase = await createServerSupabaseClient();
-  const { data: userData, error: userError } = await supabase.auth.getUser();
+  // Obtenir l'usuari autenticat via token Bearer o cookies
+  let userId: string | null = null;
+  let userError: any = null;
 
-  if (userError || !userData?.user) {
+  // 1. Prova d'obtenir el token d'accés de l'header Authorization
+  const authHeader = request.headers.get('authorization') || request.headers.get('Authorization');
+  if (authHeader && authHeader.startsWith('Bearer ')) {
+    try {
+      const { createUserSupabaseClient } = await import('@/lib/supabase/userClient');
+      const accessToken = authHeader.replace('Bearer ', '').trim();
+      const supabase = createUserSupabaseClient(accessToken);
+      const { data: userData, error } = await supabase.auth.getUser();
+      if (error || !userData?.user) {
+        userError = error;
+      } else {
+        userId = userData.user.id;
+      }
+    } catch (e) {
+      userError = e;
+    }
+  }
+
+  // 2. Si no s'ha trobat via header, prova via cookies (App Router)
+  if (!userId) {
+    try {
+      const supabase = await createServerSupabaseClient();
+      const { data: userData, error } = await supabase.auth.getUser();
+      if (error || !userData?.user) {
+        userError = error;
+      } else {
+        userId = userData.user.id;
+      }
+    } catch (e) {
+      userError = e;
+    }
+  }
+
+  if (!userId) {
     console.error("[API upload-original-docx] Error obtenint informació de l'usuari:", userError);
     return NextResponse.json({ error: 'Usuari no autenticat.' }, { status: 401 });
   }
-  const userId = userData.user.id;
 
   const supabaseAdmin = createClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
