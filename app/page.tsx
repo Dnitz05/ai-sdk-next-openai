@@ -15,10 +15,27 @@ export default function NovaPlantilla() {
   const [excelHeaders, setExcelHeaders] = useState<string[]>([]);
 
   // Processa el DOCX amb l'API
+  // Nou flux: primer puja el DOCX a Storage, després processa via storagePath
   const processDocx = async (file: File) => {
+    // 1. Pujar el DOCX a Storage
     const formData = new FormData();
     formData.append('file', file);
-    const r = await fetch('/api/process-document', { method: 'POST', body: formData, credentials: 'include' });
+    formData.append('templateId', 'nova-plantilla'); // O genera un UUID si cal
+    const uploadRes = await fetch('/api/upload-original-docx', {
+      method: 'POST',
+      body: formData,
+      credentials: 'include',
+    });
+    if (!uploadRes.ok) throw new Error('Error pujant DOCX');
+    const uploadData = await uploadRes.json();
+    if (!uploadData.success || !uploadData.originalDocxPath) throw new Error('No s\'ha rebut la ruta del DOCX');
+    // 2. Processar el DOCX via storagePath
+    const r = await fetch('/api/process-document', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      credentials: 'include',
+      body: JSON.stringify({ storagePath: uploadData.originalDocxPath }),
+    });
     if (!r.ok) throw new Error('Error processant DOCX');
     const d = await r.json();
     return d.html as string;
