@@ -3,6 +3,7 @@
 import { useRouter } from 'next/navigation';
 import { useState } from 'react';
 import * as XLSX from 'xlsx';
+import { createBrowserSupabaseClient } from '../lib/supabase/browserClient';
 
 export default function NovaPlantilla() {
   const router = useRouter();
@@ -17,7 +18,13 @@ export default function NovaPlantilla() {
   // Processa el DOCX amb l'API
   // Nou flux: primer puja el DOCX a Storage, després processa via storagePath
   const processDocx = async (file: File) => {
-    // 1. Pujar el DOCX a Storage
+    // 1. Obtenir token d'autenticació Supabase
+    const supabase = createBrowserSupabaseClient();
+    await supabase.auth.refreshSession();
+    const { data: sessionData } = await supabase.auth.getSession();
+    const accessToken = sessionData?.session?.access_token;
+
+    // 2. Pujar el DOCX a Storage
     const formData = new FormData();
     formData.append('file', file);
     formData.append('templateId', 'nova-plantilla'); // O genera un UUID si cal
@@ -25,11 +32,12 @@ export default function NovaPlantilla() {
       method: 'POST',
       body: formData,
       credentials: 'include',
+      headers: accessToken ? { Authorization: `Bearer ${accessToken}` } : {},
     });
     if (!uploadRes.ok) throw new Error('Error pujant DOCX');
     const uploadData = await uploadRes.json();
     if (!uploadData.success || !uploadData.originalDocxPath) throw new Error('No s\'ha rebut la ruta del DOCX');
-    // 2. Processar el DOCX via storagePath
+    // 3. Processar el DOCX via storagePath
     const r = await fetch('/api/process-document', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
