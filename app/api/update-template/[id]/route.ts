@@ -24,12 +24,8 @@ interface IAInstruction {
   order?: number;
 }
 
-export async function PUT(request: NextRequest, { params }: { params: { id: string } }) {
+export async function PUT(request: NextRequest) {
   // 1. Verificar autenticació
-  // (La lògica d'autenticació existent sembla utilitzar un token Bearer personalitzat.
-  // Es manté aquesta lògica. Si s'utilitza l'autenticació de Supabase directament,
-  // es podria simplificar amb createServerSupabaseClient com a save-configuration)
-
   const authHeader = request.headers.get('authorization') || request.headers.get('Authorization');
   if (!authHeader || !authHeader.startsWith('Bearer ')) {
     return NextResponse.json({ error: 'No autenticat. Falten credencials.' }, { status: 401 });
@@ -53,8 +49,10 @@ export async function PUT(request: NextRequest, { params }: { params: { id: stri
     { auth: { persistSession: false, autoRefreshToken: false } }
   );
 
-  // Extreu l'id de la URL (paràmetre dinàmic)
-  const id = params.id;
+  // Extreu l'id de la URL (paràmetre dinàmic) de la pathname
+  // Ex: /api/update-template/1234-5678-abcd-efgh
+  const pathParts = request.nextUrl.pathname.split('/');
+  const id = pathParts[pathParts.length - 1];
   console.log('[API UPDATE-TEMPLATE] ID de la plantilla a actualitzar:', id);
   
   if (!id) {
