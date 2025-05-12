@@ -13,11 +13,17 @@ export async function POST(request: NextRequest) {
     process.env.SUPABASE_SERVICE_ROLE_KEY!
   );
 
+  // Robustesa extra: captura errors de parsing JSON i retorna error clar
+  let body;
   try {
-    // 1. Llegir el cos JSON per obtenir storagePath
-    const body = await request.json();
-    const storagePath = body.storagePath as string | undefined;
+    body = await request.json();
+  } catch (e) {
+    console.error("[API process-document] Error de parsing JSON al cos de la petició:", e);
+    return NextResponse.json({ error: "El cos de la petició ha de ser JSON amb { storagePath }." }, { status: 400 });
+  }
+  const storagePath = body.storagePath as string | undefined;
 
+  try {
     if (!storagePath) {
       console.error("[API process-document] No s'ha proporcionat 'storagePath' al cos de la petició.");
       return NextResponse.json({ error: 'Falta la ruta del fitxer (storagePath).' }, { status: 400 });
@@ -36,8 +42,8 @@ export async function POST(request: NextRequest) {
     }
 
     if (!fileData) {
-        console.error(`[API process-document] No s'han rebut dades (fileData is null) per a '${storagePath}' de Supabase Storage.`);
-        return NextResponse.json({ error: 'No s\'han pogut obtenir les dades del fitxer de Storage.'}, { status: 500 });
+      console.error(`[API process-document] No s'han rebut dades (fileData is null) per a '${storagePath}' de Supabase Storage.`);
+      return NextResponse.json({ error: 'No s\'han pogut obtenir les dades del fitxer de Storage.'}, { status: 500 });
     }
 
     console.log(`[API process-document] Fitxer descarregat correctament de Storage. Mida del Blob: ${fileData.size} bytes`);
@@ -50,10 +56,10 @@ export async function POST(request: NextRequest) {
 
     // --- Opcions i StyleMap de Mammoth (sense canvis) ---
     const styleMap = [
-        "p[style-name='Heading 1'] => h1:fresh", "p[style-name='Heading 2'] => h2:fresh", "p[style-name='Heading 3'] => h3:fresh", "p[style-name='Heading 4'] => h4:fresh",
-        "p[style-name='Títol 1'] => h1:fresh", "p[style-name='Títol 2'] => h2:fresh", "p[style-name='Títol 3'] => h3:fresh", "p[style-name='Títol 4'] => h4:fresh",
-        "p[style-name='Título 1'] => h1:fresh", "p[style-name='Título 2'] => h2:fresh", "p[style-name='Título 3'] => h3:fresh", "p[style-name='Título 4'] => h4:fresh",
-        "p[style-name='Body Text'] => p:fresh", "p[style-name='Body Text Indent'] => p:fresh", "p[style-name='Body Text 2'] => p:fresh",
+      "p[style-name='Heading 1'] => h1:fresh", "p[style-name='Heading 2'] => h2:fresh", "p[style-name='Heading 3'] => h3:fresh", "p[style-name='Heading 4'] => h4:fresh",
+      "p[style-name='Títol 1'] => h1:fresh", "p[style-name='Títol 2'] => h2:fresh", "p[style-name='Títol 3'] => h3:fresh", "p[style-name='Títol 4'] => h4:fresh",
+      "p[style-name='Título 1'] => h1:fresh", "p[style-name='Título 2'] => h2:fresh", "p[style-name='Título 3'] => h3:fresh", "p[style-name='Título 4'] => h4:fresh",
+      "p[style-name='Body Text'] => p:fresh", "p[style-name='Body Text Indent'] => p:fresh", "p[style-name='Body Text 2'] => p:fresh",
     ];
     const mammothOptions = { styleMap: styleMap };
     // ----------------------------------------------------
@@ -68,27 +74,27 @@ export async function POST(request: NextRequest) {
     // ---- Neteja d'HTML amb Cheerio i optimització de taules (sense canvis) ----
     console.log("[API process-document] Netejant HTML generat per Mammoth...");
     const $ = cheerio.load(rawHtml);
-    
-    $('td').each((_i, tdElement) => { 
-      const $td = $(tdElement); 
-      const $children = $td.children(); 
-      if ($children.length === 1 && $children.is('p')) { 
-        $td.html($children.html() || ''); 
-      } 
+
+    $('td').each((_i, tdElement) => {
+      const $td = $(tdElement);
+      const $children = $td.children();
+      if ($children.length === 1 && $children.is('p')) {
+        $td.html($children.html() || '');
+      }
     });
-    
-    $('p > h1, p > h2, p > h3, p > h4, p > h5, p > h6, p > table, p > ul, p > ol, p > div').each((_i, blockElement) => { 
-      const $block = $(blockElement); 
-      const $parentParagraph = $block.parent('p'); 
-      if ($parentParagraph.length > 0) { 
-        if (($parentParagraph.text() || '').trim() === ($block.text() || '').trim()) { 
-          $parentParagraph.replaceWith($block); 
-        } else { 
-          $parentParagraph.before($block); 
-        } 
-      } 
+
+    $('p > h1, p > h2, p > h3, p > h4, p > h5, p > h6, p > table, p > ul, p > ol, p > div').each((_i, blockElement) => {
+      const $block = $(blockElement);
+      const $parentParagraph = $block.parent('p');
+      if ($parentParagraph.length > 0) {
+        if (($parentParagraph.text() || '').trim() === ($block.text() || '').trim()) {
+          $parentParagraph.replaceWith($block);
+        } else {
+          $parentParagraph.before($block);
+        }
+      }
     });
-    
+
     console.log("[API process-document] Aplicant optimització a les taules...");
     $('table').each((_i, tableElement) => {
       const $table = $(tableElement);
@@ -112,7 +118,7 @@ export async function POST(request: NextRequest) {
         });
       });
     });
-    
+
     const cleanedHtml = $('body').html() || '';
     console.log("[API process-document] Neteja d'HTML i optimització de taules completada.");
     // ---------------------------------------------
@@ -124,9 +130,8 @@ export async function POST(request: NextRequest) {
     console.error("[API process-document] Error CRÍTIC processant el document:", error);
     const errorMessage = error instanceof Error ? error.message : 'Error desconegut.';
     return NextResponse.json({
-        error: 'Error intern processant el document',
-        details: errorMessage,
-        },
-        { status: 500 });
+      error: 'Error intern processant el document',
+      details: errorMessage,
+    }, { status: 500 });
   }
 }
