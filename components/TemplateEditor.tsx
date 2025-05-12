@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef, MouseEvent } from 'react';
+import { v4 as uuidv4 } from 'uuid'; // Importar uuid
 import * as XLSX from 'xlsx';
 import PromptSidebar, { IAPrompt } from './PromptSidebar';
 import { createBrowserSupabaseClient } from '@/lib/supabase/browserClient';
@@ -34,21 +35,27 @@ const MIN_EDITOR_BOX_HEIGHT = 90; // px - Adjusted for label, button, padding, a
 
 const TemplateEditor: React.FC<TemplateEditorProps> = ({ initialTemplateData, mode }) => {
   const templateTitle = initialTemplateData?.config_name || '';
-  const docxName = initialTemplateData?.base_docx_name || '';
+  const docxName = initialTemplateData?.base_docx_name || ''; // Nom del fitxer DOCX original
   const excelName = initialTemplateData?.excel_file_name || '';
   const initialExcelHeaders: string[] = initialTemplateData?.excel_headers || [];
+
+  // Nous estats per a la gestió de l'ID de la plantilla i la ruta del DOCX a Storage
+  const [currentTemplateId, setCurrentTemplateId] = useState<string | null>(null);
+  const [originalDocxStoragePath, setOriginalDocxStoragePath] = useState<string | null>(
+    initialTemplateData?.base_docx_storage_path || null
+  );
   
   // State for Excel headers so they can be updated
   const [excelHeaders, setExcelHeaders] = useState<string[]>(initialExcelHeaders);
   
   // Use creation and modification dates from initialTemplateData if available,
   // otherwise use default historical dates
-  const createdDate = initialTemplateData?.created_at 
-    ? new Date(initialTemplateData.created_at) 
+  const createdDate = initialTemplateData?.created_at
+    ? new Date(initialTemplateData.created_at)
     : new Date(2024, 0, 15); // January 15, 2024 as default
   
-  const modifiedDate = initialTemplateData?.updated_at 
-    ? new Date(initialTemplateData.updated_at) 
+  const modifiedDate = initialTemplateData?.updated_at
+    ? new Date(initialTemplateData.updated_at)
     : new Date(2024, 3, 5); // April 5, 2024 as default
 
   const [selectedExcelHeader, setSelectedExcelHeader] = useState<string | null>(null);
@@ -56,7 +63,7 @@ const TemplateEditor: React.FC<TemplateEditorProps> = ({ initialTemplateData, mo
   const [hasUnsavedChanges, setHasUnsavedChanges] = useState<boolean>(false);
   const [isEditingTitle, setIsEditingTitle] = useState<boolean>(false);
   const [templateTitleValue, setTemplateTitleValue] = useState<string>(templateTitle);
-  const [docxNameValue, setDocxNameValue] = useState<string>(docxName);
+  const [docxNameValue, setDocxNameValue] = useState<string>(docxName); // Nom del fitxer per mostrar
   const [excelNameValue, setExcelNameValue] = useState<string>(excelName);
   const contentWrapperRef = useRef<HTMLDivElement>(null);
   const contentRef = useRef<HTMLDivElement>(null);
@@ -67,12 +74,25 @@ const TemplateEditor: React.FC<TemplateEditorProps> = ({ initialTemplateData, mo
   const iaMode = true; // Always true, no toggle needed
   
   // New prompt management state
-  const [prompts, setPrompts] = useState<IAPrompt[]>([]); 
+  const [prompts, setPrompts] = useState<IAPrompt[]>([]);
   const [activePromptId, setActivePromptId] = useState<string | null>(null);
   const [hoveredPId, setHoveredPId] = useState<string | null>(null);
   
   // Counter for sequential prompt numbering
   const [nextPromptNumber, setNextPromptNumber] = useState<number>(1);
+
+  // Efecte per inicialitzar currentTemplateId i originalDocxStoragePath
+  useEffect(() => {
+    if (mode === 'edit' && initialTemplateData?.id) {
+      setCurrentTemplateId(initialTemplateData.id);
+      setOriginalDocxStoragePath(initialTemplateData.base_docx_storage_path || null);
+      setDocxNameValue(initialTemplateData.base_docx_name || ''); // Assegurar que el nom es carrega
+    } else if (mode === 'new') {
+      setCurrentTemplateId(uuidv4()); // Generar UUID per a noves plantilles
+      setOriginalDocxStoragePath(null);
+      setDocxNameValue(''); // Començar sense nom de DOCX
+    }
+  }, [mode, initialTemplateData]);
 
   // Load existing prompts when editing an existing template
   useEffect(() => {
@@ -396,9 +416,9 @@ const TemplateEditor: React.FC<TemplateEditorProps> = ({ initialTemplateData, mo
         const accessToken = sessionData.session.access_token;
         
         // FORMAT FOR UPDATE-TEMPLATE
-        const updateData = {
+        const updateData: any = { // Usar 'any' temporalment o definir una interfície més completa
           config_name: templateTitleValue,
-          base_docx_name: docxNameValue,
+          base_docx_name: docxNameValue, // Nom del fitxer DOCX
           excel_file_name: excelNameValue,
           final_html: convertedHtml,
           excel_headers: excelHeaders,
@@ -406,11 +426,12 @@ const TemplateEditor: React.FC<TemplateEditorProps> = ({ initialTemplateData, mo
           ai_instructions: prompts.map(p => ({
             id: p.id,
             paragraphId: p.paragraphId,
-            prompt: p.content,   // Camp 'prompt' per compatibilitat amb format esperat
-            content: p.content,  // Camp 'content' també per redundància
+            prompt: p.content,
+            content: p.content,
             status: p.status,
-            order: p.order || 0  // Assegurar-se que order mai és undefined
-          }))
+            order: p.order || 0
+          })),
+          originalDocxPath: originalDocxStoragePath, // Enviar la ruta del DOCX a Storage
         };
         
         if (!initialTemplateData?.id) {
@@ -458,41 +479,30 @@ const TemplateEditor: React.FC<TemplateEditorProps> = ({ initialTemplateData, mo
         
       } else {
         // FORMAT FOR SAVE-CONFIGURATION (new template)
-        const saveData = {
-          baseDocxName: docxNameValue,
+        const saveData: any = { // Usar 'any' temporalment o definir una interfície més completa
+          id: currentTemplateId, // Enviar l'UUID generat pel frontend
+          baseDocxName: docxNameValue, // Nom del fitxer DOCX
           config_name: templateTitleValue,
           excelInfo: {
             fileName: excelNameValue,
             headers: excelHeaders
           },
           linkMappings: linkMappings,
-          aiInstructions: prompts.map((p) => ({
-            id: p.id,
-            paragraphId: p.paragraphId,
-            content: p.content,
-            prompt: p.content,  // Per compatibilitat
-            status: p.status || 'saved',
-            order: p.order || 0
-          })),
-          // Utilitzar el mateix format tant per la creació com per l'edició
-          ai_instructions: prompts.map(p => ({
+          // Mantenir ai_instructions amb el format esperat pel backend
           ai_instructions: prompts.map(p => ({
             id: p.id,
             paragraphId: p.paragraphId,
             content: p.content,
-            prompt: p.content,  // Per compatibilitat
+            prompt: p.content, // Per compatibilitat si cal
             status: p.status || 'saved',
             order: p.order || 0
           })),
-            id: p.id,
-            paragraphId: p.paragraphId,
-            content: p.content,
-            prompt: p.content,  // Per compatibilitat
-            status: p.status || 'saved',
-            order: p.order || 0
-          })),
-          finalHtml: convertedHtml
+          finalHtml: convertedHtml,
+          originalDocxPath: originalDocxStoragePath, // Enviar la ruta del DOCX a Storage
         };
+        
+        // Eliminar aiInstructions si no s'utilitza per evitar redundància
+        // delete saveData.aiInstructions;
         
         const createUrl = '/api/save-configuration';
         console.log('Creant nova plantilla a URL:', createUrl);
@@ -592,31 +602,65 @@ const TemplateEditor: React.FC<TemplateEditorProps> = ({ initialTemplateData, mo
     
     try {
       if (fileType === 'docx') {
-        // Process DOCX file using the API
-        setDocxNameValue(file.name);
+        if (!currentTemplateId) {
+          document.body.removeChild(loadingMessage);
+          alert("Error: Falta l'ID de la plantilla per pujar el fitxer DOCX.");
+          if (fileInputRef.current) fileInputRef.current.value = '';
+          return;
+        }
+
+        setDocxNameValue(file.name); // Actualitzar el nom del fitxer a la UI
         setHasUnsavedChanges(true);
-        
-        // Create FormData to send the file
-        const formData = new FormData();
-        formData.append('file', file);
-        
-        // Send the file to the process-document API
-        const response = await fetch('/api/process-document', {
+
+        // 1. Pujar el fitxer DOCX original
+        const formDataUpload = new FormData();
+        formDataUpload.append('file', file);
+        formDataUpload.append('templateId', currentTemplateId);
+
+        const uploadResponse = await fetch('/api/upload-original-docx', {
           method: 'POST',
-          body: formData,
+          body: formDataUpload,
+          // Afegir token d'autenticació si /api/upload-original-docx ho requereix
         });
-        
-        if (!response.ok) {
-          throw new Error(`Error processant el DOCX: ${response.statusText}`);
+
+        if (!uploadResponse.ok) {
+          document.body.removeChild(loadingMessage);
+          const errorData = await uploadResponse.json().catch(() => ({}));
+          alert(`Error pujant el DOCX original: ${errorData.error || uploadResponse.statusText}`);
+          if (fileInputRef.current) fileInputRef.current.value = '';
+          return;
+        }
+
+        const uploadData = await uploadResponse.json();
+        if (!uploadData.success || !uploadData.originalDocxPath) {
+          document.body.removeChild(loadingMessage);
+          alert(`Error confirmant la pujada del DOCX: ${uploadData.error || 'Ruta no rebuda.'}`);
+          if (fileInputRef.current) fileInputRef.current.value = '';
+          return;
         }
         
-        const data = await response.json();
+        setOriginalDocxStoragePath(uploadData.originalDocxPath);
+        console.log("DOCX original pujat, ruta:", uploadData.originalDocxPath);
+
+        // 2. Processar el document (ara llegint des de Storage via API)
+        const processResponse = await fetch('/api/process-document', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ storagePath: uploadData.originalDocxPath }),
+        });
+
+        if (!processResponse.ok) {
+          document.body.removeChild(loadingMessage);
+          const errorData = await processResponse.json().catch(() => ({}));
+          alert(`Error processant el DOCX des de Storage: ${errorData.error || processResponse.statusText}`);
+          if (fileInputRef.current) fileInputRef.current.value = '';
+          return;
+        }
+
+        const processData = await processResponse.json();
+        setConvertedHtml(processData.html);
         
-        // Update the HTML content with the processed HTML
-        setConvertedHtml(data.html);
-        
-        // Show success message
-        document.body.removeChild(loadingMessage);
+        // Show success message (ja no es treu loadingMessage aquí, es fa al final del try/catch/finally)
         const successMessage = `Arxiu DOCX processat: ${file.name}`;
         const messageElement = document.createElement('div');
         messageElement.className = 'fixed top-4 right-4 bg-green-100 border border-green-400 text-green-700 px-4 py-3 rounded z-50';
