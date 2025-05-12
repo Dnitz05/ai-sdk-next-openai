@@ -10,15 +10,22 @@ export async function POST(request: NextRequest) {
   let userError: any = null;
 
   // 1. Prova d'obtenir el token d'accés de l'header Authorization
-  const authHeader = request.headers.get('authorization') || request.headers.get('Authorization');
+  const authHeader = request.headers.get('authorization') ?? request.headers.get('Authorization');
+  console.log('[API upload-original-docx] HEADER Authorization:', authHeader);
+
   if (authHeader && authHeader.startsWith('Bearer ')) {
+    const accessToken = authHeader.slice(7).trim();
+    if (!accessToken) {
+      console.error('[API upload-original-docx] Token buit al header Authorization');
+      return NextResponse.json({ error: 'Token buit o no proporcionat.' }, { status: 401 });
+    }
     try {
       const { createUserSupabaseClient } = await import('@/lib/supabase/userClient');
-      const accessToken = authHeader.replace('Bearer ', '').trim();
       const supabase = createUserSupabaseClient(accessToken);
       const { data: userData, error } = await supabase.auth.getUser();
       if (error || !userData?.user) {
-        userError = error;
+        console.error('[API upload-original-docx] Token rebut però invàlid', error);
+        return NextResponse.json({ error: 'Token invàlid o caducat.' }, { status: 401 });
       } else {
         userId = userData.user.id;
       }
