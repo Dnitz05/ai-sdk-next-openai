@@ -1,32 +1,19 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
-import { getToken } from 'next-auth/jwt'; // Assumint que utilitzes NextAuth per a la sessió
-
-// Helper per obtenir l'usuari de Supabase a partir del token de NextAuth
-// Aquesta funció pot variar depenent de com gestionis la sessió i els usuaris
-// Si no utilitzes NextAuth, hauràs d'adaptar la manera d'obtenir el userId
-async function getSupabaseUserId(req: NextRequest): Promise<string | null> {
-  // Intenta obtenir el token de NextAuth. El 'secret' ha de coincidir amb el de la configuració de NextAuth.
-  const token = await getToken({ req, secret: process.env.NEXTAUTH_SECRET });
-
-  if (token && token.sub) {
-    // 'token.sub' normalment conté l'ID de l'usuari
-    return token.sub;
-  }
-  // Si no hi ha token o 'sub', intenta obtenir l'usuari directament de Supabase si hi ha una sessió activa
-  // Això requeriria un client Supabase configurat per llegir la sessió del costat del servidor
-  // Per simplicitat, si el token de NextAuth no funciona, retornem null aquí.
-  // Hauries d'implementar una lògica robusta per obtenir el userId autenticat.
-  // Per exemple, si utilitzes el helper de Supabase Auth:
-  // import { createServerSupabaseClient } from '@/lib/supabase/serverClient'; // o similar
-  // const supabase = await createServerSupabaseClient();
-  // const { data: { user } } = await supabase.auth.getUser();
-  // return user?.id || null;
-  return null;
-}
+import { createServerSupabaseClient } from '@/lib/supabase/serverClient';
 
 export async function POST(request: NextRequest) {
   console.log("API /api/upload-original-docx rebuda petició POST");
+
+  // Obtenir l'usuari autenticat via Supabase (mateix patró que save-configuration)
+  const supabase = await createServerSupabaseClient();
+  const { data: userData, error: userError } = await supabase.auth.getUser();
+
+  if (userError || !userData?.user) {
+    console.error("[API upload-original-docx] Error obtenint informació de l'usuari:", userError);
+    return NextResponse.json({ error: 'Usuari no autenticat.' }, { status: 401 });
+  }
+  const userId = userData.user.id;
 
   const supabaseAdmin = createClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -34,12 +21,6 @@ export async function POST(request: NextRequest) {
   );
 
   try {
-    const userId = await getSupabaseUserId(request);
-
-    if (!userId) {
-      console.error("[API upload-original-docx] Usuari no autenticat.");
-      return NextResponse.json({ error: 'Usuari no autenticat.' }, { status: 401 });
-    }
 
     const formData = await request.formData();
     const file = formData.get('file') as File | null;
