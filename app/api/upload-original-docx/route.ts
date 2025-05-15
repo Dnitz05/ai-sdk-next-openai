@@ -81,17 +81,16 @@ export async function POST(request: NextRequest) {
     }
 
     const fileBuffer = Buffer.from(await file.arrayBuffer());
-    const originalFileName = file.name;
-    const timestamp = Date.now();
-    const storagePath = `user-${userId}/template-${templateId}/original/${timestamp}-${originalFileName}`;
+    // Ruta fixa per sobreescriure sempre el mateix fitxer
+    const storagePath = `user-${userId}/template-${templateId}/original/original.docx`;
 
-    console.log(`[API upload-original-docx] Intentant pujar a Storage: ${storagePath}`);
+    console.log(`[API upload-original-docx] Intentant pujar a Storage (sobreescriptura): ${storagePath}`);
 
     const { data, error: uploadError } = await supabaseAdmin.storage
       .from('template-docx') // Nom del bucket
       .upload(storagePath, fileBuffer, {
         contentType: file.type,
-        upsert: true, // Considera si vols 'true' o 'false'. Amb timestamp, 'false' és més segur.
+        upsert: true, // Sobreescriu sempre el mateix fitxer
       });
 
     if (uploadError) {
@@ -104,9 +103,6 @@ export async function POST(request: NextRequest) {
         return NextResponse.json({ error: 'Error confirmant la pujada del fitxer (no path).'}, { status: 500 });
     }
     
-    // data.path hauria de ser igual a storagePath si la pujada va bé amb upsert:false i nom únic.
-    // Si s'utilitza una funcionalitat de Supabase que generi el nom, s'hauria d'utilitzar data.path.
-    // Com que construïm el path nosaltres, podem retornar el nostre storagePath.
     console.log(`[API upload-original-docx] Fitxer pujat correctament a: ${data.path}`);
 
     return NextResponse.json({ success: true, originalDocxPath: data.path }); // Retornem el path confirmat per Supabase
