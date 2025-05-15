@@ -14,6 +14,8 @@ export default function NovaPlantilla() {
   const [error, setError] = useState<string | null>(null);
   const [finalHtml, setFinalHtml] = useState<string | null>(null);
   const [excelHeaders, setExcelHeaders] = useState<string[]>([]);
+  const [originalDocxPath, setOriginalDocxPath] = useState<string | null>(null);
+  const [templateId] = useState(() => crypto.randomUUID());
 
   // Processa el DOCX amb l'API
   // Nou flux: primer puja el DOCX a Storage, després processa via storagePath
@@ -37,6 +39,7 @@ export default function NovaPlantilla() {
     if (!uploadRes.ok) throw new Error('Error pujant DOCX');
     const uploadData = await uploadRes.json();
     if (!uploadData.success || !uploadData.originalDocxPath) throw new Error('No s\'ha rebut la ruta del DOCX');
+    setOriginalDocxPath(uploadData.originalDocxPath);
     // 3. Processar el DOCX via storagePath
     const r = await fetch('/api/process-document', {
       method: 'POST',
@@ -94,6 +97,8 @@ export default function NovaPlantilla() {
 
       // Desa la plantilla
       const config = {
+        id: templateId,
+        originalDocxPath: originalDocxPath,
         baseDocxName: wordFile.name,
         config_name: templateName,
         excelInfo: { fileName: excelFile.name, headers },
