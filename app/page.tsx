@@ -25,6 +25,7 @@ export default function NovaPlantilla() {
     await supabase.auth.refreshSession();
     const { data: sessionData } = await supabase.auth.getSession();
     const accessToken = sessionData?.session?.access_token;
+    console.log('accessToken per upload-original-docx:', accessToken);
 
     // 2. Pujar el DOCX a Storage
     const formData = new FormData();
