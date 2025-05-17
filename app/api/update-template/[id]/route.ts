@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createUserSupabaseClient } from '@/lib/supabase/userClient'; // Per verificar l'usuari
 import { createClient } from '@supabase/supabase-js'; // Per al client de servei
+import { generatePlaceholderDocx } from '@util/generatePlaceholderDocx';
 
 // Interfície per a les dades esperades al body (pot ser més específica)
 interface UpdateTemplatePayload {
@@ -132,5 +133,40 @@ export async function PUT(request: NextRequest) {
   }
 
   console.log('[API UPDATE-TEMPLATE] Plantilla actualitzada correctament:', updatedTemplate);
-  return NextResponse.json({ template: updatedTemplate }, { status: 200 });
+
+  // Generació i pujada de placeholder.docx si hi ha associacions
+  if ((body.link_mappings?.length ?? 0) > 0 || (body.ai_instructions?.length ?? 0) > 0) {
+    try {
+      const originalPathToUse = body.originalDocxPath ?? (updatedTemplate as any).base_docx_storage_path;
+      const { data: fileData, error: downloadError } = await serviceClient.storage
+        .from('template-docx')
+        .download(originalPathToUse);
+      if (downloadError || !fileData) throw downloadError;
+      const arrayBuffer = await fileData.arrayBuffer();
+      const originalBuffer = Buffer.from(arrayBuffer);
+      const placeholderBuffer = await generatePlaceholderDocx(
+        originalBuffer,
+        body.link_mappings ?? [],
+        body.ai_instructions ?? []
+      );
+      const placeholderPath = originalPathToUse.replace('/original/original.docx', '/placeholder/placeholder.docx');
+      const { data: uploadData, error: uploadError } = await serviceClient.storage
+        .from('template-docx')
+        .upload(placeholderPath, placeholderBuffer, {
+          contentType: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+          upsert: true
+        });
+      if (uploadError) throw uploadError;
+      await serviceClient
+        .from('plantilla_configs')
+        .update({ placeholder_docx_storage_path: uploadData.path })
+        .eq('id', id)
+        .eq('user_id', userId);
+      (updatedTemplate as any).placeholder_docx_storage_path = uploadData.path;
+    } catch (error) {
+      console.error('[API UPDATE-TEMPLATE] Error generant placeholder.docx:', error);
+    }
+  }
+
+  return NextResponse.json({ template: updatedTemplate, placeholderDocxPath: (updatedTemplate as any).placeholder_docx_storage_path }, { status: 200 });
 }
