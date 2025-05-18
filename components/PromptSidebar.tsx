@@ -12,6 +12,7 @@ export interface IAPrompt {
   isExpanded: boolean;
   isEditing?: boolean; // Added isEditing property as optional
   order?: number; // Added order property for sequential numbering
+  originalParagraphText?: string; // Text original del paràgraf per ajudar a trobar-lo al DOCX
 }
 
 interface PromptSidebarProps {

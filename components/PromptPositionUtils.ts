@@ -128,6 +128,9 @@ export const createPromptForParagraph = (
     position = paragraphRect.top + (paragraphRect.height / 2) - wrapperRect.top;
   }
   
+  // Normalitzar el text del paràgraf (eliminar espais innecessaris)
+  const normalizedParagraphText = paragraphText.trim();
+  
   return {
     id: generatePromptId(),
     paragraphId,
@@ -136,6 +139,7 @@ export const createPromptForParagraph = (
     createdAt: new Date(),
     updatedAt: new Date(),
     position,
-    isExpanded: true
+    isExpanded: true,
+    originalParagraphText: normalizedParagraphText // Afegir el text original del paràgraf
   };
 };

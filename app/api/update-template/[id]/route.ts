@@ -24,6 +24,7 @@ interface IAInstruction {
   prompt?: string;
   status?: string;
   order?: number;
+  originalParagraphText?: string; // Text original del paràgraf per trobar-lo al document DOCX
 }
 
 export async function PUT(request: NextRequest) {
@@ -96,7 +97,8 @@ export async function PUT(request: NextRequest) {
       prompt: instr.content || instr.prompt || '',
       content: instr.content || instr.prompt || '',
       status: instr.status || 'saved',
-      order: instr.order || 0
+      order: instr.order || 0,
+      originalParagraphText: instr.originalParagraphText || '' // Preservar el text original del paràgraf
     }));
   }
 

@@ -19,6 +19,7 @@ interface AIInstruction {
   paragraphId?: string;
   content?: string;
   prompt?: string;
+  originalParagraphText?: string; // Text original del paràgraf per fer la cerca més precisa
 }
 
 // Funció per mostrar un log amb més detall del que ofereix console.log
@@ -81,7 +82,11 @@ export async function generatePlaceholderDocx(
         id: instr.id || 'N/A',
         paragraphId: instr.paragraphId || 'N/A',
         contentLength: (instr.content || instr.prompt || '').length,
-        contentPreview: truncateText(instr.content || instr.prompt || '', 50)
+        contentPreview: truncateText(instr.content || instr.prompt || '', 50),
+        hasOriginalText: !!instr.originalParagraphText,
+        originalTextLength: instr.originalParagraphText?.length || 0,
+        originalTextPreview: instr.originalParagraphText ? 
+          truncateText(instr.originalParagraphText, 50) : 'N/A'
       });
     }
   }
@@ -304,9 +309,87 @@ export async function generatePlaceholderDocx(
         const content = instr.content || instr.prompt || 'Instrucció IA';
         const paragraphId = instr.paragraphId || '';
         
-        // Utilitzem una estratègia similar a la de Excel, però amb contingut específic per a IA
+        // Prioritzar la cerca utilitzant originalParagraphText si està disponible
+        if (instr.originalParagraphText && instr.originalParagraphText.length > 5) {
+          debugLog('AI_SEARCH', `Utilitzant originalParagraphText per IA: ID: ${instr.id || paragraphId}`, {
+            textLength: instr.originalParagraphText.length,
+            textPreview: truncateText(instr.originalParagraphText, 50)
+          });
+          
+          const normalizedSearchText = normalizeTextForSearch(instr.originalParagraphText);
+          const escapedText = escapeRegExp(normalizedSearchText);
+          
+          // Verificar si el text està present al document
+          const xmlLowerCase = documentXml.toLowerCase();
+          const normalizedLowerCase = normalizedSearchText.toLowerCase();
+          const textExists = xmlLowerCase.includes(normalizedLowerCase);
+          
+          debugLog('AI_TEXT_CHECK', `Verificació de text IA al document: ${textExists ? 'TROBAT' : 'NO TROBAT'}`, {
+            searchText: normalizedLowerCase.substring(0, 30) + '...',
+            firstIndex: textExists ? xmlLowerCase.indexOf(normalizedLowerCase) : -1
+          });
+          
+          if (textExists) {
+            // Regex per trobar el paràgraf amb el text
+            const paragraphRegex = new RegExp(
+              `(<w:p[^>]*>(?:<w:pPr>.*?</w:pPr>)?)([\\s\\S]*?${escapedText}[\\s\\S]*?)(</w:p>)`,
+              'i'
+            );
+            
+            const originalXmlLength = documentXml.length;
+            let matchFound = false;
+            
+            documentXml = documentXml.replace(paragraphRegex, (match, startTag, content, endTag) => {
+              matchFound = true;
+              const placeholderText = `[AI_INSTRUCTION: ${truncateText(instr.content || instr.prompt || '', 30)} (ID: ${instr.id || paragraphId})]`;
+              
+              const replacement = `${startTag}<w:r><w:t xml:space="preserve">${placeholderText}</w:t></w:r>${endTag}`;
+              debugLog('AI_REPLACE', `Substituint per placeholder IA: "${placeholderText}"`);
+              return replacement;
+            });
+            
+            if (matchFound && documentXml.length !== originalXmlLength) {
+              modificacions++;
+              substitucions.exitoses++;
+              debugLog('AI_SUCCESS', `✅ Substitució exitosa per IA ID: ${instr.id || paragraphId}`);
+              // Continuem amb el següent si ja hem fet una substitució
+              continue;
+            }
+          }
+          
+          // Intent alternatiu: buscar només una part significativa del text
+          if (!textExists) {
+            debugLog('AI_RETRY', `Text IA no trobat exactament, intentant amb substring`);
+            let simplifiedSearch = normalizedSearchText;
+            if (simplifiedSearch.length > 30) {
+              simplifiedSearch = simplifiedSearch.substring(0, 30);
+              debugLog('AI_SUBSTRING', `Utilitzant substring: "${simplifiedSearch}"`);
+            }
+            
+            const simpleRegex = new RegExp(
+              `(<w:p[^>]*>(?:<w:pPr>.*?</w:pPr>)?)([\\s\\S]*?${escapeRegExp(simplifiedSearch)}[\\s\\S]*?)(</w:p>)`,
+              'i'
+            );
+            
+            const simpleLength = documentXml.length;
+            documentXml = documentXml.replace(simpleRegex, (match, startTag, content, endTag) => {
+              const placeholderText = `[AI_INSTRUCTION: ${truncateText(instr.content || instr.prompt || '', 30)} (ID: ${instr.id || paragraphId})]`;
+              debugLog('AI_REPLACE_ALT', `Intent alternatiu - substituint IA per: "${placeholderText}"`);
+              return `${startTag}<w:r><w:t xml:space="preserve">${placeholderText}</w:t></w:r>${endTag}`;
+            });
+            
+            if (documentXml.length !== simpleLength) {
+              modificacions++;
+              substitucions.exitoses++;
+              debugLog('AI_SUCCESS_ALT', `✅ Substitució alternativa exitosa per IA ID: ${instr.id || paragraphId}`);
+              continue;
+            }
+          }
+        }
+        
+        // Si originalParagraphText no funcionava o no estava disponible, utilitzem el mètode anterior
         if (paragraphId) {
-          console.log(`[generatePlaceholderDocx] Utilitzant paragraphId per IA: ${paragraphId}`);
+          debugLog('AI_FALLBACK', `Utilitzant paragraphId per IA: ${paragraphId}`);
           
           // Buscar per posició
           const paragraphNum = parseInt(paragraphId.replace(/\D/g, ''), 10);
@@ -329,7 +412,7 @@ export async function generatePlaceholderDocx(
                 documentXml = documentXml.replace(new RegExp(escapedParagraph, 'g'), replacement);
                 
                 modificacions++;
-                console.log(`[generatePlaceholderDocx] ✅ Substitució per ID exitosa per IA ID: ${instr.id || paragraphId}`);
+                debugLog('AI_SUCCESS_ID', `✅ Substitució per ID exitosa per IA ID: ${instr.id || paragraphId}`);
               }
             }
           }

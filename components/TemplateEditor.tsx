@@ -389,7 +389,8 @@ const TemplateEditor: React.FC<TemplateEditorProps> = ({ initialTemplateData, mo
           const htmlSpan = span as HTMLSpanElement;
           const excelHeader = htmlSpan.dataset.excelHeader;
           const linkId = htmlSpan.dataset.linkId;
-          const selectedText = htmlSpan.textContent;
+          // Utilitzar originalText en lloc de textContent (que és la capçalera d'Excel)
+          const selectedText = htmlSpan.dataset.originalText || htmlSpan.textContent;
           
           if (excelHeader && linkId && selectedText) {
             linkMappings.push({
@@ -429,7 +430,8 @@ const TemplateEditor: React.FC<TemplateEditorProps> = ({ initialTemplateData, mo
             prompt: p.content,
             content: p.content,
             status: p.status,
-            order: p.order || 0
+            order: p.order || 0,
+            originalParagraphText: p.originalParagraphText || '' // Afegir el text original del paràgraf
           })),
           originalDocxPath: originalDocxStoragePath, // Enviar la ruta del DOCX a Storage
         };
@@ -569,7 +571,8 @@ const TemplateEditor: React.FC<TemplateEditorProps> = ({ initialTemplateData, mo
             content: p.content,
             prompt: p.content, // Per compatibilitat si cal
             status: p.status || 'saved',
-            order: p.order || 0
+            order: p.order || 0,
+            originalParagraphText: p.originalParagraphText || '' // Afegir el text original del paràgraf
           })),
           finalHtml: convertedHtml,
           originalDocxPath: originalDocxStoragePath,
@@ -618,7 +621,7 @@ const TemplateEditor: React.FC<TemplateEditorProps> = ({ initialTemplateData, mo
     }
   };
 
-  // Excel mapping logic remains unchanged
+  // Excel mapping logic
   const handleTextSelection = () => {
     if (!convertedHtml || !selectedExcelHeader) return;
     const sel = window.getSelection();
@@ -639,7 +642,8 @@ const TemplateEditor: React.FC<TemplateEditorProps> = ({ initialTemplateData, mo
     span.dataset.excelHeader = selectedExcelHeader;
     const linkId = `link-${Date.now()}-${Math.random().toString(36).substr(2,5)}`;
     span.dataset.linkId = linkId;
-    span.textContent = selectedExcelHeader;
+    span.dataset.originalText = text; // IMPORTANT: Guardar el text original seleccionat
+    span.textContent = selectedExcelHeader; // Visualment mostrem la capçalera
     try {
       range.deleteContents();
       range.insertNode(span);
