@@ -2,6 +2,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createServerSupabaseClient } from '@/lib/supabase/serverClient' // Assumint que existeix per obtenir l'usuari
 import { createClient } from '@supabase/supabase-js'
+import { createUserSupabaseClient } from '@/lib/supabase/userClient';
 import { generatePlaceholderDocx } from '@util/generatePlaceholderDocx';
 // import { cookies } from 'next/headers' // No es necessita si createServerSupabaseClient gestiona cookies
 
@@ -46,18 +47,39 @@ export async function POST(request: NextRequest) {
     }
     // ... (resta de validacions existents)
 
-    // Obtenir usuari actual
-    // const cookieStore = cookies(); // Si createServerSupabaseClient no ho gestiona
-    const supabase = await createServerSupabaseClient(); // Aquest client hauria de poder llegir la sessió
-    const { data: userData, error: userError } = await supabase.auth.getUser();
-
-    if (userError || !userData?.user) {
+    // Autenticació de l’usuari: primer via header Authorization (Bearer), després cookies
+    let userId: string | null = null;
+    let userError: any = null;
+    const authHeader = request.headers.get('authorization') ?? request.headers.get('Authorization');
+    if (authHeader?.startsWith('Bearer ')) {
+      const accessToken = authHeader.slice(7).trim();
+      try {
+        const userClient = createUserSupabaseClient(accessToken);
+        const { data: userDataAuth, error: authError } = await userClient.auth.getUser();
+        if (!authError && userDataAuth.user) {
+          userId = userDataAuth.user.id;
+        } else {
+          userError = authError;
+        }
+      } catch (e) {
+        userError = e;
+      }
+    }
+    if (!userId) {
+      const supabaseServer = await createServerSupabaseClient();
+      const { data: userDataAuth2, error: serverError } = await supabaseServer.auth.getUser();
+      if (!serverError && userDataAuth2.user) {
+        userId = userDataAuth2.user.id;
+      } else {
+        userError = serverError;
+      }
+    }
+    if (!userId) {
       console.error("[API save-configuration] Error obtenint informació de l'usuari:", userError);
       return NextResponse.json({ error: 'Usuari no autenticat.' }, { status: 401 });
     }
     
-    const userId = userData.user.id;
-    console.log("[API save-configuration] Usuari autenticat identificat:", userId);
+    console.log("[API save-configuration] Usuari autenticat via JWT/cookie:", userId);
     
     // Client amb service role key per bypassejar RLS (només després de verificar l'usuari)
     const serviceClient = createClient(

@@ -617,10 +617,19 @@ const TemplateEditor: React.FC<TemplateEditorProps> = ({ initialTemplateData, mo
         formDataUpload.append('file', file);
         formDataUpload.append('templateId', currentTemplateId);
 
+        // Obtenir token d’autenticació per la crida al servidor
+        const supabaseClient = createBrowserSupabaseClient();
+        await supabaseClient.auth.refreshSession();
+        const { data: { session } } = await supabaseClient.auth.getSession();
+        const accessTokenUpload = session?.access_token;
+
         const uploadResponse = await fetch('/api/upload-original-docx', {
-          method: 'POST',
-          body: formDataUpload,
-          // Afegir token d'autenticació si /api/upload-original-docx ho requereix
+            method: 'POST',
+            headers: {
+              ...(accessTokenUpload ? { Authorization: `Bearer ${accessTokenUpload}` } : {}),
+            },
+            credentials: 'include',
+            body: formDataUpload,
         });
 
         if (!uploadResponse.ok) {

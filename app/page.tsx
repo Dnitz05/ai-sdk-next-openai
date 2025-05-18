@@ -33,8 +33,8 @@ export default function NovaPlantilla() {
     formData.append('templateId', 'nova-plantilla'); // O genera un UUID si cal
     const uploadRes = await fetch('/api/upload-original-docx', {
       method: 'POST',
-      body: formData,
       credentials: 'include',
+      body: formData,
       headers: accessToken ? { Authorization: `Bearer ${accessToken}` } : {},
     });
     if (!uploadRes.ok) throw new Error('Error pujant DOCX');
@@ -86,9 +86,14 @@ export default function NovaPlantilla() {
   };
 
   const handleSave = async () => {
-    setIsSaving(true);
-    setError(null);
-    try {
+      setIsSaving(true);
+      setError(null);
+      // refrescar sessió i obtenir token
+      const supabase = createBrowserSupabaseClient();
+      await supabase.auth.refreshSession();
+      const { data: { session } } = await supabase.auth.getSession();
+      const accessToken = session?.access_token;
+      try {
       if (!wordFile || !excelFile) throw new Error('Falten fitxers');
       // Processa DOCX i Excel
       const html = await processDocx(wordFile);
@@ -109,7 +114,10 @@ export default function NovaPlantilla() {
       };
       const response = await fetch('/api/save-configuration', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: {
+          'Content-Type': 'application/json',
+          ...(accessToken ? { Authorization: `Bearer ${accessToken}` } : {}),
+        },
         credentials: 'include',
         body: JSON.stringify(config),
       });
