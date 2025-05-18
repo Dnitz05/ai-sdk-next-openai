@@ -30,7 +30,7 @@ export default function NovaPlantilla() {
     // 2. Pujar el DOCX a Storage
     const formData = new FormData();
     formData.append('file', file);
-    formData.append('templateId', 'nova-plantilla'); // O genera un UUID si cal
+    formData.append('templateId', templateId);
     const uploadRes = await fetch('/api/upload-original-docx', {
       method: 'POST',
       credentials: 'include',
