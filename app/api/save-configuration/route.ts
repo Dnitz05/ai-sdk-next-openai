@@ -2,6 +2,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createServerSupabaseClient } from '@/lib/supabase/serverClient' // Assumint que existeix per obtenir l'usuari
 import { createClient } from '@supabase/supabase-js'
+import { generatePlaceholderDocx } from '@util/generatePlaceholderDocx';
 // import { cookies } from 'next/headers' // No es necessita si createServerSupabaseClient gestiona cookies
 
 // Interfície unificada per a les instruccions d'IA
@@ -117,8 +118,42 @@ export async function POST(request: NextRequest) {
     
     console.log("[API save-configuration] ✅ Inserció completada amb èxit. ID de la plantilla:", insertedData?.id);
 
+    let placeholderDocxPath: string | null = null;
+    if ((configToInsert.link_mappings?.length ?? 0) > 0 || processedAiInstructions.length > 0) {
+      try {
+        const origPath = configToInsert.base_docx_storage_path!;
+        const { data: fileData, error: downloadError } = await serviceClient.storage
+          .from('template-docx')
+          .download(origPath);
+        if (downloadError || !fileData) throw downloadError;
+        const arrayBuffer = await fileData.arrayBuffer();
+        const originalBuffer = Buffer.from(arrayBuffer);
+        const placeholderBuffer = await generatePlaceholderDocx(
+          originalBuffer,
+          configToInsert.link_mappings,
+          processedAiInstructions
+        );
+        const phPath = origPath.replace('/original/original.docx', '/placeholder/placeholder.docx');
+        const { data: uploadData, error: uploadError } = await serviceClient.storage
+          .from('template-docx')
+          .upload(phPath, placeholderBuffer, {
+            contentType: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+            upsert: true
+          });
+        if (uploadError) throw uploadError;
+        placeholderDocxPath = uploadData.path;
+        await serviceClient
+          .from('plantilla_configs')
+          .update({ placeholder_docx_storage_path: placeholderDocxPath })
+          .eq('id', insertedData.id)
+          .eq('user_id', userId);
+      } catch (error) {
+        console.error('[API save-configuration] Error generant placeholder.docx:', error);
+      }
+    }
+
     return NextResponse.json(
-      { message: 'Configuració desada correctament!', templateId: insertedData?.id },
+      { message: 'Configuració desada correctament!', templateId: insertedData?.id, placeholderDocxPath },
       { status: 201 }
     );
 
