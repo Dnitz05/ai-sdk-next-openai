@@ -1,13 +1,39 @@
 import PizZip from 'pizzip';
 import Docxtemplater from 'docxtemplater';
+import { DOMParser, XMLSerializer } from 'xmldom';
+
+/**
+ * Interfície per a les associacions Excel
+ */
+interface ExcelLinkMapping {
+  id: string;
+  paragraphId?: string;
+  selectedText?: string;
+  excelHeader?: string;
+}
+
+/**
+ * Interfície per a les instruccions IA
+ */
+interface AIInstruction {
+  id?: string;
+  paragraphId?: string;
+  content?: string;
+  prompt?: string;
+}
 
 /**
  * Genera un nou DOCX substituint el contingut dels paràgrafs amb placeholders.
+ * 
+ * @param originalBuffer Buffer del document DOCX original
+ * @param linkMappings Associacions entre paràgrafs i cel·les Excel
+ * @param aiInstructions Instruccions d'IA per a paràgrafs específics
+ * @returns Buffer del document DOCX amb placeholders
  */
 export async function generatePlaceholderDocx(
   originalBuffer: Buffer,
-  linkMappings: any[],
-  aiInstructions: { paragraphId?: string, id?: string }[]
+  linkMappings: ExcelLinkMapping[],
+  aiInstructions: AIInstruction[]
 ): Promise<Buffer> {
   // Validació inicial
   if (!originalBuffer || originalBuffer.length === 0) {
@@ -21,74 +47,108 @@ export async function generatePlaceholderDocx(
   });
 
   try {
+    // Carregar el document amb PizZip
     const zip = new PizZip(originalBuffer);
-    const doc = new Docxtemplater(zip, { 
-      paragraphLoop: true, 
-      linebreaks: true,
-      // Opció per evitar errors si un tag no existeix
-      nullGetter: function() {
-        return "";
-      }
-    });
-
-    // Preparar dades per a docxtemplater
-    const data: Record<string, string> = {};
     
-    // Procés específic pels link_mappings - utilitza el format correcte
-    if (Array.isArray(linkMappings)) {
-      console.log("[generatePlaceholderDocx] Processant linkMappings:", 
-        linkMappings.length > 0 ? linkMappings.slice(0, 2) : 'Cap mapping'); // Mostrar fins a 2 elements
+    // Extracte el document.xml del DOCX
+    const documentXml = zip.files['word/document.xml'].asText();
+    
+    // Parsear el XML per poder-lo manipular
+    const parser = new DOMParser();
+    const xmlDoc = parser.parseFromString(documentXml, 'text/xml');
+    
+    // Identificar tots els paràgrafs (elements <w:p>)
+    const paragraphs = xmlDoc.getElementsByTagName('w:p');
+    console.log(`[generatePlaceholderDocx] Document conté ${paragraphs.length} paràgrafs`);
+    
+    let modificacions = 0;
+    let selectionFound = 0;
+    
+    // Processar les associacions Excel
+    if (Array.isArray(linkMappings) && linkMappings.length > 0) {
+      console.log("[generatePlaceholderDocx] Processant associacions Excel...");
       
-      linkMappings.forEach((mapping, index) => {
-        // Format de TemplateEditor.tsx usa id, excelHeader i selectedText 
-        if (mapping.id) {
-          // Usem l'id com a clau per a Docxtemplater
-          const tagName = `link_${mapping.id}`;
-          data[tagName] = `{{${tagName}}}`;
-          console.log(`[generatePlaceholderDocx] Mapping ${index}: Assignat ${tagName} per a ${mapping.excelHeader || 'sense header'}`);
+      // Crear un mapa per accés més eficient
+      const paragraphTextMap = createParagraphTextMap(paragraphs);
+      
+      for (const mapping of linkMappings) {
+        if (!mapping.id) continue;
+        
+        let paragraphFound = false;
+        
+        // Estratègia 1: Buscar per selectedText si està disponible
+        if (mapping.selectedText) {
+          // Buscar el text seleccionat en els paràgrafs
+          for (let i = 0; i < paragraphs.length; i++) {
+            const paragraphText = paragraphTextMap[i]?.toLowerCase() || '';
+            if (paragraphText.includes(mapping.selectedText.toLowerCase())) {
+              // Substituir el paràgraf
+              replaceWithPlaceholder(
+                paragraphs[i], 
+                `[EXCEL_LINK: ${mapping.excelHeader || 'Dades Excel'} (ID: ${mapping.id})]`
+              );
+              paragraphFound = true;
+              selectionFound++;
+              modificacions++;
+              break;
+            }
+          }
         }
         
-        // Mantenim suport per al format antic, si existeix
-        if (mapping.paragraphId) {
-          data[mapping.paragraphId] = `{{${mapping.paragraphId}}}`;
-          console.log(`[generatePlaceholderDocx] Mapping ${index}: Format antic amb paragraphId ${mapping.paragraphId}`);
+        // Estratègia 2: Usar paragraphId si existeix i selectedText no va funcionar
+        if (!paragraphFound && mapping.paragraphId) {
+          // Buscar per ID directament en metadades o provat de trobar per posició
+          // Aquesta és una implementació més simple, però es pot millorar segons els patrons de la teva app
+          const paragraphIndex = parseInt(mapping.paragraphId.replace('p', ''), 10);
+          if (!isNaN(paragraphIndex) && paragraphIndex >= 0 && paragraphIndex < paragraphs.length) {
+            replaceWithPlaceholder(
+              paragraphs[paragraphIndex], 
+              `[EXCEL_LINK: ${mapping.excelHeader || 'Dades Excel'} (ID: ${mapping.id})]`
+            );
+            modificacions++;
+          }
         }
-      });
+      }
+      
+      console.log(`[generatePlaceholderDocx] S'han trobat ${selectionFound} de ${linkMappings.length} textos seleccionats.`);
     }
     
-    // Procés pels ai_instructions (millora del format per ser més robust)
-    if (Array.isArray(aiInstructions)) {
-      console.log("[generatePlaceholderDocx] Processant aiInstructions:", 
-          aiInstructions.length > 0 ? aiInstructions.map(i => i.paragraphId || i.id).slice(0, 3) : 'Cap instruction'); 
-          
-      aiInstructions.forEach((instr, index) => {
-        // Format primari: paragraphId
-        if (instr.paragraphId) {
-          data[instr.paragraphId] = `{{${instr.paragraphId}}}`;
-          console.log(`[generatePlaceholderDocx] Instruction ${index}: Assignat ${instr.paragraphId}`);
-        } 
-        // Format alternatiu si no hi ha paragraphId però hi ha id
-        else if (instr.id) {
-          const tagName = `instr_${instr.id}`;
-          data[tagName] = `{{${tagName}}}`;
-          console.log(`[generatePlaceholderDocx] Instruction ${index}: Alternativa amb ${tagName}`);
+    // Processar les instruccions IA
+    if (Array.isArray(aiInstructions) && aiInstructions.length > 0) {
+      console.log("[generatePlaceholderDocx] Processant instruccions IA...");
+      
+      for (const instr of aiInstructions) {
+        if (!instr.id && !instr.paragraphId) continue;
+        
+        const paragraphId = instr.paragraphId || (instr.id ? `p${instr.id}` : '');
+        const content = instr.content || instr.prompt || 'Instrucció IA';
+        
+        // Intent de trobar el paràgraf per ID
+        if (paragraphId) {
+          // Intentar extreure un número del paragraphId
+          const paragraphIndex = parseInt(paragraphId.replace(/\D/g, ''), 10);
+          if (!isNaN(paragraphIndex) && paragraphIndex >= 0 && paragraphIndex < paragraphs.length) {
+            replaceWithPlaceholder(
+              paragraphs[paragraphIndex], 
+              `[AI_INSTRUCTION: ${truncateText(content, 30)} (ID: ${instr.id || paragraphId})]`
+            );
+            modificacions++;
+          }
         }
-      });
+      }
     }
     
-    // Si no hi ha substitucions, retorna un warning però genera el document igual
-    if (Object.keys(data).length === 0) {
-      console.warn("[generatePlaceholderDocx] No s'han trobat mappings o instructions vàlids per substituir");
-    } else {
-      console.log(`[generatePlaceholderDocx] S'utilitzaran ${Object.keys(data).length} substitucions`);
-    }
-
-    // Renderitzar el document amb les dades
-    console.log("[generatePlaceholderDocx] Renderitzant document");
-    doc.render(data);
+    console.log(`[generatePlaceholderDocx] Total modificacions: ${modificacions}`);
+    
+    // Convertir el XML modificat de tornada a text
+    const serializer = new XMLSerializer();
+    const modifiedXml = serializer.serializeToString(xmlDoc);
+    
+    // Actualitzar el ZIP amb el nou XML
+    zip.file('word/document.xml', modifiedXml);
     
     // Generar el buffer de sortida
-    const out = doc.getZip().generate({ type: 'nodebuffer' });
+    const out = zip.generate({ type: 'nodebuffer' });
     console.log("[generatePlaceholderDocx] Document generat correctament, mida:", out.length);
     
     return out as Buffer;
@@ -96,4 +156,60 @@ export async function generatePlaceholderDocx(
     console.error("[generatePlaceholderDocx] Error processant document:", error);
     throw new Error(`Error en generatePlaceholderDocx: ${error instanceof Error ? error.message : String(error)}`);
   }
+}
+
+/**
+ * Reemplaça el contingut d'un paràgraf amb un text placeholder
+ */
+function replaceWithPlaceholder(paragraph: Element, placeholderText: string) {
+  // Eliminar tots els elements fills del paràgraf
+  while (paragraph.firstChild) {
+    paragraph.removeChild(paragraph.firstChild);
+  }
+  
+  // Crear elements necessaris per a un text en un paràgraf DOCX
+  const run = paragraph.ownerDocument.createElement('w:r');
+  const text = paragraph.ownerDocument.createElement('w:t');
+  
+  // Establir el text del placeholder
+  text.textContent = placeholderText;
+  
+  // Assegurar-se que el text preserva espais
+  text.setAttribute('xml:space', 'preserve');
+  
+  // Construir l'estructura: <w:p><w:r><w:t>Placeholder</w:t></w:r></w:p>
+  run.appendChild(text);
+  paragraph.appendChild(run);
+}
+
+/**
+ * Crea un mapa que conté el text de cada paràgraf per a una cerca més eficient
+ */
+function createParagraphTextMap(paragraphs: NodeListOf<Element>): Record<number, string> {
+  const map: Record<number, string> = {};
+  
+  for (let i = 0; i < paragraphs.length; i++) {
+    const paragraph = paragraphs[i];
+    
+    // Buscar tots els elements de text dins d'aquest paràgraf
+    const textElements = paragraph.getElementsByTagName('w:t');
+    let fullText = '';
+    
+    // Concatenar tots els fragments de text
+    for (let j = 0; j < textElements.length; j++) {
+      fullText += (textElements[j].textContent || '');
+    }
+    
+    map[i] = fullText;
+  }
+  
+  return map;
+}
+
+/**
+ * Trunca un text a una longitud màxima, afegint "..." si és necessari
+ */
+function truncateText(text: string, maxLength: number): string {
+  if (!text) return '';
+  return text.length <= maxLength ? text : text.substring(0, maxLength) + '...';
 }
