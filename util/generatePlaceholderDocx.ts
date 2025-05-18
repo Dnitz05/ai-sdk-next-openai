@@ -185,7 +185,7 @@ function replaceWithPlaceholder(paragraph: Element, placeholderText: string) {
 /**
  * Crea un mapa que conté el text de cada paràgraf per a una cerca més eficient
  */
-function createParagraphTextMap(paragraphs: NodeListOf<Element>): Record<number, string> {
+function createParagraphTextMap(paragraphs: HTMLCollectionOf<Element> | NodeListOf<Element>): Record<number, string> {
   const map: Record<number, string> = {};
   
   for (let i = 0; i < paragraphs.length; i++) {
