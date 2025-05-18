@@ -498,7 +498,7 @@ const TemplateEditor: React.FC<TemplateEditorProps> = ({ initialTemplateData, mo
             order: p.order || 0
           })),
           finalHtml: convertedHtml,
-          originalDocxPath: originalDocxStoragePath, // Enviar la ruta del DOCX a Storage
+          originalDocxPath: originalDocxStoragePath,
         };
         
         // Eliminar aiInstructions si no s'utilitza per evitar redundància
@@ -650,6 +650,16 @@ const TemplateEditor: React.FC<TemplateEditorProps> = ({ initialTemplateData, mo
         
         setOriginalDocxStoragePath(uploadData.originalDocxPath);
         console.log("DOCX original pujat, ruta:", uploadData.originalDocxPath);
+// Desa la ruta original a la BD per generar el placeholder després
+        await fetch(`/api/update-template/${currentTemplateId}`, {
+          method: 'PUT',
+          headers: {
+            'Content-Type': 'application/json',
+            ...(accessTokenUpload ? { Authorization: `Bearer ${accessTokenUpload}` } : {})
+          },
+          credentials: 'include',
+          body: JSON.stringify({ originalDocxPath: uploadData.originalDocxPath })
+        });
 
         // 2. Processar el document (ara llegint des de Storage via API)
         const processResponse = await fetch('/api/process-document', {

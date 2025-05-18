@@ -96,6 +96,7 @@ export async function PUT(request: NextRequest) {
   // Gestió especial per a 'originalDocxPath' per actualitzar 'base_docx_storage_path'
   // Permet enviar null per desvincular el DOCX.
   if (body.originalDocxPath !== undefined) {
+    // Emmagatzema la ruta original en el camp base_docx_storage_path
     updateData.base_docx_storage_path = body.originalDocxPath;
   }
   // Si originalDocxPath no ve al body, base_docx_storage_path no es modifica.
@@ -134,38 +135,144 @@ export async function PUT(request: NextRequest) {
 
   console.log('[API UPDATE-TEMPLATE] Plantilla actualitzada correctament:', updatedTemplate);
 
-  // Generació i pujada de placeholder.docx si hi ha associacions
-  if ((body.link_mappings?.length ?? 0) > 0 || (body.ai_instructions?.length ?? 0) > 0) {
-    try {
-      const originalPathToUse = body.originalDocxPath ?? (updatedTemplate as any).base_docx_storage_path;
-      const { data: fileData, error: downloadError } = await serviceClient.storage
-        .from('template-docx')
-        .download(originalPathToUse);
-      if (downloadError || !fileData) throw downloadError;
-      const arrayBuffer = await fileData.arrayBuffer();
-      const originalBuffer = Buffer.from(arrayBuffer);
-      const placeholderBuffer = await generatePlaceholderDocx(
-        originalBuffer,
-        body.link_mappings ?? [],
-        body.ai_instructions ?? []
-      );
-      const placeholderPath = originalPathToUse.replace('/original/original.docx', '/placeholder/placeholder.docx');
-      const { data: uploadData, error: uploadError } = await serviceClient.storage
-        .from('template-docx')
-        .upload(placeholderPath, placeholderBuffer, {
-          contentType: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
-          upsert: true
-        });
-      if (uploadError) throw uploadError;
+
+    // Determinar ruta original per generació de placeholder i comprovar associacions
+    const originalPathToUse = body.originalDocxPath ?? (updatedTemplate as any).base_docx_storage_path;
+    if (((body.link_mappings?.length ?? 0) > 0 || (body.ai_instructions?.length ?? 0) > 0) && originalPathToUse) {
+      try {
+        console.log(`[API UPDATE-TEMPLATE] Intent de generar placeholder per a: ${originalPathToUse}`);
+        
+        // 1. Descarregar el docx original
+        const { data: fileData, error: downloadError } = await serviceClient.storage
+          .from('template-docx')
+          .download(originalPathToUse);
+          
+        if (downloadError) {
+          console.error('[API UPDATE-TEMPLATE] Error descarregant document original:', downloadError);
+          throw downloadError;
+        }
+        
+        if (!fileData || fileData.size === 0) {
+          console.error('[API UPDATE-TEMPLATE] Document original buit o no trobat a:', originalPathToUse);
+          throw new Error('Document original no disponible');
+        }
+        
+        console.log(`[API UPDATE-TEMPLATE] Document original descarregat: ${fileData.size} bytes`);
+        
+        // 2. Convertir a buffer
+        const arrayBuffer = await fileData.arrayBuffer();
+        const originalBuffer = Buffer.from(arrayBuffer);
+        
+        // 3. Generar placeholder DOCX
+        console.log(`[API UPDATE-TEMPLATE] Invocant generatePlaceholderDocx amb mappings:`, 
+          { linkCount: body.link_mappings?.length, aiCount: body.ai_instructions?.length });
+        
+        const placeholderBuffer = await generatePlaceholderDocx(
+          originalBuffer,
+          body.link_mappings ?? [],
+          body.ai_instructions ?? []
+        );
+        
+        // 4. Determinar la ruta de placeholder correctament
+        let placeholderPath = '';
+        
+        console.log(`[API UPDATE-TEMPLATE] Processant ruta original: ${originalPathToUse}`);
+        
+        // Mètode 1: Si la ruta segueix exactament el patró esperat
+        if (originalPathToUse.includes('/original/original.docx')) {
+          placeholderPath = originalPathToUse.replace('/original/original.docx', '/placeholder/placeholder.docx');
+        } 
+        // Mètode 2: Reconstruir basant-nos en parts de la ruta
+        else {
+          // Dividim la ruta per segments
+          const pathParts = originalPathToUse.split('/');
+          
+          // Busquem el segment 'original' si existeix
+          const originalIndex = pathParts.findIndex((part: string) => part === 'original');
+          
+          if (originalIndex !== -1) {
+            // Substituïm 'original' per 'placeholder'
+            pathParts[originalIndex] = 'placeholder';
+            
+            // Si hi ha un segment després (nom de fitxer), el substituïm
+            if (originalIndex + 1 < pathParts.length) {
+              pathParts[originalIndex + 1] = 'placeholder.docx';
+            }
+            
+            placeholderPath = pathParts.join('/');
+          } else {
+            // Si no trobem cap patró conegut, construïm una ruta basada en la base
+            // Eliminem el nom del fitxer per obtenir el directori pare
+            const lastSlashIndex = originalPathToUse.lastIndexOf('/');
+            const parentDir = lastSlashIndex !== -1 ? 
+                              originalPathToUse.substring(0, lastSlashIndex) : 
+                              '';
+            
+            // Pujem un nivell (eliminem 'original' si existeix)
+            const baseDir = parentDir.endsWith('/original') ? 
+                           parentDir.substring(0, parentDir.length - '/original'.length) : 
+                           parentDir;
+                           
+            placeholderPath = `${baseDir}/placeholder/placeholder.docx`;
+          }
+        }
+        
+        console.log(`[API UPDATE-TEMPLATE] Ruta original: ${originalPathToUse}`);
+        console.log(`[API UPDATE-TEMPLATE] Ruta placeholder generada: ${placeholderPath}`);
+        
+        // 5. Assegurar que el directori existeix (crear .keep)
+        const placeholderDir = placeholderPath.substring(0, placeholderPath.lastIndexOf('/'));
+        try {
+          console.log(`[API UPDATE-TEMPLATE] Assegurant directori: ${placeholderDir}`);
+          await serviceClient.storage
+            .from('template-docx')
+            .upload(`${placeholderDir}/.keep`, new Uint8Array(0), { upsert: true });
+          console.log(`[API UPDATE-TEMPLATE] Directori assegurat`);
+        } catch (dirError: any) {
+          // Ignorem errors si ja existeix el fitxer
+          if (dirError?.message?.includes('duplicate') || dirError?.error?.includes('duplicate')) {
+            console.log(`[API UPDATE-TEMPLATE] Directori ja existeix`);
+          } else {
+            console.warn(`[API UPDATE-TEMPLATE] Avís creant directori: ${dirError?.message || dirError}`);
+            // Continuem tot i així, pot ser que funcioni
+          }
+        }
+        
+        // 6. Pujar el placeholder
+        console.log(`[API UPDATE-TEMPLATE] Pujant placeholder de ${placeholderBuffer.length} bytes`);
+        const { data: uploadData, error: uploadError } = await serviceClient.storage
+          .from('template-docx')
+          .upload(placeholderPath, placeholderBuffer, {
+            contentType: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+            upsert: true
+          });
+          
+        if (uploadError) {
+          console.error('[API UPDATE-TEMPLATE] Error pujant placeholder:', uploadError);
+          throw uploadError;
+        }
       await serviceClient
         .from('plantilla_configs')
         .update({ placeholder_docx_storage_path: uploadData.path })
         .eq('id', id)
         .eq('user_id', userId);
       (updatedTemplate as any).placeholder_docx_storage_path = uploadData.path;
-    } catch (error) {
-      console.error('[API UPDATE-TEMPLATE] Error generant placeholder.docx:', error);
-    }
+      } catch (error) {
+        // Logging detallat per ajudar al diagnòstic
+        console.error('[API UPDATE-TEMPLATE] Error generant placeholder.docx:', error);
+        console.error('[API UPDATE-TEMPLATE] Detalls addicionals:', {
+          templateId: id,
+          userId,
+          originalPathExistent: !!originalPathToUse,
+          originalPath: originalPathToUse,
+          linkMappingsCount: body.link_mappings?.length ?? 0,
+          aiInstructionsCount: body.ai_instructions?.length ?? 0,
+          errorName: error instanceof Error ? error.name : 'Unknown',
+          errorMessage: error instanceof Error ? error.message : String(error)
+        });
+        
+        // No fallem completament, continuem per retornar la plantilla tot i l'error
+      }
   }
 
   return NextResponse.json({ template: updatedTemplate, placeholderDocxPath: (updatedTemplate as any).placeholder_docx_storage_path }, { status: 200 });

@@ -140,42 +140,162 @@ export async function POST(request: NextRequest) {
     
     console.log("[API save-configuration] ✅ Inserció completada amb èxit. ID de la plantilla:", insertedData?.id);
 
-    let placeholderDocxPath: string | null = null;
-    if ((configToInsert.link_mappings?.length ?? 0) > 0 || processedAiInstructions.length > 0) {
+    // Generació inicial del placeholder si hi ha originals
+    let placeholderDocxPath = null;
+    if (configurationData.originalDocxPath && 
+        ((configurationData.linkMappings?.length ?? 0) > 0 || 
+         (configurationData.ai_instructions?.length ?? 0) > 0 ||
+         (configurationData.aiInstructions?.length ?? 0) > 0)) {
       try {
-        const origPath = configToInsert.base_docx_storage_path!;
+        console.log(`[API save-configuration] Intent de generar placeholder inicial per a: ${configurationData.originalDocxPath}`);
+        
+        // 1. Descarregar el DOCX original
         const { data: fileData, error: downloadError } = await serviceClient.storage
           .from('template-docx')
-          .download(origPath);
-        if (downloadError || !fileData) throw downloadError;
+          .download(configurationData.originalDocxPath);
+          
+        if (downloadError) {
+          console.error('[API save-configuration] Error descarregant document original:', downloadError);
+          throw downloadError;
+        }
+        
+        if (!fileData || fileData.size === 0) {
+          console.error('[API save-configuration] Document original buit o no trobat');
+          throw new Error('Document original no disponible');
+        }
+        
+        console.log(`[API save-configuration] Document original descarregat: ${fileData.size} bytes`);
+        
+        // 2. Convertir a buffer
         const arrayBuffer = await fileData.arrayBuffer();
         const originalBuffer = Buffer.from(arrayBuffer);
+        
+        // 3. Generar placeholder DOCX
+        const aiInstructions = configurationData.ai_instructions || configurationData.aiInstructions || [];
+        console.log(`[API save-configuration] Invocant generatePlaceholderDocx amb mappings:`, 
+          { linkCount: configurationData.linkMappings?.length, aiCount: aiInstructions.length });
+        
         const placeholderBuffer = await generatePlaceholderDocx(
           originalBuffer,
-          configToInsert.link_mappings,
-          processedAiInstructions
+          configurationData.linkMappings || [],
+          aiInstructions
         );
-        const phPath = origPath.replace('/original/original.docx', '/placeholder/placeholder.docx');
+        
+        // 4. Determinar la ruta de placeholder correctament
+        let placeholderPath = '';
+        const originalPathToUse = configurationData.originalDocxPath;
+        
+        console.log(`[API save-configuration] Processant ruta original: ${originalPathToUse}`);
+        
+        // Mètode 1: Si la ruta segueix exactament el patró esperat
+        if (originalPathToUse.includes('/original/original.docx')) {
+          placeholderPath = originalPathToUse.replace('/original/original.docx', '/placeholder/placeholder.docx');
+        } 
+        // Mètode 2: Reconstruir basant-nos en parts de la ruta
+        else {
+          // Dividim la ruta per segments
+          const pathParts = originalPathToUse.split('/');
+          
+          // Busquem el segment 'original' si existeix
+          const originalIndex = pathParts.findIndex((part: string) => part === 'original');
+          
+          if (originalIndex !== -1) {
+            // Substituïm 'original' per 'placeholder'
+            pathParts[originalIndex] = 'placeholder';
+            
+            // Si hi ha un segment després (nom de fitxer), el substituïm
+            if (originalIndex + 1 < pathParts.length) {
+              pathParts[originalIndex + 1] = 'placeholder.docx';
+            }
+            
+            placeholderPath = pathParts.join('/');
+          } else {
+            // Si no trobem cap patró conegut, construïm una ruta basada en la base
+            const lastSlashIndex = originalPathToUse.lastIndexOf('/');
+            const parentDir = lastSlashIndex !== -1 ? 
+                              originalPathToUse.substring(0, lastSlashIndex) : 
+                              '';
+            
+            // Pujem un nivell (eliminem 'original' si existeix)
+            const baseDir = parentDir.endsWith('/original') ? 
+                           parentDir.substring(0, parentDir.length - '/original'.length) : 
+                           parentDir;
+                           
+            placeholderPath = `${baseDir}/placeholder/placeholder.docx`;
+          }
+        }
+        
+        console.log(`[API save-configuration] Ruta original: ${originalPathToUse}`);
+        console.log(`[API save-configuration] Ruta placeholder generada: ${placeholderPath}`);
+        
+        // 5. Assegurar que el directori existeix (crear .keep)
+        const placeholderDir = placeholderPath.substring(0, placeholderPath.lastIndexOf('/'));
+        try {
+          console.log(`[API save-configuration] Assegurant directori: ${placeholderDir}`);
+          await serviceClient.storage
+            .from('template-docx')
+            .upload(`${placeholderDir}/.keep`, new Uint8Array(0), { upsert: true });
+          console.log(`[API save-configuration] Directori assegurat`);
+        } catch (dirError: any) {
+          // Ignorem errors si ja existeix el fitxer
+          if (dirError?.message?.includes('duplicate') || dirError?.error?.includes('duplicate')) {
+            console.log(`[API save-configuration] Directori ja existeix`);
+          } else {
+            console.warn(`[API save-configuration] Avís creant directori: ${dirError?.message || dirError}`);
+            // Continuem tot i així, pot ser que funcioni
+          }
+        }
+        
+        // 6. Pujar el placeholder
+        console.log(`[API save-configuration] Pujant placeholder de ${placeholderBuffer.length} bytes`);
         const { data: uploadData, error: uploadError } = await serviceClient.storage
           .from('template-docx')
-          .upload(phPath, placeholderBuffer, {
+          .upload(placeholderPath, placeholderBuffer, {
             contentType: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
             upsert: true
           });
-        if (uploadError) throw uploadError;
+          
+        if (uploadError) {
+          console.error('[API save-configuration] Error pujant placeholder:', uploadError);
+          throw uploadError;
+        }
+        
+        // 7. Actualitzar la BD amb la ruta del placeholder
         placeholderDocxPath = uploadData.path;
+        console.log(`[API save-configuration] Placeholder pujat correctament. Actualitzant BD amb: ${uploadData.path}`);
         await serviceClient
           .from('plantilla_configs')
-          .update({ placeholder_docx_storage_path: placeholderDocxPath })
-          .eq('id', insertedData.id)
+          .update({ placeholder_docx_storage_path: uploadData.path })
+          .eq('id', configurationData.id)
           .eq('user_id', userId);
+          
+        console.log('[API save-configuration] Procés de placeholder completat amb èxit');
+        
       } catch (error) {
+        // Logging detallat per ajudar al diagnòstic
         console.error('[API save-configuration] Error generant placeholder.docx:', error);
+        console.error('[API save-configuration] Detalls addicionals:', {
+          templateId: configurationData.id,
+          userId,
+          originalPathExistent: !!configurationData.originalDocxPath,
+          originalPath: configurationData.originalDocxPath,
+          linkMappingsCount: configurationData.linkMappings?.length ?? 0,
+          aiInstructionsCount: (configurationData.ai_instructions?.length ?? 0) + 
+                              (configurationData.aiInstructions?.length ?? 0),
+          errorName: error instanceof Error ? error.name : 'Unknown',
+          errorMessage: error instanceof Error ? error.message : String(error)
+        });
+        
+        // No fallem completament, continuem per retornar la resposta d'èxit
       }
     }
 
     return NextResponse.json(
-      { message: 'Configuració desada correctament!', templateId: insertedData?.id, placeholderDocxPath },
+      { 
+        message: 'Configuració desada correctament!', 
+        templateId: insertedData?.id,
+        placeholderDocxPath: placeholderDocxPath 
+      },
       { status: 201 }
     );
 
