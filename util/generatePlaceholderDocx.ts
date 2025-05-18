@@ -1,6 +1,5 @@
 import PizZip from 'pizzip';
 import Docxtemplater from 'docxtemplater';
-import { DOMParser, XMLSerializer } from 'xmldom';
 
 /**
  * Interfície per a les associacions Excel
@@ -24,6 +23,7 @@ interface AIInstruction {
 
 /**
  * Genera un nou DOCX substituint el contingut dels paràgrafs amb placeholders.
+ * Implementació basada en manipulació directa de XML per màxima compatibilitat.
  * 
  * @param originalBuffer Buffer del document DOCX original
  * @param linkMappings Associacions entre paràgrafs i cel·les Excel
@@ -50,67 +50,128 @@ export async function generatePlaceholderDocx(
     // Carregar el document amb PizZip
     const zip = new PizZip(originalBuffer);
     
-    // Extracte el document.xml del DOCX
-    const documentXml = zip.files['word/document.xml'].asText();
-    
-    // Parsear el XML per poder-lo manipular
-    const parser = new DOMParser();
-    const xmlDoc = parser.parseFromString(documentXml, 'text/xml');
-    
-    // Identificar tots els paràgrafs (elements <w:p>)
-    const paragraphs = xmlDoc.getElementsByTagName('w:p');
-    console.log(`[generatePlaceholderDocx] Document conté ${paragraphs.length} paràgrafs`);
+    // Extreure directament el document.xml del DOCX
+    let documentXml = zip.files['word/document.xml'].asText();
+    console.log(`[generatePlaceholderDocx] Document XML extret, mida: ${documentXml.length} bytes`);
     
     let modificacions = 0;
-    let selectionFound = 0;
+    let substitucions = {
+      exitoses: 0,
+      fallides: 0
+    };
     
-    // Processar les associacions Excel
+    // Processar les associacions Excel a nivell de text XML
     if (Array.isArray(linkMappings) && linkMappings.length > 0) {
       console.log("[generatePlaceholderDocx] Processant associacions Excel...");
-      
-      // Crear un mapa per accés més eficient
-      const paragraphTextMap = createParagraphTextMap(paragraphs);
       
       for (const mapping of linkMappings) {
         if (!mapping.id) continue;
         
-        let paragraphFound = false;
-        
-        // Estratègia 1: Buscar per selectedText si està disponible
-        if (mapping.selectedText) {
-          // Buscar el text seleccionat en els paràgrafs
-          for (let i = 0; i < paragraphs.length; i++) {
-            const paragraphText = paragraphTextMap[i]?.toLowerCase() || '';
-            if (paragraphText.includes(mapping.selectedText.toLowerCase())) {
-              // Substituir el paràgraf
-              replaceWithPlaceholder(
-                paragraphs[i], 
-                `[EXCEL_LINK: ${mapping.excelHeader || 'Dades Excel'} (ID: ${mapping.id})]`
-              );
-              paragraphFound = true;
-              selectionFound++;
+        // Si tenim text seleccionat, l'utilitzem per trobar el paràgraf
+        if (mapping.selectedText && mapping.selectedText.length > 3) {
+          const normalizedSearchText = normalizeTextForSearch(mapping.selectedText);
+          console.log(`[generatePlaceholderDocx] Cercant text: "${normalizedSearchText.substring(0, 30)}${normalizedSearchText.length > 30 ? '...' : ''}"`);
+          
+          // Regex més robusta per trobar el paràgraf sencer que conté el text, preservant propietats
+          // Nota: Escapem el text seleccionat per evitar problemes amb caràcters especials en regex
+          const escapedText = escapeRegExp(normalizedSearchText);
+          
+          // La regex cerca:
+          // 1. Inici del paràgraf amb tots els seus atributs (<w:p ...>)
+          // 2. Opcionalment les propietats del paràgraf (<w:pPr>...</w:pPr>)
+          // 3. El contingut que conté el text seleccionat
+          // 4. Final del paràgraf (</w:p>)
+          const paragraphRegex = new RegExp(
+            `(<w:p[^>]*>(?:<w:pPr>.*?</w:pPr>)?)([\\s\\S]*?${escapedText}[\\s\\S]*?)(</w:p>)`,
+            'i'
+          );
+          
+          // Intentem trobar i substituir
+          const originalXmlLength = documentXml.length;
+          
+          documentXml = documentXml.replace(paragraphRegex, (match, startTag, content, endTag) => {
+            // Creem un nou paràgraf que manté les propietats però substitueix el contingut
+            const placeholderText = `[EXCEL_LINK: ${mapping.excelHeader || 'Dades Excel'} (ID: ${mapping.id})]`;
+            const replacement = `${startTag}<w:r><w:t xml:space="preserve">${placeholderText}</w:t></w:r>${endTag}`;
+            console.log(`[generatePlaceholderDocx] Substituint paràgraf per placeholder Excel: "${placeholderText}"`);
+            return replacement;
+          });
+          
+          // Comprovar si s'ha fet alguna substitució
+          if (documentXml.length !== originalXmlLength) {
+            modificacions++;
+            substitucions.exitoses++;
+            console.log(`[generatePlaceholderDocx] ✅ Substitució exitosa per Excel ID: ${mapping.id}`);
+          } else {
+            substitucions.fallides++;
+            console.log(`[generatePlaceholderDocx] ❌ No s'ha trobat text coincident per Excel ID: ${mapping.id}`);
+            
+            // Intent alternatiu: buscar text amb menys restriccions
+            console.log(`[generatePlaceholderDocx] Intent alternatiu de cerca...`);
+            // Simplifiquem encara més el text per buscar només una part significativa
+            let simplifiedSearch = normalizedSearchText;
+            if (simplifiedSearch.length > 20) {
+              simplifiedSearch = simplifiedSearch.substring(0, 20);
+              console.log(`[generatePlaceholderDocx] Utilitzant substring: "${simplifiedSearch}"`);
+            }
+            
+            const simpleRegex = new RegExp(
+              `(<w:p[^>]*>(?:<w:pPr>.*?</w:pPr>)?)([\\s\\S]*?${escapeRegExp(simplifiedSearch)}[\\s\\S]*?)(</w:p>)`,
+              'i'
+            );
+            
+            const simpleLength = documentXml.length;
+            documentXml = documentXml.replace(simpleRegex, (match, startTag, content, endTag) => {
+              const placeholderText = `[EXCEL_LINK: ${mapping.excelHeader || 'Dades Excel'} (ID: ${mapping.id})]`;
+              console.log(`[generatePlaceholderDocx] Intent alternatiu - substituint per: "${placeholderText}"`);
+              return `${startTag}<w:r><w:t xml:space="preserve">${placeholderText}</w:t></w:r>${endTag}`;
+            });
+            
+            if (documentXml.length !== simpleLength) {
               modificacions++;
-              break;
+              substitucions.exitoses++;
+              console.log(`[generatePlaceholderDocx] ✅ Substitució alternativa exitosa per Excel ID: ${mapping.id}`);
+            }
+          }
+        } 
+        // Alternativament, usem paragraphId si està disponible
+        else if (mapping.paragraphId) {
+          console.log(`[generatePlaceholderDocx] Utilitzant paragraphId: ${mapping.paragraphId}`);
+          
+          // Buscar paràgrafs per posició (estratègia imperfecta però pot funcionar en alguns casos)
+          const paragraphNum = parseInt(mapping.paragraphId.replace(/\D/g, ''), 10);
+          if (!isNaN(paragraphNum)) {
+            // Trobar tots els paràgrafs al document
+            const paragraphMatches = documentXml.match(/<w:p[^>]*>[\s\S]*?<\/w:p>/g);
+            
+            if (paragraphMatches && paragraphNum < paragraphMatches.length) {
+              console.log(`[generatePlaceholderDocx] Trobat paràgraf #${paragraphNum} de ${paragraphMatches.length}`);
+              
+              const paragraph = paragraphMatches[paragraphNum];
+              const placeholderText = `[EXCEL_LINK: ${mapping.excelHeader || 'Dades Excel'} (ID: ${mapping.id})]`;
+              
+              // Dividir el paràgraf per mantenir les propietats
+              const startTagMatch = paragraph.match(/(<w:p[^>]*>(?:<w:pPr>.*?<\/w:pPr>)?)/);
+              const endTagMatch = paragraph.match(/(<\/w:p>)$/);
+              
+              if (startTagMatch && endTagMatch) {
+                const startTag = startTagMatch[1];
+                const endTag = endTagMatch[1];
+                
+                const replacement = `${startTag}<w:r><w:t xml:space="preserve">${placeholderText}</w:t></w:r>${endTag}`;
+                
+                // Escapar caràcters especials en el paràgraf per substituir-lo exactament
+                const escapedParagraph = escapeRegExp(paragraph);
+                documentXml = documentXml.replace(new RegExp(escapedParagraph, 'g'), replacement);
+                
+                modificacions++;
+                substitucions.exitoses++;
+                console.log(`[generatePlaceholderDocx] ✅ Substitució per ID exitosa per Excel ID: ${mapping.id}`);
+              }
             }
           }
         }
-        
-        // Estratègia 2: Usar paragraphId si existeix i selectedText no va funcionar
-        if (!paragraphFound && mapping.paragraphId) {
-          // Buscar per ID directament en metadades o provat de trobar per posició
-          // Aquesta és una implementació més simple, però es pot millorar segons els patrons de la teva app
-          const paragraphIndex = parseInt(mapping.paragraphId.replace('p', ''), 10);
-          if (!isNaN(paragraphIndex) && paragraphIndex >= 0 && paragraphIndex < paragraphs.length) {
-            replaceWithPlaceholder(
-              paragraphs[paragraphIndex], 
-              `[EXCEL_LINK: ${mapping.excelHeader || 'Dades Excel'} (ID: ${mapping.id})]`
-            );
-            modificacions++;
-          }
-        }
       }
-      
-      console.log(`[generatePlaceholderDocx] S'han trobat ${selectionFound} de ${linkMappings.length} textos seleccionats.`);
     }
     
     // Processar les instruccions IA
@@ -120,32 +181,47 @@ export async function generatePlaceholderDocx(
       for (const instr of aiInstructions) {
         if (!instr.id && !instr.paragraphId) continue;
         
-        const paragraphId = instr.paragraphId || (instr.id ? `p${instr.id}` : '');
         const content = instr.content || instr.prompt || 'Instrucció IA';
+        const paragraphId = instr.paragraphId || '';
         
-        // Intent de trobar el paràgraf per ID
+        // Utilitzem una estratègia similar a la de Excel, però amb contingut específic per a IA
         if (paragraphId) {
-          // Intentar extreure un número del paragraphId
-          const paragraphIndex = parseInt(paragraphId.replace(/\D/g, ''), 10);
-          if (!isNaN(paragraphIndex) && paragraphIndex >= 0 && paragraphIndex < paragraphs.length) {
-            replaceWithPlaceholder(
-              paragraphs[paragraphIndex], 
-              `[AI_INSTRUCTION: ${truncateText(content, 30)} (ID: ${instr.id || paragraphId})]`
-            );
-            modificacions++;
+          console.log(`[generatePlaceholderDocx] Utilitzant paragraphId per IA: ${paragraphId}`);
+          
+          // Buscar per posició
+          const paragraphNum = parseInt(paragraphId.replace(/\D/g, ''), 10);
+          if (!isNaN(paragraphNum)) {
+            const paragraphMatches = documentXml.match(/<w:p[^>]*>[\s\S]*?<\/w:p>/g);
+            
+            if (paragraphMatches && paragraphNum < paragraphMatches.length) {
+              const paragraph = paragraphMatches[paragraphNum];
+              const placeholderText = `[AI_INSTRUCTION: ${truncateText(content, 30)} (ID: ${instr.id || paragraphId})]`;
+              
+              const startTagMatch = paragraph.match(/(<w:p[^>]*>(?:<w:pPr>.*?<\/w:pPr>)?)/);
+              const endTagMatch = paragraph.match(/(<\/w:p>)$/);
+              
+              if (startTagMatch && endTagMatch) {
+                const startTag = startTagMatch[1];
+                const endTag = endTagMatch[1];
+                
+                const replacement = `${startTag}<w:r><w:t xml:space="preserve">${placeholderText}</w:t></w:r>${endTag}`;
+                const escapedParagraph = escapeRegExp(paragraph);
+                documentXml = documentXml.replace(new RegExp(escapedParagraph, 'g'), replacement);
+                
+                modificacions++;
+                console.log(`[generatePlaceholderDocx] ✅ Substitució per ID exitosa per IA ID: ${instr.id || paragraphId}`);
+              }
+            }
           }
         }
       }
     }
     
-    console.log(`[generatePlaceholderDocx] Total modificacions: ${modificacions}`);
-    
-    // Convertir el XML modificat de tornada a text
-    const serializer = new XMLSerializer();
-    const modifiedXml = serializer.serializeToString(xmlDoc);
+    console.log(`[generatePlaceholderDocx] Resum de modificacions: ${modificacions} total`);
+    console.log(`[generatePlaceholderDocx] Substitucions: ${substitucions.exitoses} exitoses, ${substitucions.fallides} fallides`);
     
     // Actualitzar el ZIP amb el nou XML
-    zip.file('word/document.xml', modifiedXml);
+    zip.file('word/document.xml', documentXml);
     
     // Generar el buffer de sortida
     const out = zip.generate({ type: 'nodebuffer' });
@@ -159,51 +235,25 @@ export async function generatePlaceholderDocx(
 }
 
 /**
- * Reemplaça el contingut d'un paràgraf amb un text placeholder
+ * Normalitza un text per fer-lo més fàcil de trobar al document
+ * Elimina espais redundants, caràcters especials, etc.
  */
-function replaceWithPlaceholder(paragraph: Element, placeholderText: string) {
-  // Eliminar tots els elements fills del paràgraf
-  while (paragraph.firstChild) {
-    paragraph.removeChild(paragraph.firstChild);
-  }
+function normalizeTextForSearch(text: string): string {
+  if (!text) return '';
   
-  // Crear elements necessaris per a un text en un paràgraf DOCX
-  const run = paragraph.ownerDocument.createElement('w:r');
-  const text = paragraph.ownerDocument.createElement('w:t');
-  
-  // Establir el text del placeholder
-  text.textContent = placeholderText;
-  
-  // Assegurar-se que el text preserva espais
-  text.setAttribute('xml:space', 'preserve');
-  
-  // Construir l'estructura: <w:p><w:r><w:t>Placeholder</w:t></w:r></w:p>
-  run.appendChild(text);
-  paragraph.appendChild(run);
+  // Eliminar caràcters que poden causar problemes en la cerca
+  return text
+    .replace(/\s+/g, ' ')       // Reduir múltiples espais a un sol
+    .replace(/[\r\n]+/g, ' ')   // Reemplaçar salts de línia per espais
+    .trim()                     // Eliminar espais al principi i final
+    .toLowerCase();             // Convertir a minúscules per fer la cerca case-insensitive
 }
 
 /**
- * Crea un mapa que conté el text de cada paràgraf per a una cerca més eficient
+ * Escapa caràcters especials en una cadena per utilitzar-la en una expressió regular
  */
-function createParagraphTextMap(paragraphs: HTMLCollectionOf<Element> | NodeListOf<Element>): Record<number, string> {
-  const map: Record<number, string> = {};
-  
-  for (let i = 0; i < paragraphs.length; i++) {
-    const paragraph = paragraphs[i];
-    
-    // Buscar tots els elements de text dins d'aquest paràgraf
-    const textElements = paragraph.getElementsByTagName('w:t');
-    let fullText = '';
-    
-    // Concatenar tots els fragments de text
-    for (let j = 0; j < textElements.length; j++) {
-      fullText += (textElements[j].textContent || '');
-    }
-    
-    map[i] = fullText;
-  }
-  
-  return map;
+function escapeRegExp(text: string): string {
+  return text.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 }
 
 /**
