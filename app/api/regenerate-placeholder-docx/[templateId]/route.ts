@@ -13,7 +13,7 @@ import { canRegeneratePlaceholder } from '@util/ensureStoragePathConsistency';
  */
 export async function POST(
   request: NextRequest,
-  { params }: { params: { templateId: string } }
+  context: { params: { templateId: string } }
 ) {
   console.log("[API regenerate-placeholder-docx] Petició rebuda");
   
@@ -42,7 +42,7 @@ export async function POST(
   );
 
   // 3. Obtenir templateId dels paràmetres
-  const { templateId } = params;
+  const { templateId } = context.params;
   console.log(`[API regenerate-placeholder-docx] Regenerant placeholder per plantilla: ${templateId}`);
 
   if (!templateId) {
