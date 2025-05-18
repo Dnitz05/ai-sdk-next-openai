@@ -137,7 +137,54 @@ export async function PUT(request: NextRequest) {
 
 
     // Determinar ruta original per generació de placeholder i comprovar associacions
-    const originalPathToUse = body.originalDocxPath ?? (updatedTemplate as any).base_docx_storage_path;
+    let originalPathToUse = body.originalDocxPath ?? (updatedTemplate as any).base_docx_storage_path;
+    
+    // Sistema de recuperació si la ruta és null però el document podria existir
+    if (!originalPathToUse && ((body.link_mappings?.length ?? 0) > 0 || (body.ai_instructions?.length ?? 0) > 0)) {
+      console.log("[API UPDATE-TEMPLATE] Ruta original no trobada. Intentant construir-la automàticament...");
+      
+      // Construir ruta probable basat en convencions conegudes
+      const probablePath = `user-${userId}/template-${id}/original/original.docx`;
+      console.log(`[API UPDATE-TEMPLATE] Verificant si existeix document a ruta reconstruïda: ${probablePath}`);
+      
+      try {
+        // Verificar si existeix el fitxer o el directori
+        const { data: fileListData } = await serviceClient.storage
+          .from('template-docx')
+          .list(`user-${userId}/template-${id}/original`);
+          
+        if (fileListData && fileListData.length > 0) {
+          console.log(`[API UPDATE-TEMPLATE] Directori existeix amb ${fileListData.length} fitxers:`, 
+            fileListData.map(f => f.name).join(', '));
+            
+          // Buscar si hi ha algun fitxer .docx
+          const docxFile = fileListData.find(f => f.name.toLowerCase().endsWith('.docx'));
+          
+          if (docxFile) {
+            // S'ha trobat un fitxer .docx, reconstruïm la ruta completa
+            const recoveredPath = `user-${userId}/template-${id}/original/${docxFile.name}`;
+            console.log(`[API UPDATE-TEMPLATE] ✅ Recuperat document: ${recoveredPath}`);
+            
+            // Actualitzar la plantilla amb la ruta recuperada
+            await serviceClient
+              .from('plantilla_configs')
+              .update({ base_docx_storage_path: recoveredPath })
+              .eq('id', id)
+              .eq('user_id', userId);
+              
+            console.log(`[API UPDATE-TEMPLATE] ✅ BD actualitzada amb ruta recuperada`);
+            originalPathToUse = recoveredPath;
+          } else {
+            console.log(`[API UPDATE-TEMPLATE] ⚠️ No s'ha trobat cap fitxer .docx al directori original`);
+          }
+        } else {
+          console.log(`[API UPDATE-TEMPLATE] ⚠️ Directori no existeix o està buit`);
+        }
+      } catch (recoverError) {
+        console.error("[API UPDATE-TEMPLATE] Error recuperant ruta del document:", recoverError);
+      }
+    }
+    
     if (((body.link_mappings?.length ?? 0) > 0 || (body.ai_instructions?.length ?? 0) > 0) && originalPathToUse) {
       try {
         console.log(`[API UPDATE-TEMPLATE] Intent de generar placeholder per a: ${originalPathToUse}`);

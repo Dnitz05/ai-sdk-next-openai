@@ -142,17 +142,70 @@ export async function POST(request: NextRequest) {
 
     // Generació inicial del placeholder si hi ha originals
     let placeholderDocxPath = null;
-    if (configurationData.originalDocxPath && 
+    
+    // Determinar ruta original i implementar recuperació si és necesari
+    let originalPathToUse = configurationData.originalDocxPath;
+    
+    // Sistema de recuperació si la ruta és null però el document podria existir
+    if (!originalPathToUse && 
+        ((configurationData.linkMappings?.length ?? 0) > 0 || 
+         (configurationData.ai_instructions?.length ?? 0) > 0 ||
+         (configurationData.aiInstructions?.length ?? 0) > 0)) {
+      console.log("[API save-configuration] Ruta original no trobada. Intentant construir-la automàticament...");
+      
+      // Construir ruta probable basat en convencions conegudes
+      const probablePath = `user-${userId}/template-${configurationData.id}/original/original.docx`;
+      console.log(`[API save-configuration] Verificant si existeix document a ruta reconstruïda: ${probablePath}`);
+      
+      try {
+        // Verificar si existeix el fitxer o el directori
+        const { data: fileListData } = await serviceClient.storage
+          .from('template-docx')
+          .list(`user-${userId}/template-${configurationData.id}/original`);
+          
+        if (fileListData && fileListData.length > 0) {
+          console.log(`[API save-configuration] Directori existeix amb ${fileListData.length} fitxers:`, 
+            fileListData.map(f => f.name).join(', '));
+            
+          // Buscar si hi ha algun fitxer .docx
+          const docxFile = fileListData.find(f => f.name.toLowerCase().endsWith('.docx'));
+          
+          if (docxFile) {
+            // S'ha trobat un fitxer .docx, reconstruïm la ruta completa
+            const recoveredPath = `user-${userId}/template-${configurationData.id}/original/${docxFile.name}`;
+            console.log(`[API save-configuration] ✅ Recuperat document: ${recoveredPath}`);
+            
+            // Actualitzar el configToInsert per incloure el path recuperat
+            configToInsert.base_docx_storage_path = recoveredPath;
+            await serviceClient
+              .from('plantilla_configs')
+              .update({ base_docx_storage_path: recoveredPath })
+              .eq('id', configurationData.id);
+              
+            console.log(`[API save-configuration] ✅ BD actualitzada amb ruta recuperada`);
+            originalPathToUse = recoveredPath;
+          } else {
+            console.log(`[API save-configuration] ⚠️ No s'ha trobat cap fitxer .docx al directori original`);
+          }
+        } else {
+          console.log(`[API save-configuration] ⚠️ Directori no existeix o està buit`);
+        }
+      } catch (recoverError) {
+        console.error("[API save-configuration] Error recuperant ruta del document:", recoverError);
+      }
+    }
+    
+    if (originalPathToUse && 
         ((configurationData.linkMappings?.length ?? 0) > 0 || 
          (configurationData.ai_instructions?.length ?? 0) > 0 ||
          (configurationData.aiInstructions?.length ?? 0) > 0)) {
       try {
-        console.log(`[API save-configuration] Intent de generar placeholder inicial per a: ${configurationData.originalDocxPath}`);
+        console.log(`[API save-configuration] Intent de generar placeholder inicial per a: ${originalPathToUse}`);
         
         // 1. Descarregar el DOCX original
         const { data: fileData, error: downloadError } = await serviceClient.storage
           .from('template-docx')
-          .download(configurationData.originalDocxPath);
+          .download(originalPathToUse);
           
         if (downloadError) {
           console.error('[API save-configuration] Error descarregant document original:', downloadError);
@@ -183,7 +236,11 @@ export async function POST(request: NextRequest) {
         
         // 4. Determinar la ruta de placeholder correctament
         let placeholderPath = '';
-        const originalPathToUse = configurationData.originalDocxPath;
+        
+        // Assegurar que tenim un originalPathToUse string vàlid
+        if (!originalPathToUse || typeof originalPathToUse !== 'string') {
+          throw new Error('Ruta original no vàlida per generar placeholder');
+        }
         
         console.log(`[API save-configuration] Processant ruta original: ${originalPathToUse}`);
         
