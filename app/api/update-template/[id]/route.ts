@@ -13,6 +13,7 @@ interface UpdateTemplatePayload {
   link_mappings?: any[]; // Especificar tipus més concret si és possible
   ai_instructions?: IAInstruction[];
   originalDocxPath?: string | null; // Ruta del DOCX original a Supabase Storage
+  skipPlaceholderGeneration?: boolean; // Permet ometre la generació del placeholder
 }
 
 // Interfície per a les instruccions d'IA (ja existent)
@@ -62,6 +63,12 @@ export async function PUT(request: NextRequest) {
 
   const body = (await request.json()) as UpdateTemplatePayload;
   console.log('[API UPDATE-TEMPLATE] Body rebut:', JSON.stringify(body, null, 2).substring(0,500) + "...");
+  
+  // Determinar si s'ha de saltar la generació del placeholder
+  const skipPlaceholderGeneration = body.skipPlaceholderGeneration === true;
+  if (skipPlaceholderGeneration) {
+    console.log('[API UPDATE-TEMPLATE] Es saltarà la generació del placeholder (skipPlaceholderGeneration = true)');
+  }
 
   // Camps permesos per actualitzar directament
   const allowedFields: Array<keyof UpdateTemplatePayload> = [
@@ -136,6 +143,16 @@ export async function PUT(request: NextRequest) {
   console.log('[API UPDATE-TEMPLATE] Plantilla actualitzada correctament:', updatedTemplate);
 
 
+    // Si skipPlaceholderGeneration és true, només actualitzem les metadades i no generem placeholder
+    if (skipPlaceholderGeneration) {
+      console.log('[API UPDATE-TEMPLATE] Generació de placeholder omesa segons petició. Retornant resposta...');
+      return NextResponse.json({ 
+        template: updatedTemplate, 
+        placeholderDocxPath: (updatedTemplate as any).placeholder_docx_storage_path,
+        placeholderStatus: 'skipped'
+      }, { status: 200 });
+    }
+    
     // Determinar ruta original per generació de placeholder i comprovar associacions
     let originalPathToUse = body.originalDocxPath ?? (updatedTemplate as any).base_docx_storage_path;
     
@@ -322,5 +339,9 @@ export async function PUT(request: NextRequest) {
       }
   }
 
-  return NextResponse.json({ template: updatedTemplate, placeholderDocxPath: (updatedTemplate as any).placeholder_docx_storage_path }, { status: 200 });
+  return NextResponse.json({ 
+    template: updatedTemplate, 
+    placeholderDocxPath: (updatedTemplate as any).placeholder_docx_storage_path,
+    placeholderStatus: 'generated'
+  }, { status: 200 });
 }
