@@ -154,14 +154,53 @@ export async function POST(
       aiInstructions
     );
     
-    // 11. Determinar la ruta on s'ha de desar el placeholder
-    // Construir ruta del placeholder mantenint la mateixa estructura
-    const originalPathParts = originalPathToUse.split('/');
-    const originalDir = originalPathParts.slice(0, -2).join('/');
-    const placeholderPath = `${originalDir}/placeholder/placeholder.docx`;
-    
-    console.log(`[API regenerate-placeholder-docx] Ruta original: ${originalPathToUse}`);
-    console.log(`[API regenerate-placeholder-docx] Ruta placeholder: ${placeholderPath}`);
+        // 11. Determinar la ruta on s'ha de desar el placeholder de manera més robusta
+        // Utilitzant el mateix algoritme que a save-configuration i update-template
+        let placeholderPath = '';
+        
+        console.log(`[API regenerate-placeholder-docx] Processant ruta original: ${originalPathToUse}`);
+        
+        // Mètode 1: Si la ruta segueix exactament el patró esperat
+        if (originalPathToUse.includes('/original/original.docx')) {
+          placeholderPath = originalPathToUse.replace('/original/original.docx', '/placeholder/placeholder.docx');
+        } 
+        // Mètode 2: Reconstruir basant-nos en parts de la ruta
+        else {
+          // Dividim la ruta per segments
+          const pathParts = originalPathToUse.split('/');
+          
+          // Busquem el segment 'original' si existeix
+          const originalIndex = pathParts.findIndex((part: string) => part === 'original');
+          
+          if (originalIndex !== -1) {
+            // Substituïm 'original' per 'placeholder'
+            pathParts[originalIndex] = 'placeholder';
+            
+            // Si hi ha un segment després (nom de fitxer), el substituïm
+            if (originalIndex + 1 < pathParts.length) {
+              pathParts[originalIndex + 1] = 'placeholder.docx';
+            }
+            
+            placeholderPath = pathParts.join('/');
+          } else {
+            // Si no trobem cap patró conegut, construïm una ruta basada en la base
+            // Eliminem el nom del fitxer per obtenir el directori pare
+            const lastSlashIndex = originalPathToUse.lastIndexOf('/');
+            const parentDir = lastSlashIndex !== -1 ? 
+                              originalPathToUse.substring(0, lastSlashIndex) : 
+                              '';
+            
+            // Pujem un nivell (eliminem 'original' si existeix)
+            const baseDir = parentDir.endsWith('/original') ? 
+                           parentDir.substring(0, parentDir.length - '/original'.length) : 
+                           parentDir;
+                           
+            placeholderPath = `${baseDir}/placeholder/placeholder.docx`;
+          }
+        }
+        
+        console.log(`[API regenerate-placeholder-docx] Ruta original: ${originalPathToUse}`);
+        console.log(`[API regenerate-placeholder-docx] Ruta placeholder generada: ${placeholderPath}`);
     
     // 12. Assegurar que el directori existeix
     const placeholderDir = placeholderPath.substring(0, placeholderPath.lastIndexOf('/'));
@@ -198,7 +237,37 @@ export async function POST(
       .update({ placeholder_docx_storage_path: uploadData.path })
       .eq('id', templateId);
     
-    // 15. Retornar èxit
+    // 15. Verificar que el placeholder existeix a Supabase Storage després de pujar
+    console.log(`[API regenerate-placeholder-docx] Verificant existència del placeholder...`);
+    try {
+      const { data: fileExists } = await serviceClient.storage
+        .from('template-docx')
+        .getPublicUrl(uploadData.path);
+        
+      if (!fileExists || !fileExists.publicUrl) {
+        console.warn(`[API regenerate-placeholder-docx] Advertència: No s'ha pogut verificar el placeholder`);
+      } else {
+        console.log(`[API regenerate-placeholder-docx] ✅ Placeholder verificat a: ${fileExists.publicUrl}`);
+      }
+    } catch (verifyError) {
+      console.warn(`[API regenerate-placeholder-docx] Error verificant placeholder:`, verifyError);
+      // No fallem l'operació per aquest error de verificació
+    }
+    
+    // 16. Verificar que s'ha actualitzat correctament a la BD
+    const { data: verifyDbUpdate } = await serviceClient
+      .from('plantilla_configs')
+      .select('placeholder_docx_storage_path')
+      .eq('id', templateId)
+      .single();
+    
+    if (verifyDbUpdate?.placeholder_docx_storage_path === uploadData.path) {
+      console.log(`[API regenerate-placeholder-docx] ✅ Actualització a BD verificada`);
+    } else {
+      console.warn(`[API regenerate-placeholder-docx] ⚠️ L'actualització a BD no s'ha pogut verificar`);
+    }
+    
+    // 17. Retornar èxit
     return NextResponse.json({
       message: 'Placeholder regenerat correctament',
       templateId,
