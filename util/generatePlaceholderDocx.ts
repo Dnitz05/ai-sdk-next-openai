@@ -39,6 +39,11 @@ function debugLog(context: string, message: string, data?: any) {
  * Genera un nou DOCX substituint el contingut dels paràgrafs amb placeholders.
  * Implementació basada en manipulació directa de XML per màxima compatibilitat.
  * 
+ * Millores implementades:
+ * 1. Preservació d'estils i estructura dels paràgrafs
+ * 2. Algoritme robust per trobar text fragmentat en múltiples <w:t>
+ * 3. Manteniment dels encapçalaments i formatació
+ * 
  * @param originalBuffer Buffer del document DOCX original
  * @param linkMappings Associacions entre paràgrafs i cel·les Excel
  * @param aiInstructions Instruccions d'IA per a paràgrafs específics
@@ -190,33 +195,119 @@ export async function generatePlaceholderDocx(
           // 2. Opcionalment les propietats del paràgraf (<w:pPr>...</w:pPr>)
           // 3. El contingut que conté el text seleccionat
           // 4. Final del paràgraf (</w:p>)
-          const paragraphRegex = new RegExp(
-            `(<w:p[^>]*>(?:<w:pPr>.*?</w:pPr>)?)([\\s\\S]*?${escapedText}[\\s\\S]*?)(</w:p>)`,
-            'i'
-          );
-          
-          debugLog('REGEX', `Expressió regular utilitzada:`, paragraphRegex.toString());
-          
-          // Intentem trobar i substituir
-          const originalXmlLength = documentXml.length;
-          
-          // Variable per controlar si s'ha trobat match
-          let matchFound = false;
-          
-          documentXml = documentXml.replace(paragraphRegex, (match, startTag, content, endTag) => {
-            matchFound = true;
-            debugLog('MATCH', `Coincidència trobada, mida: ${match.length} bytes`, {
-              startTag: startTag.substring(0, 50) + (startTag.length > 50 ? '...' : ''),
-              contentPreview: content.substring(0, 50) + (content.length > 50 ? '...' : ''),
-              endTag: endTag
-            });
+            // Millora 1: Primer intentem amb una estratègia basada en DOM per trobar text fragmentat
+            // Si un text està dividit entre múltiples <w:t>, cal analitzar tots els runs d'un paràgraf
+            let paragraphsWithPotentialMatches = [];
+            const paragraphMatches = documentXml.match(/<w:p[^>]*>[\s\S]*?<\/w:p>/g) || [];
             
-            // Creem un nou paràgraf que manté les propietats però substitueix el contingut
-            const placeholderText = `[EXCEL_LINK: ${mapping.excelHeader || 'Dades Excel'} (ID: ${mapping.id})]`;
-            const replacement = `${startTag}<w:r><w:t xml:space="preserve">${placeholderText}</w:t></w:r>${endTag}`;
-            debugLog('REPLACE', `Substituint per placeholder: "${placeholderText}"`);
-            return replacement;
-          });
+            debugLog('DOM_SEARCH', `Analitzant ${paragraphMatches.length} paràgrafs per trobar text fragmentat`);
+            
+            // Cerca basada en fragments de text per detectar coincidències en múltiples <w:t>
+            for (let i = 0; i < paragraphMatches.length; i++) {
+              const paragraph = paragraphMatches[i];
+              // Extreure tot el text pla d'un paràgraf (concatenant tots els <w:t>)
+              const textElements = paragraph.match(/<w:t[^>]*>([^<]*)<\/w:t>/g) || [];
+              const paragraphText = textElements
+                .map(el => {
+                  const match = el.match(/<w:t[^>]*>([^<]*)<\/w:t>/);
+                  return match ? match[1] : '';
+                })
+                .join('');
+              
+              // Normalitzar i cercar
+              const normalizedParagraphText = normalizeTextForSearch(paragraphText);
+              if (normalizedParagraphText.includes(normalizedSearchText.toLowerCase())) {
+                paragraphsWithPotentialMatches.push({
+                  index: i,
+                  paragraph,
+                  originalText: paragraphText
+                });
+                debugLog('TEXT_FRAGMENT_MATCH', `✓ Trobat text en paràgraf #${i} (fragmentat en ${textElements.length} parts)`);
+              }
+            }
+            
+            // Si hem trobat paràgrafs amb coincidències potencials, els processem
+            let matchFound = false;
+            let originalXmlLength = documentXml.length;
+            
+            if (paragraphsWithPotentialMatches.length > 0) {
+              debugLog('MATCHES', `Trobats ${paragraphsWithPotentialMatches.length} paràgrafs amb text similar`);
+              
+              for (const match of paragraphsWithPotentialMatches) {
+                // Analitzem l'estructura del paràgraf per preservar-la
+                const startTagMatch = match.paragraph.match(/(<w:p[^>]*>(?:<w:pPr>.*?<\/w:pPr>)?)/);
+                const endTagMatch = match.paragraph.match(/(<\/w:p>)$/);
+                
+                if (startTagMatch && endTagMatch) {
+                  const startTag = startTagMatch[1];
+                  const endTag = endTagMatch[1];
+                  
+                  // Extreure estil del primer <w:r> per preservar-lo
+                  const runStyleMatch = match.paragraph.match(/<w:r>(?:<w:rPr>(.*?)<\/w:rPr>)?/);
+                  const styleTag = runStyleMatch && runStyleMatch[1] ? 
+                    `<w:rPr>${runStyleMatch[1]}</w:rPr>` : '';
+                  
+                  // MILLORA CRÍTICA: En lloc de substituir tot el paràgraf,
+                  // Mantenim el startTag intacte (que conté propietats i estil de paràgraf)
+                  // i creem un replacement que preserva l'estil original
+                  const placeholderText = `[EXCEL_LINK: ${mapping.excelHeader || 'Dades Excel'} (ID: ${mapping.id})]`;
+                  
+                  // Preservar l'estructura del paràgraf, incloent encapçalaments i estils
+                  const replacement = `${startTag}<w:r>${styleTag}<w:t xml:space="preserve">${placeholderText}</w:t></w:r>${endTag}`;
+                  
+                  debugLog('PRESERVE_REPLACE', `Substituint per placeholder preservant estil: "${placeholderText}"`);
+                  
+                  // Escapar el paràgraf per fer una substitució exacta
+                  const escapedParagraphForReplace = escapeRegExp(match.paragraph);
+                  const paragraphRegexExact = new RegExp(escapedParagraphForReplace, 'g');
+                  
+                  // Aplicar la substitució
+                  documentXml = documentXml.replace(paragraphRegexExact, replacement);
+                  
+                  // Verificar si s'ha fet la substitució
+                  if (documentXml.length !== originalXmlLength) {
+                    matchFound = true;
+                    debugLog('STRUCTURE_PRESERVED', `✅ Substitució exitosa preservant estructura per Excel ID: ${mapping.id}`);
+                    break; // Sortim del bucle un cop fet el primer reemplaçament
+                  }
+                }
+              }
+            }
+            
+            // Si no hem trobat coincidències amb la cerca DOM, provem amb el mètode regex original
+            if (!matchFound) {
+              debugLog('FALLBACK', `No s'ha trobat amb cerca DOM, provant amb regex tradicional`);
+              
+              // La regex millorada ara captura millor les seccions del paràgraf
+              const paragraphRegex = new RegExp(
+                `(<w:p[^>]*>(?:<w:pPr>.*?</w:pPr>)?)([\\s\\S]*?${escapedText}[\\s\\S]*?)(</w:p>)`,
+                'i'
+              );
+              
+              debugLog('REGEX', `Expressió regular utilitzada:`, paragraphRegex.toString());
+              
+              // Intentem trobar i substituir
+              originalXmlLength = documentXml.length;
+              
+              documentXml = documentXml.replace(paragraphRegex, (match, startTag, content, endTag) => {
+                matchFound = true;
+                debugLog('MATCH', `Coincidència trobada, mida: ${match.length} bytes`, {
+                  startTag: startTag.substring(0, 50) + (startTag.length > 50 ? '...' : ''),
+                  contentPreview: content.substring(0, 50) + (content.length > 50 ? '...' : ''),
+                  endTag: endTag
+                });
+                
+                // Extreure estils de text existents
+                const runStyleMatch = content.match(/<w:rPr>(.*?)<\/w:rPr>/);
+                const styleTag = runStyleMatch ? `<w:rPr>${runStyleMatch[1]}</w:rPr>` : '';
+                
+                // Crear el placeholder preservant l'estil
+                const placeholderText = `[EXCEL_LINK: ${mapping.excelHeader || 'Dades Excel'} (ID: ${mapping.id})]`;
+                const replacement = `${startTag}<w:r>${styleTag}<w:t xml:space="preserve">${placeholderText}</w:t></w:r>${endTag}`;
+                debugLog('REPLACE', `Substituint per placeholder: "${placeholderText}" amb estils preservats`);
+                return replacement;
+              });
+            }
           
           // Comprovar si s'ha fet alguna substitució
           if (matchFound && documentXml.length !== originalXmlLength) {
@@ -343,8 +434,13 @@ export async function generatePlaceholderDocx(
               matchFound = true;
               const placeholderText = `[AI_INSTRUCTION: ${truncateText(instr.content || instr.prompt || '', 30)} (ID: ${instr.id || paragraphId})]`;
               
-              const replacement = `${startTag}<w:r><w:t xml:space="preserve">${placeholderText}</w:t></w:r>${endTag}`;
-              debugLog('AI_REPLACE', `Substituint per placeholder IA: "${placeholderText}"`);
+              // Extreure estils de text existents per preservar-los
+              const runStyleMatch = content.match(/<w:rPr>(.*?)<\/w:rPr>/);
+              const styleTag = runStyleMatch ? `<w:rPr>${runStyleMatch[1]}</w:rPr>` : '';
+              
+              // Crear el placeholder preservant l'estil
+              const replacement = `${startTag}<w:r>${styleTag}<w:t xml:space="preserve">${placeholderText}</w:t></w:r>${endTag}`;
+              debugLog('AI_REPLACE', `Substituint per placeholder IA: "${placeholderText}" amb estils preservats`);
               return replacement;
             });
             
@@ -374,8 +470,13 @@ export async function generatePlaceholderDocx(
             const simpleLength = documentXml.length;
             documentXml = documentXml.replace(simpleRegex, (match, startTag, content, endTag) => {
               const placeholderText = `[AI_INSTRUCTION: ${truncateText(instr.content || instr.prompt || '', 30)} (ID: ${instr.id || paragraphId})]`;
-              debugLog('AI_REPLACE_ALT', `Intent alternatiu - substituint IA per: "${placeholderText}"`);
-              return `${startTag}<w:r><w:t xml:space="preserve">${placeholderText}</w:t></w:r>${endTag}`;
+              
+              // Extreure estils de text existents per preservar-los
+              const runStyleMatch = content.match(/<w:rPr>(.*?)<\/w:rPr>/);
+              const styleTag = runStyleMatch ? `<w:rPr>${runStyleMatch[1]}</w:rPr>` : '';
+              
+              debugLog('AI_REPLACE_ALT', `Intent alternatiu - substituint IA per: "${placeholderText}" preservant estil`);
+              return `${startTag}<w:r>${styleTag}<w:t xml:space="preserve">${placeholderText}</w:t></w:r>${endTag}`;
             });
             
             if (documentXml.length !== simpleLength) {
@@ -407,7 +508,12 @@ export async function generatePlaceholderDocx(
                 const startTag = startTagMatch[1];
                 const endTag = endTagMatch[1];
                 
-                const replacement = `${startTag}<w:r><w:t xml:space="preserve">${placeholderText}</w:t></w:r>${endTag}`;
+                // Extreure estil del primer <w:r> per preservar-lo
+                const runStyleMatch = paragraph.match(/<w:r>(?:<w:rPr>(.*?)<\/w:rPr>)?/);
+                const styleTag = runStyleMatch && runStyleMatch[1] ? 
+                  `<w:rPr>${runStyleMatch[1]}</w:rPr>` : '';
+                  
+                const replacement = `${startTag}<w:r>${styleTag}<w:t xml:space="preserve">${placeholderText}</w:t></w:r>${endTag}`;
                 const escapedParagraph = escapeRegExp(paragraph);
                 documentXml = documentXml.replace(new RegExp(escapedParagraph, 'g'), replacement);
                 
@@ -451,7 +557,12 @@ export async function generatePlaceholderDocx(
           const startTag = startTagMatch[1];
           const endTag = endTagMatch[1];
           
-          const testReplacement = `${startTag}<w:r><w:t xml:space="preserve">${testPlaceholder}</w:t></w:r>${endTag}`;
+          // Extreure estil del primer <w:r> per preservar-lo
+          const runStyleMatch = testParagraph.match(/<w:r>(?:<w:rPr>(.*?)<\/w:rPr>)?/);
+          const styleTag = runStyleMatch && runStyleMatch[1] ? 
+            `<w:rPr>${runStyleMatch[1]}</w:rPr>` : '';
+            
+          const testReplacement = `${startTag}<w:r>${styleTag}<w:t xml:space="preserve">${testPlaceholder}</w:t></w:r>${endTag}`;
           
           // Substituir el primer paràgraf
           const originalForTest = documentXml;
@@ -506,6 +617,8 @@ export async function generatePlaceholderDocx(
 /**
  * Normalitza un text per fer-lo més fàcil de trobar al document
  * Elimina espais redundants, caràcters especials, etc.
+ * 
+ * Millora: Més tolerant amb puntuació i espais, per trobar text fragmentat
  */
 function normalizeTextForSearch(text: string): string {
   if (!text) return '';
@@ -514,8 +627,53 @@ function normalizeTextForSearch(text: string): string {
   return text
     .replace(/\s+/g, ' ')       // Reduir múltiples espais a un sol
     .replace(/[\r\n]+/g, ' ')   // Reemplaçar salts de línia per espais
+    .replace(/[,.;:!?"\[\]{}()]/g, ' ') // Reemplaçar puntuació per espais
+    .replace(/\s+/g, ' ')       // Tornar a reduir múltiples espais
     .trim()                     // Eliminar espais al principi i final
     .toLowerCase();             // Convertir a minúscules per fer la cerca case-insensitive
+}
+
+/**
+ * Funció auxiliar per comprovar si dos textos són similars
+ * Útil per trobar coincidències quan el text ha estat lleugerament modificat
+ * 
+ * @param text1 Primer text a comparar
+ * @param text2 Segon text a comparar
+ * @param threshold Llindar de similitud (0.0 a 1.0)
+ * @returns True si els textos són similars segons el llindar
+ */
+function areTextsSimilar(text1: string, text2: string, threshold: number = 0.7): boolean {
+  if (!text1 || !text2) return false;
+  if (text1 === text2) return true;
+  
+  // Normalitzar ambdós textos
+  const normalized1 = normalizeTextForSearch(text1);
+  const normalized2 = normalizeTextForSearch(text2);
+  
+  // Si un text conté l'altre, són similars
+  if (normalized1.includes(normalized2) || normalized2.includes(normalized1)) {
+    return true;
+  }
+  
+  // Si els textos són molt curts, comparem directament
+  if (normalized1.length < 10 || normalized2.length < 10) {
+    return normalized1 === normalized2;
+  }
+  
+  // Per textos més llargs, calculem quants caràcters comparteixen
+  let commonChars = 0;
+  const shortText = normalized1.length < normalized2.length ? normalized1 : normalized2;
+  const longText = normalized1.length >= normalized2.length ? normalized1 : normalized2;
+  
+  for (let i = 0; i < shortText.length; i++) {
+    if (longText.includes(shortText[i])) {
+      commonChars++;
+    }
+  }
+  
+  // Calculem similitud basada en caràcters comuns
+  const similarity = commonChars / shortText.length;
+  return similarity >= threshold;
 }
 
 /**
