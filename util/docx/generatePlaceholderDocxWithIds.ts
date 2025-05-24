@@ -7,7 +7,7 @@
  */
 
 import * as JSZip from 'jszip';
-import { DOMParser, XMLSerializer } from '@xmldom/xmldom';
+import { DOMParser, XMLSerializer, Document as XMLDocument, Element as XMLElement } from '@xmldom/xmldom';
 import { ExcelLinkMapping, AIInstruction } from '@/app/types';
 
 /**
@@ -104,7 +104,7 @@ export async function generatePlaceholderDocxWithIds(
             const placeholder = `{{IA_${instruction.id || 'INSTRUCTION'}}}`;
             
             // Substituïm tot el contingut del paràgraf pel placeholder
-            replaceAllTextInParagraph(paragraphContent, placeholder);
+            replaceAllTextInParagraph(paragraphContent, placeholder, xmlDoc);
             
             modificationsCount++;
             console.log(`[generatePlaceholderDocxWithIds] ✅ Paràgraf complet substituït per "${placeholder}" en ID ${instruction.paragraphId}"`);
@@ -169,7 +169,7 @@ export async function generatePlaceholderDocxWithIds(
  * @param id ID de l'SDT a buscar
  * @returns Element SDT si es troba, undefined si no
  */
-function findSdtById(xmlDoc: Document, id: string): Element | undefined {
+function findSdtById(xmlDoc: XMLDocument, id: string): XMLElement | undefined {
   const allSdts = xmlDoc.getElementsByTagName('w:sdt');
   
   for (let i = 0; i < allSdts.length; i++) {
@@ -198,7 +198,7 @@ function findSdtById(xmlDoc: Document, id: string): Element | undefined {
  * @param sdt Element SDT
  * @returns Element de contingut del paràgraf, o undefined si no es troba
  */
-function getParagraphContentFromSdt(sdt: Element): Element | undefined {
+function getParagraphContentFromSdt(sdt: XMLElement): XMLElement | undefined {
   const sdtContent = sdt.getElementsByTagName('w:sdtContent')[0];
   
   if (sdtContent) {
@@ -219,7 +219,7 @@ function getParagraphContentFromSdt(sdt: Element): Element | undefined {
  * @param placeholder Text del placeholder
  * @returns true si s'ha fet la substitució, false si no
  */
-function replaceSelectedTextWithPlaceholder(paragraph: Element, selectedText: string, placeholder: string): boolean {
+function replaceSelectedTextWithPlaceholder(paragraph: XMLElement, selectedText: string, placeholder: string): boolean {
   const textNodes = paragraph.getElementsByTagName('w:t');
   let fullText = '';
   
@@ -282,8 +282,9 @@ function replaceSelectedTextWithPlaceholder(paragraph: Element, selectedText: st
  * Substitueix tot el text d'un paràgraf per un placeholder
  * @param paragraph Element del paràgraf
  * @param placeholder Text del placeholder
+ * @param xmlDoc Document XML per crear nous elements
  */
-function replaceAllTextInParagraph(paragraph: Element, placeholder: string): void {
+function replaceAllTextInParagraph(paragraph: XMLElement, placeholder: string, xmlDoc: XMLDocument): void {
   const textNodes = paragraph.getElementsByTagName('w:t');
   
   // Si hi ha almenys un node de text, substituïm el primer i esborrem la resta
@@ -297,8 +298,8 @@ function replaceAllTextInParagraph(paragraph: Element, placeholder: string): voi
     }
   } else {
     // Si no hi ha nodes de text, creem un de nou
-    const runElement = paragraph.getElementsByTagName('w:r')[0] || paragraph.appendChild(document.createElement('w:r'));
-    const textElement = document.createElement('w:t');
+    const runElement = paragraph.getElementsByTagName('w:r')[0] || paragraph.appendChild(xmlDoc.createElementNS('http://schemas.openxmlformats.org/wordprocessingml/2006/main', 'w:r'));
+    const textElement = xmlDoc.createElementNS('http://schemas.openxmlformats.org/wordprocessingml/2006/main', 'w:t');
     textElement.textContent = placeholder;
     runElement.appendChild(textElement);
   }
