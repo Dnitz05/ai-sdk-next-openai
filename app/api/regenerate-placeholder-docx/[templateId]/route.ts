@@ -14,8 +14,9 @@ import { generatePlaceholderDocxWithIds } from '@/util/docx/generatePlaceholderD
  */
 export async function GET(
   request: NextRequest,
-  { params }: { params: { templateId: string } }
+  context: { params: Promise<{ templateId: string }> }
 ) {
+  const params = await context.params;
   console.log(`[API regenerate-placeholder-docx] Inici amb ID: ${params.templateId}`);
   
   try {
@@ -48,10 +49,9 @@ export async function GET(
       return NextResponse.json({ error: 'No s\'ha pogut obtenir el document original' }, { status: 404 });
     }
     
-    // Convertir el Blob a Buffer utilitzant Uint8Array per evitar problemes de tipus
+    // Convertir el Blob a Buffer
     const arrayBuffer = await originalDocxData.arrayBuffer();
-    const uint8Array = new Uint8Array(arrayBuffer);
-    const originalDocxBuffer = Buffer.from(uint8Array);
+    const originalDocxBuffer = Buffer.from(new Uint8Array(arrayBuffer));
     console.log(`[API regenerate-placeholder-docx] Document original obtingut, mida: ${originalDocxBuffer.length} bytes`);
     
     // 2. Obtenir les configuracions de link mappings i AI instructions
