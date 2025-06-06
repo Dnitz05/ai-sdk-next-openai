@@ -4,12 +4,6 @@ import { createServerClient } from '@supabase/ssr'
 import type { NextRequest } from 'next/server'
 
 export async function middleware(req: NextRequest) {
-  // Saltar el middleware per l'endpoint de test públic
-  if (req.nextUrl.pathname === '/api/test-sdt-public') {
-    console.log('[middleware] Saltant autenticació per endpoint de test públic');
-    return NextResponse.next()
-  }
-  
   const res = NextResponse.next()
   
   const supabase = createServerClient(
@@ -41,5 +35,5 @@ export async function middleware(req: NextRequest) {
 }
 
 export const config = {
-  matcher: ['/((?!_next/static|_next/image|favicon.ico|api/test-sdt-public).*)'],
+  matcher: ['/((?!_next/static|_next/image|favicon.ico).*)'],
 };
