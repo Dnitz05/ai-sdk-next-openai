@@ -103,18 +103,96 @@ export async function POST(
       aiInstructionsCount: template.ai_instructions?.length || 0
     });
     
-    // 2. Verificar que hi ha una ruta al document original
-    if (!template.base_docx_storage_path) {
-      console.error(`[API regenerate-placeholder-docx] No hi ha ruta al document original`);
-      return NextResponse.json({ error: 'No hi ha document original disponible per aquesta plantilla' }, { status: 400 });
+    // 2. Sistema robustos de verificació i recuperació del document original
+    let originalDocxPath = template.base_docx_storage_path;
+    
+    if (!originalDocxPath) {
+      console.log(`[API regenerate-placeholder-docx] Ruta del document original no trobada a BD. Intentant recuperació...`);
+      
+      // Intentar recuperar el document utilitzant la ruta estàndard
+      const probablePath = `user-${userId}/template-${params.templateId}/original/original.docx`;
+      
+      try {
+        console.log(`[API regenerate-placeholder-docx] Verificant existència de: ${probablePath}`);
+        const { data: fileExists } = await supabase.storage
+          .from('template-docx')
+          .download(probablePath);
+          
+        if (fileExists && fileExists.size > 0) {
+          originalDocxPath = probablePath;
+          
+          // Actualitzar la BD immediatament per corregir el problema sistemàtic
+          const { error: updateError } = await supabase
+            .from('plantilla_configs')
+            .update({ base_docx_storage_path: probablePath })
+            .eq('id', params.templateId)
+            .eq('user_id', userId);
+          
+          if (updateError) {
+            console.warn(`[API regenerate-placeholder-docx] Avís actualitzant BD amb ruta recuperada:`, updateError);
+          } else {
+            console.log(`[API regenerate-placeholder-docx] ✅ BD actualitzada amb ruta recuperada: ${probablePath}`);
+          }
+        } else {
+          throw new Error('Document no vàlid o buit');
+        }
+      } catch (recoverError) {
+        console.error(`[API regenerate-placeholder-docx] No s'ha pogut recuperar el document:`, recoverError);
+        
+        // Intentar buscar qualsevol fitxer .docx al directori
+        try {
+          const { data: fileList } = await supabase.storage
+            .from('template-docx')
+            .list(`user-${userId}/template-${params.templateId}/original`);
+          
+          if (fileList && fileList.length > 0) {
+            const docxFile = fileList.find(f => f.name.toLowerCase().endsWith('.docx'));
+            
+            if (docxFile) {
+              const recoveredPath = `user-${userId}/template-${params.templateId}/original/${docxFile.name}`;
+              console.log(`[API regenerate-placeholder-docx] Trobat fitxer alternatiu: ${recoveredPath}`);
+              
+              // Verificar que és vàlid
+              const { data: altFileData } = await supabase.storage
+                .from('template-docx')
+                .download(recoveredPath);
+              
+              if (altFileData && altFileData.size > 0) {
+                originalDocxPath = recoveredPath;
+                
+                // Actualitzar BD
+                await supabase
+                  .from('plantilla_configs')
+                  .update({ base_docx_storage_path: recoveredPath })
+                  .eq('id', params.templateId)
+                  .eq('user_id', userId);
+                
+                console.log(`[API regenerate-placeholder-docx] ✅ Document alternatiu recuperat: ${recoveredPath}`);
+              }
+            }
+          }
+        } catch (listError) {
+          console.error(`[API regenerate-placeholder-docx] Error llistant fitxers:`, listError);
+        }
+      }
+    }
+    
+    // Si encara no tenim document original, fallar amb error informatiu
+    if (!originalDocxPath) {
+      console.error(`[API regenerate-placeholder-docx] No s'ha pogut trobar cap document original per la plantilla ${params.templateId}`);
+      return NextResponse.json({ 
+        error: 'No hi ha document original disponible per aquesta plantilla',
+        details: 'Cal pujar un document DOCX original abans de poder generar el placeholder',
+        templateId: params.templateId
+      }, { status: 400 });
     }
     
     // 3. Descarregar el document original des de Storage
-    console.log(`[API regenerate-placeholder-docx] Descarregant document original de: ${template.base_docx_storage_path}`);
+    console.log(`[API regenerate-placeholder-docx] Descarregant document original de: ${originalDocxPath}`);
     const { data: originalDocxData, error: originalDocxError } = await supabase
       .storage
       .from('template-docx')
-      .download(template.base_docx_storage_path);
+      .download(originalDocxPath);
     
     if (originalDocxError || !originalDocxData) {
       console.error(`[API regenerate-placeholder-docx] Error obtenint document original:`, originalDocxError);
@@ -123,7 +201,7 @@ export async function POST(
     
     // Convertir el Blob a Buffer
     const arrayBuffer = await originalDocxData.arrayBuffer();
-    const originalDocxBuffer = Buffer.from(new Uint8Array(arrayBuffer));
+    const originalDocxBuffer = Buffer.from(arrayBuffer);
     console.log(`[API regenerate-placeholder-docx] Document original obtingut, mida: ${originalDocxBuffer.length} bytes`);
     
     // 4. Obtenir les configuracions de link mappings i AI instructions de l'estructura actual

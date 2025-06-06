@@ -107,6 +107,39 @@ export async function POST(request: NextRequest) {
     console.log(`[API upload-original-docx] Fitxer pujat correctament a: ${data.path}`);
 
     // ==========================================
+    // ACTUALITZACIÓ IMMEDIATA DE LA BD
+    // ==========================================
+    console.log(`[API upload-original-docx] Actualitzant BD amb ruta del document original...`);
+    
+    try {
+      const { error: updateError } = await supabaseAdmin
+        .from('plantilla_configs')
+        .upsert({
+          id: templateId,
+          user_id: userId,
+          base_docx_storage_path: data.path,
+          base_docx_name: file.name,
+          config_name: file.name.replace(/\.docx$/i, ''), // Nom sense extensió com a títol per defecte
+          created_at: new Date().toISOString(),
+          updated_at: new Date().toISOString()
+        }, {
+          onConflict: 'id'
+        });
+
+      if (updateError) {
+        console.error('[API upload-original-docx] Error actualitzant BD:', updateError);
+        // No fallem completament però advertim
+        console.warn('[API upload-original-docx] Continuant sense actualitzar BD...');
+      } else {
+        console.log(`[API upload-original-docx] BD actualitzada amb ruta: ${data.path}`);
+      }
+    } catch (dbError) {
+      console.error('[API upload-original-docx] Error crític actualitzant BD:', dbError);
+      // No fallem completament
+      console.warn('[API upload-original-docx] Continuant sense actualitzar BD...');
+    }
+
+    // ==========================================
     // INDEXACIÓ AUTOMÀTICA AMB SDTs
     // ==========================================
     console.log(`[API upload-original-docx] Iniciant indexació automàtica del document...`);

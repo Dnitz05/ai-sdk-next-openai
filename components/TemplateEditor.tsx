@@ -728,16 +728,9 @@ const TemplateEditor: React.FC<TemplateEditorProps> = ({ initialTemplateData, mo
         
         setOriginalDocxStoragePath(uploadData.originalDocxPath);
         console.log("DOCX original pujat, ruta:", uploadData.originalDocxPath);
-// Desa la ruta original a la BD per generar el placeholder després
-        await fetch(`/api/update-template/${currentTemplateId}`, {
-          method: 'PUT',
-          headers: {
-            'Content-Type': 'application/json',
-            ...(accessTokenUpload ? { Authorization: `Bearer ${accessTokenUpload}` } : {})
-          },
-          credentials: 'include',
-          body: JSON.stringify({ originalDocxPath: uploadData.originalDocxPath })
-        });
+        // NOTE: L'actualització de la BD ara es fa automàticament a upload-original-docx
+        // No cal fer una crida addicional aquí
+        console.log("DOCX original processat. La BD s'ha actualitzat automàticament.");
 
         // 2. Processar el document (ara llegint des de Storage via API)
         const processResponse = await fetch('/api/process-document', {
