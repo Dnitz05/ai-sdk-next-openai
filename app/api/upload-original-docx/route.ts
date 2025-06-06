@@ -1,60 +1,33 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
 import { createUserSupabaseClient } from '@/lib/supabase/userClient';
-import { createServerSupabaseClient } from '@/lib/supabase/serverClient';
 import { indexDocxWithSdts, isDocxIndexed } from '@/util/docx/indexDocxWithSdts';
 
 export async function POST(request: NextRequest) {
   console.log("API /api/upload-original-docx rebuda petició POST");
 
-  // Obtenir l'usuari autenticat via token Bearer o cookies
-  let userId: string | null = null;
-  let userError: any = null;
-
-  // 1. Prova d'obtenir el token d'accés de l'header Authorization
-  const authHeader = request.headers.get('authorization') ?? request.headers.get('Authorization');
-  console.log('[API upload-original-docx] HEADER Authorization:', authHeader);
-
-  if (authHeader && authHeader.startsWith('Bearer ')) {
-    const accessToken = authHeader.slice(7).trim();
-    if (!accessToken) {
-      console.error('[API upload-original-docx] Token buit al header Authorization');
-      return NextResponse.json({ error: 'Token buit o no proporcionat.' }, { status: 401 });
-    }
-    try {
-      const { createUserSupabaseClient } = await import('@/lib/supabase/userClient');
-      const supabase = createUserSupabaseClient(accessToken);
-      const { data: userData, error } = await supabase.auth.getUser();
-      if (error || !userData?.user) {
-        console.error('[API upload-original-docx] Token rebut però invàlid', error);
-        return NextResponse.json({ error: 'Token invàlid o caducat.' }, { status: 401 });
-      } else {
-        userId = userData.user.id;
-      }
-    } catch (e) {
-      userError = e;
-    }
+  // 1. Verificar autenticació (mateix patró que update-template)
+  const authHeader = request.headers.get('authorization') || request.headers.get('Authorization');
+  console.log('[API upload-original-docx] HEADER Authorization:', authHeader ? 'present' : 'missing');
+  
+  if (!authHeader || !authHeader.startsWith('Bearer ')) {
+    console.error('[API upload-original-docx] No Bearer token found');
+    return NextResponse.json({ error: 'No autenticat. Falten credencials.' }, { status: 401 });
   }
+  
+  const accessToken = authHeader.replace('Bearer ', '').trim();
+  console.log('[API upload-original-docx] accessToken per upload-original-docx:', accessToken ? 'present' : 'undefined');
+  
+  const userSupabaseClient = createUserSupabaseClient(accessToken);
+  const { data: userData, error: userError } = await userSupabaseClient.auth.getUser();
 
-  // 2. Si no s'ha trobat via header, prova via cookies (App Router)
-  if (!userId) {
-    try {
-      const supabase = await createServerSupabaseClient();
-      const { data: userData, error } = await supabase.auth.getUser();
-      if (error || !userData?.user) {
-        userError = error;
-      } else {
-        userId = userData.user.id;
-      }
-    } catch (e) {
-      userError = e;
-    }
+  if (userError || !userData?.user) {
+    console.error("[API upload-original-docx] Error verificant usuari:", userError);
+    return NextResponse.json({ error: 'Usuari no autenticat o token invàlid.', details: userError?.message }, { status: 401 });
   }
-
-  if (!userId) {
-    console.error("[API upload-original-docx] Error obtenint informació de l'usuari:", userError);
-    return NextResponse.json({ error: 'Usuari no autenticat.' }, { status: 401 });
-  }
+  
+  const userId = userData.user.id;
+  console.log("[API upload-original-docx] Usuari autenticat:", userId);
 
   const supabaseAdmin = createClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
