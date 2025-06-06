@@ -2,6 +2,8 @@ import { NextRequest, NextResponse } from 'next/server';
 import { createUserSupabaseClient } from '@/lib/supabase/userClient'; // Per verificar l'usuari
 import { createClient } from '@supabase/supabase-js'; // Per al client de servei
 import { generatePlaceholderDocx } from '@util/generatePlaceholderDocx';
+import { indexDocxWithSdts, isDocxIndexed } from '@/util/docx/indexDocxWithSdts';
+import { generatePlaceholderDocxWithIds } from '@/util/docx/generatePlaceholderDocxWithIds';
 
 // Interfície per a les dades esperades al body (pot ser més específica)
 interface UpdateTemplatePayload {
@@ -229,15 +231,131 @@ export async function PUT(request: NextRequest) {
         const arrayBuffer = await fileData.arrayBuffer();
         const originalBuffer = Buffer.from(arrayBuffer);
         
-        // 3. Generar placeholder DOCX
-        console.log(`[API UPDATE-TEMPLATE] Invocant generatePlaceholderDocx amb mappings:`, 
-          { linkCount: body.link_mappings?.length, aiCount: body.ai_instructions?.length });
+        // ==========================================
+        // NOVA LÒGICA AMB INDEXACIÓ AUTOMÀTICA
+        // ==========================================
+        console.log(`[API UPDATE-TEMPLATE] 🔄 Implementant generació amb indexació automàtica...`);
         
-        const placeholderBuffer = await generatePlaceholderDocx(
-          originalBuffer,
+        // 2.1. Verificar si existeix versió indexada
+        const indexedPath = originalPathToUse.replace('/original/', '/indexed/').replace('.docx', '.docx');
+        console.log(`[API UPDATE-TEMPLATE] Buscant versió indexada a: ${indexedPath}`);
+        
+        let indexedBuffer = originalBuffer;
+        let usingIndexedVersion = false;
+        
+        try {
+          const { data: indexedData, error: indexedError } = await serviceClient.storage
+            .from('template-docx')
+            .download(indexedPath);
+            
+          if (!indexedError && indexedData && indexedData.size > 0) {
+            console.log(`[API UPDATE-TEMPLATE] ✅ Versió indexada trobada: ${indexedData.size} bytes`);
+            const indexedArrayBuffer = await indexedData.arrayBuffer();
+            indexedBuffer = Buffer.from(new Uint8Array(indexedArrayBuffer));
+            usingIndexedVersion = true;
+            
+            // Verificar que realment està indexada
+            const indexCheck = await isDocxIndexed(indexedBuffer);
+            if (!indexCheck.indexed) {
+              console.log(`[API UPDATE-TEMPLATE] ⚠️ El document "indexat" no té SDTs vàlids. Forçant nova indexació...`);
+              usingIndexedVersion = false;
+              indexedBuffer = originalBuffer;
+            }
+          } else {
+            console.log(`[API UPDATE-TEMPLATE] ℹ️ No s'ha trobat versió indexada prèvia`);
+          }
+        } catch (indexedFetchError) {
+          console.log(`[API UPDATE-TEMPLATE] ℹ️ Error accedint a versió indexada:`, indexedFetchError);
+        }
+        
+        // 2.2. Si no hi ha versió indexada vàlida, crear-la
+        if (!usingIndexedVersion) {
+          console.log(`[API UPDATE-TEMPLATE] 🔧 Indexant document original amb SDTs...`);
+          
+          try {
+            // Verificar si el document original ja té SDTs
+            const originalIndexCheck = await isDocxIndexed(originalBuffer);
+            
+            if (originalIndexCheck.indexed) {
+              console.log(`[API UPDATE-TEMPLATE] ✅ Document original ja té ${originalIndexCheck.docproofSdtCount} SDTs`);
+              indexedBuffer = originalBuffer;
+            } else {
+              console.log(`[API UPDATE-TEMPLATE] 🔨 Aplicant indexació automàtica...`);
+              const indexingResult = await indexDocxWithSdts(originalBuffer);
+              indexedBuffer = indexingResult.indexedBuffer;
+              
+              console.log(`[API UPDATE-TEMPLATE] ✅ Document indexat amb ${indexingResult.idMap.length} paràgrafs`);
+              
+              // Guardar la versió indexada per futures utilitzacions
+              try {
+                const { error: saveIndexedError } = await serviceClient.storage
+                  .from('template-docx')
+                  .upload(indexedPath, indexedBuffer, {
+                    contentType: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+                    upsert: true
+                  });
+                  
+                if (saveIndexedError) {
+                  console.warn(`[API UPDATE-TEMPLATE] ⚠️ No s'ha pogut guardar la versió indexada:`, saveIndexedError);
+                } else {
+                  console.log(`[API UPDATE-TEMPLATE] 💾 Versió indexada guardada a: ${indexedPath}`);
+                }
+              } catch (saveError) {
+                console.warn(`[API UPDATE-TEMPLATE] ⚠️ Error guardant versió indexada:`, saveError);
+              }
+            }
+          } catch (indexingError) {
+            console.error(`[API UPDATE-TEMPLATE] ❌ Error durant la indexació:`, indexingError);
+            console.log(`[API UPDATE-TEMPLATE] 🔄 Continuant amb la funció legacy...`);
+            
+            // Fallback a la funció legacy
+            const placeholderBuffer = await generatePlaceholderDocx(
+              originalBuffer,
+              body.link_mappings ?? [],
+              body.ai_instructions ?? []
+            );
+            
+            // Saltar a la secció de pujada
+            console.log(`[API UPDATE-TEMPLATE] 📤 Utilitzant generació legacy...`);
+            const legacyPlaceholderPath = originalPathToUse.replace('/original/original.docx', '/placeholder/placeholder.docx');
+            
+            const { data: legacyUploadData, error: legacyUploadError } = await serviceClient.storage
+              .from('template-docx')
+              .upload(legacyPlaceholderPath, placeholderBuffer, {
+                contentType: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+                upsert: true
+              });
+              
+            if (!legacyUploadError && legacyUploadData) {
+              await serviceClient
+                .from('plantilla_configs')
+                .update({ placeholder_docx_storage_path: legacyUploadData.path })
+                .eq('id', id)
+                .eq('user_id', userId);
+              (updatedTemplate as any).placeholder_docx_storage_path = legacyUploadData.path;
+              
+              return NextResponse.json({ 
+                template: updatedTemplate, 
+                placeholderDocxPath: legacyUploadData.path,
+                placeholderStatus: 'generated_legacy'
+              }, { status: 200 });
+            }
+            
+            throw indexingError;
+          }
+        }
+        
+        // 3. Generar placeholder amb la nova funció basada en IDs
+        console.log(`[API UPDATE-TEMPLATE] 🎯 Generant placeholder amb tecnologia SDT...`);
+        console.log(`[API UPDATE-TEMPLATE] Mappings: ${body.link_mappings?.length || 0} links, ${body.ai_instructions?.length || 0} instruccions AI`);
+        
+        const placeholderBuffer = await generatePlaceholderDocxWithIds(
+          indexedBuffer,
           body.link_mappings ?? [],
           body.ai_instructions ?? []
         );
+        
+        console.log(`[API UPDATE-TEMPLATE] ✅ Placeholder generat amb èxit: ${placeholderBuffer.length} bytes`);
         
         // 4. Determinar la ruta de placeholder correctament
         let placeholderPath = '';
