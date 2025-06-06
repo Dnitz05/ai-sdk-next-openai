@@ -1,33 +1,59 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
 import { createUserSupabaseClient } from '@/lib/supabase/userClient';
+import { createServerSupabaseClient } from '@/lib/supabase/serverClient';
 import { indexDocxWithSdts, isDocxIndexed } from '@/util/docx/indexDocxWithSdts';
 
 export async function POST(request: NextRequest) {
   console.log("API /api/upload-original-docx rebuda petició POST");
 
-  // 1. Verificar autenticació (mateix patró que update-template)
-  const authHeader = request.headers.get('authorization') || request.headers.get('Authorization');
+  // Autenticació de l'usuari: primer via header Authorization (Bearer), després cookies
+  let userId: string | null = null;
+  let userError: any = null;
+  const authHeader = request.headers.get('authorization') ?? request.headers.get('Authorization');
   console.log('[API upload-original-docx] HEADER Authorization:', authHeader ? 'present' : 'missing');
   
-  if (!authHeader || !authHeader.startsWith('Bearer ')) {
-    console.error('[API upload-original-docx] No Bearer token found');
-    return NextResponse.json({ error: 'No autenticat. Falten credencials.' }, { status: 401 });
+  if (authHeader?.startsWith('Bearer ')) {
+    const accessToken = authHeader.slice(7).trim();
+    console.log('[API upload-original-docx] accessToken present:', accessToken ? 'yes' : 'no');
+    try {
+      const userClient = createUserSupabaseClient(accessToken);
+      const { data: userDataAuth, error: authError } = await userClient.auth.getUser();
+      if (!authError && userDataAuth.user) {
+        userId = userDataAuth.user.id;
+        console.log("[API upload-original-docx] Usuari autenticat via Bearer token:", userId);
+      } else {
+        userError = authError;
+        console.log("[API upload-original-docx] Bearer token invalid, trying fallback...");
+      }
+    } catch (e) {
+      userError = e;
+      console.log("[API upload-original-docx] Bearer token error, trying fallback...");
+    }
   }
   
-  const accessToken = authHeader.replace('Bearer ', '').trim();
-  console.log('[API upload-original-docx] accessToken per upload-original-docx:', accessToken ? 'present' : 'undefined');
-  
-  const userSupabaseClient = createUserSupabaseClient(accessToken);
-  const { data: userData, error: userError } = await userSupabaseClient.auth.getUser();
-
-  if (userError || !userData?.user) {
-    console.error("[API upload-original-docx] Error verificant usuari:", userError);
-    return NextResponse.json({ error: 'Usuari no autenticat o token invàlid.', details: userError?.message }, { status: 401 });
+  if (!userId) {
+    console.log("[API upload-original-docx] Trying authentication via cookies...");
+    try {
+      const supabaseServer = await createServerSupabaseClient();
+      const { data: userDataAuth2, error: serverError } = await supabaseServer.auth.getUser();
+      if (!serverError && userDataAuth2.user) {
+        userId = userDataAuth2.user.id;
+        console.log("[API upload-original-docx] Usuari autenticat via cookies:", userId);
+      } else {
+        userError = serverError;
+      }
+    } catch (e) {
+      userError = e;
+    }
   }
   
-  const userId = userData.user.id;
-  console.log("[API upload-original-docx] Usuari autenticat:", userId);
+  if (!userId) {
+    console.error("[API upload-original-docx] Error obtenint informació de l'usuari:", userError);
+    return NextResponse.json({ error: 'Usuari no autenticat.' }, { status: 401 });
+  }
+  
+  console.log("[API upload-original-docx] Usuari autenticat amb èxit:", userId);
 
   const supabaseAdmin = createClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
