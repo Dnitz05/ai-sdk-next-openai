@@ -313,7 +313,7 @@ export async function POST(
       }
       
       // 10. Si hem hagut d'indexar el document, també desem la versió indexada
-      if (!isIndexed.indexed) {
+      if (!isIndexed.indexed && originalPath) {
         const indexedPath = originalPath.replace('/original/', '/indexed/').replace(/\/[^\/]+$/, '/indexed.docx');
         
         const { error: indexedUploadError } = await supabase
@@ -328,6 +328,26 @@ export async function POST(
           console.warn(`[API regenerate-placeholder-docx] Avís: No s'ha pogut pujar document indexat:`, indexedUploadError);
         } else {
           console.log(`[API regenerate-placeholder-docx] Document indexat desat a ${indexedPath}`);
+          
+          // Guardar també els mappings a la BD si els tenim
+          try {
+            const { error: updateMappingsError } = await supabase
+              .from('plantilla_configs')
+              .update({
+                indexed_docx_storage_path: indexedPath,
+                updated_at: new Date().toISOString()
+              })
+              .eq('id', params.templateId)
+              .eq('user_id', userId);
+            
+            if (updateMappingsError) {
+              console.warn(`[API regenerate-placeholder-docx] Avís actualitzant ruta indexada:`, updateMappingsError);
+            } else {
+              console.log(`[API regenerate-placeholder-docx] Ruta indexada guardada a BD`);
+            }
+          } catch (mappingsError) {
+            console.warn(`[API regenerate-placeholder-docx] Error guardant ruta indexada:`, mappingsError);
+          }
         }
       }
       

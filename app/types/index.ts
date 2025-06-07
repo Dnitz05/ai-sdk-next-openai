@@ -26,6 +26,16 @@ export interface AIInstruction {
 }
 
 /**
+ * Interfície per a els mappings de paràgrafs amb IDs
+ */
+export interface ParagraphMapping {
+  id: string; // ID del SDT (ex: "docproof_pid_123")
+  text: string; // Contingut del paràgraf
+  numericId: number; // ID numèric seqüencial
+  originalIndex?: number; // Índex original al document
+}
+
+/**
  * Interfície per a la configuració completa d'una plantilla
  */
 export interface TemplateConfiguration {
@@ -47,6 +57,8 @@ export interface Template {
   base_docx_name?: string;
   base_docx_storage_path?: string;
   placeholder_docx_storage_path?: string;
+  indexed_docx_storage_path?: string;
+  paragraph_mappings?: ParagraphMapping[];
   docx_storage_path?: string;
   excel_file_name?: string;
   excel_headers?: string[];

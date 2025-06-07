@@ -177,6 +177,27 @@ export async function POST(request: NextRequest) {
           paragraphMappings = indexingResult.idMap;
           console.log(`[API upload-original-docx] Document indexat pujat a: ${indexedData.path}`);
           console.log(`[API upload-original-docx] ${paragraphMappings.length} paràgrafs indexats amb SDTs`);
+          
+          // 4. Guardar els mappings d'IDs a la BD per a ús posterior
+          try {
+            const { error: mappingsUpdateError } = await supabaseAdmin
+              .from('plantilla_configs')
+              .update({
+                indexed_docx_storage_path: indexedData.path,
+                paragraph_mappings: paragraphMappings,
+                updated_at: new Date().toISOString()
+              })
+              .eq('id', templateId)
+              .eq('user_id', userId);
+
+            if (mappingsUpdateError) {
+              console.error('[API upload-original-docx] Error guardant mappings a BD:', mappingsUpdateError);
+            } else {
+              console.log(`[API upload-original-docx] Mappings de ${paragraphMappings.length} paràgrafs guardats a BD`);
+            }
+          } catch (mappingsError) {
+            console.error('[API upload-original-docx] Error crític guardant mappings:', mappingsError);
+          }
         }
       } else {
         console.log(`[API upload-original-docx] El document ja estava indexat, saltant procés d'indexació`);
