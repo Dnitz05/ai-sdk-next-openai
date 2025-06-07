@@ -402,8 +402,33 @@ const TemplateEditor: React.FC<TemplateEditorProps> = ({ initialTemplateData, mo
         });
       }
       
-      // Prepare data based on the expected format for each endpoint
+      // Verificar si la plantilla existeix a la BD abans de decidir endpoint
+      let shouldUseUpdateEndpoint = false;
+      
       if (mode === 'edit' && initialTemplateData?.id) {
+        shouldUseUpdateEndpoint = true;
+      } else if (currentTemplateId) {
+        // Verificar si la plantilla ja existeix a la BD
+        try {
+          const supabase = createBrowserSupabaseClient();
+          const { data: existingTemplate, error: checkError } = await supabase
+            .from('plantilla_configs')
+            .select('id')
+            .eq('id', currentTemplateId)
+            .maybeSingle();
+          
+          if (!checkError && existingTemplate) {
+            shouldUseUpdateEndpoint = true;
+            console.log(`Plantilla ${currentTemplateId} ja existeix a la BD - usant endpoint d'actualització`);
+          }
+        } catch (checkError) {
+          console.warn('Error verificant existència de plantilla:', checkError);
+          // En cas d'error, deixem que save-configuration gestioni amb UPSERT
+        }
+      }
+      
+      // Preparar dades segons l'endpoint a utilitzar
+      if (shouldUseUpdateEndpoint && (initialTemplateData?.id || currentTemplateId)) {
         // Obtain authentication token for edit mode
         const supabase = createBrowserSupabaseClient();
         const { data: sessionData, error: sessionError } = await supabase.auth.getSession();
@@ -466,21 +491,33 @@ const TemplateEditor: React.FC<TemplateEditorProps> = ({ initialTemplateData, mo
           credentials: 'include' // Include cookies
         });
         
-        // Llegim el cos de la resposta UNA SOLA VEGADA per evitar errors
-        const responseText = await response.text();
+        // Gestió robusta de la resposta per evitar "body stream already read"
         let responseData;
+        let responseText = '';
         
         try {
-          // Intentem parsejar com a JSON
-          responseData = JSON.parse(responseText);
-        } catch (e) {
-          console.error('Error al parsejar JSON de la resposta. Text de la resposta:', responseText);
-          throw new Error(`Error del servidor (no JSON): ${response.status} - ${responseText || response.statusText}`);
+          // Primer verificar si la resposta té contingut
+          const contentLength = response.headers.get('content-length');
+          const contentType = response.headers.get('content-type');
+          
+          if (contentLength === '0' || !contentType?.includes('json')) {
+            // Si no hi ha contingut o no és JSON, usar text
+            responseText = await response.text();
+            responseData = responseText ? { message: responseText } : {};
+          } else {
+            // Si sembla JSON, intentar parsejar directament
+            responseData = await response.json();
+          }
+        } catch (parseError) {
+          console.error('Error llegint resposta del servidor:', parseError);
+          // Fallback si hi ha problemes llegint la resposta
+          responseData = { error: 'Error de comunicació amb el servidor' };
         }
         
         if (!response.ok) {
           console.error('Error de resposta des del servidor:', response.status, responseData);
-          throw new Error(responseData?.error || responseData?.details || responseData?.message || 'Error actualitzant la plantilla des del servidor');
+          const errorMessage = responseData?.error || responseData?.details || responseData?.message || responseText || `Error HTTP ${response.status}`;
+          throw new Error(errorMessage);
         }
         
         // Després, regenerem el placeholder de forma asíncrona

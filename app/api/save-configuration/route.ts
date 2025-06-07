@@ -121,24 +121,41 @@ export async function POST(request: NextRequest) {
       // created_at i updated_at seran gestionats per la BD (DEFAULT now())
     };
 
-    console.log("[API save-configuration] Iniciant inserció amb payload:", JSON.stringify(configToInsert, null, 2));
+    console.log("[API save-configuration] Iniciant operació UPSERT amb payload:", JSON.stringify(configToInsert, null, 2));
     
-    const { data: insertedData, error: dbError } = await serviceClient
+    // Implementem UPSERT per manejar tant insercions com actualitzacions
+    const { data: upsertedData, error: dbError } = await serviceClient
       .from('plantilla_configs')
-      .insert([configToInsert]) // insert espera un array
+      .upsert([configToInsert], { 
+        onConflict: 'id',
+        ignoreDuplicates: false 
+      })
       .select()
       .single();
 
     if (dbError) {
-      console.error("[API save-configuration] Error detallat d'inserció:", dbError);
-      // ... (gestió d'errors existent)
+      console.error("[API save-configuration] Error detallat d'UPSERT:", dbError);
+      
       let msg = 'Error al desar la configuració.';
-      if (dbError.code === '23505') msg = 'Error de duplicitat: Ja existeix una plantilla amb aquest ID.';
-      // ... (altres codis d'error)
-      return NextResponse.json({ error: msg, details: dbError.message, code: dbError.code }, { status: 500 });
+      if (dbError.code === '23505') {
+        msg = 'Error de duplicitat: Conflicte amb ID existent.';
+      } else if (dbError.code === '23503') {
+        msg = 'Error d\'integritat referencial: Usuari no vàlid.';
+      } else if (dbError.code === '23514') {
+        msg = 'Error de validació: Dades invàlides.';
+      } else if (dbError.code === '42501') {
+        msg = 'Error de permisos: No autoritzat per aquesta operació.';
+      }
+      
+      return NextResponse.json({ 
+        error: msg, 
+        details: dbError.message, 
+        code: dbError.code,
+        hint: dbError.hint 
+      }, { status: 500 });
     }
     
-    console.log("[API save-configuration] ✅ Inserció completada amb èxit. ID de la plantilla:", insertedData?.id);
+    console.log("[API save-configuration] ✅ Operació UPSERT completada amb èxit. ID de la plantilla:", upsertedData?.id);
 
     // ==========================================
     // GENERACIÓ ROBUSTA DEL PLACEHOLDER
@@ -278,7 +295,7 @@ export async function POST(request: NextRequest) {
     return NextResponse.json(
       { 
         message: 'Configuració desada correctament!', 
-        templateId: insertedData?.id,
+        templateId: upsertedData?.id,
         placeholderDocxPath: placeholderDocxPath 
       },
       { status: 201 }
