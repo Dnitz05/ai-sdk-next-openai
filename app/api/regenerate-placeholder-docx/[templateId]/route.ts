@@ -201,7 +201,7 @@ export async function POST(
     
     // Convertir el Blob a Buffer
     const arrayBuffer = await originalDocxData.arrayBuffer();
-    const originalDocxBuffer = Buffer.from(arrayBuffer);
+    const originalDocxBuffer = Buffer.from(arrayBuffer as ArrayBuffer);
     console.log(`[API regenerate-placeholder-docx] Document original obtingut, mida: ${originalDocxBuffer.length} bytes`);
     
     // 4. Obtenir les configuracions de link mappings i AI instructions de l'estructura actual
@@ -259,7 +259,7 @@ export async function POST(
     let placeholderPath = '';
     const originalPath = template.base_docx_storage_path;
     
-    if (originalPath.includes('/original/')) {
+    if (originalPath && originalPath.includes('/original/')) {
       placeholderPath = originalPath.replace('/original/', '/placeholder/').replace(/\/[^\/]+$/, '/placeholder.docx');
     } else {
       // Fallback: construir ruta basada en l'estructura esperada

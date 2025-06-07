@@ -229,7 +229,7 @@ export async function PUT(request: NextRequest) {
         
         // 2. Convertir a buffer
         const arrayBuffer = await fileData.arrayBuffer();
-        const originalBuffer = Buffer.from(arrayBuffer);
+        const originalBuffer = Buffer.from(arrayBuffer as ArrayBuffer);
         
         // ==========================================
         // NOVA LÒGICA AMB INDEXACIÓ AUTOMÀTICA
@@ -363,9 +363,9 @@ export async function PUT(request: NextRequest) {
         console.log(`[API UPDATE-TEMPLATE] Processant ruta original: ${originalPathToUse}`);
         
         // Mètode 1: Si la ruta segueix exactament el patró esperat
-        if (originalPathToUse.includes('/original/original.docx')) {
+        if (originalPathToUse && originalPathToUse.includes('/original/original.docx')) {
           placeholderPath = originalPathToUse.replace('/original/original.docx', '/placeholder/placeholder.docx');
-        } 
+        }
         // Mètode 2: Reconstruir basant-nos en parts de la ruta
         else {
           // Dividim la ruta per segments

@@ -38,8 +38,30 @@ export interface TemplateConfiguration {
 
 /**
  * Interfície per a una plantilla de la base de dades
+ * Actualitzada per reflectir l'esquema real de plantilla_configs
  */
 export interface Template {
+  id: string;
+  user_id: string;
+  config_name: string;
+  base_docx_name?: string;
+  base_docx_storage_path?: string;
+  placeholder_docx_storage_path?: string;
+  docx_storage_path?: string;
+  excel_file_name?: string;
+  excel_headers?: string[];
+  link_mappings?: ExcelLinkMapping[];
+  ai_instructions?: AIInstruction[];
+  final_html?: string;
+  created_at: string;
+  updated_at: string;
+}
+
+/**
+ * Interfície per compatibilitat amb l'antiga estructura
+ * @deprecated Usar Template en lloc d'aquesta interfície
+ */
+export interface LegacyTemplate {
   id: string;
   title: string;
   description: string;
