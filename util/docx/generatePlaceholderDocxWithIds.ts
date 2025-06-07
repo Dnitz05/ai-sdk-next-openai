@@ -12,6 +12,7 @@ import { ExcelLinkMapping, AIInstruction } from '@/app/types';
 
 /**
  * Genera un document DOCX amb placeholders basant-se en IDs de paràgrafs
+ * Utilitza un sistema unificat de placeholders JSON per gestionar Excel, IA i combinacions
  * @param docxBuffer Buffer del document DOCX indexat amb SDTs
  * @param linkMappings Array de mappings d'Excel
  * @param aiInstructions Array d'instruccions d'IA
@@ -22,7 +23,7 @@ export async function generatePlaceholderDocxWithIds(
   linkMappings: ExcelLinkMapping[],
   aiInstructions: AIInstruction[]
 ): Promise<Buffer> {
-  console.log('[generatePlaceholderDocxWithIds] Inici de la generació amb placeholders basats en IDs');
+  console.log('[generatePlaceholderDocxWithIds] Inici de la generació amb placeholders JSON unificats');
   console.log(`[generatePlaceholderDocxWithIds] Mappings: ${linkMappings.length}, AI Instructions: ${aiInstructions.length}`);
   
   // Debug: Mostrar detalls dels mappings
@@ -52,123 +53,37 @@ export async function generatePlaceholderDocxWithIds(
     const parser = new DOMParser();
     const xmlDoc = parser.parseFromString(documentXml, 'text/xml');
 
-    // Procesar els linkMappings
+    // FASE 1: Agrupar mappings i instruccions per paragraphId
+    console.log('[generatePlaceholderDocxWithIds] 📊 Agrupant dades per paràgraf...');
+    const paragraphData = groupDataByParagraphId(linkMappings, aiInstructions);
+    
+    console.log(`[generatePlaceholderDocxWithIds] Paràgrafs detectats: ${Object.keys(paragraphData).length}`);
+    Object.entries(paragraphData).forEach(([paragraphId, data]) => {
+      console.log(`[generatePlaceholderDocxWithIds] Paràgraf ${paragraphId}: ${data.excelMappings.length} Excel + ${data.aiInstructions.length} IA`);
+    });
+
+    // FASE 2: Processar cada paràgraf i generar placeholders JSON
     let modificationsCount = 0;
     
-    // Processar primer els mappings d'Excel
-    if (linkMappings && linkMappings.length > 0) {
-      console.log(`[generatePlaceholderDocxWithIds] Processant ${linkMappings.length} linkMappings...`);
+    for (const [paragraphId, data] of Object.entries(paragraphData)) {
+      console.log(`[generatePlaceholderDocxWithIds] 🔄 Processant paràgraf: ${paragraphId}`);
       
-      for (const mapping of linkMappings) {
-        if (!mapping.selectedText) {
-          console.log(`[generatePlaceholderDocxWithIds] Saltant mapping sense selectedText:`, mapping);
-          continue;
-        }
-        
-        let substitucionFeta = false;
-        
-        // MÈTODE 1: Intentar trobar per ID
-        if (mapping.paragraphId) {
-          const sdt = findSdtById(xmlDoc, mapping.paragraphId);
-          
-          if (sdt) {
-            // Trobar el text seleccionat dins de l'SDT
-            const paragraphContent = getParagraphContentFromSdt(sdt);
-            
-            if (paragraphContent) {
-              // Substitució del text seleccionat pel placeholder corresponent
-              const placeholder = `{{${mapping.excelHeader || 'EXCEL_FIELD'}}}`;
-              const result = replaceSelectedTextWithPlaceholder(
-                paragraphContent, 
-                mapping.selectedText, 
-                placeholder
-              );
-              
-              if (result) {
-                modificationsCount++;
-                substitucionFeta = true;
-                console.log(`[generatePlaceholderDocxWithIds] ✅ (ID) Substituït text "${mapping.selectedText}" per "${placeholder}" en paràgraf ${mapping.paragraphId}"`);
-              }
-            }
-          }
-        }
-        
-        // MÈTODE 2: Si no troba per ID, intentar fallback per text
-        if (!substitucionFeta) {
-          console.log(`[generatePlaceholderDocxWithIds] 🔄 Intentant fallback per text per "${mapping.selectedText}"...`);
-          
-          const allParagraphs = xmlDoc.getElementsByTagName('w:p');
-          let textFallbackSuccess = false;
-          
-          for (let i = 0; i < allParagraphs.length && !textFallbackSuccess; i++) {
-            const paragraph = allParagraphs[i];
-            
-            // Obtenir tot el text del paràgraf
-            const textNodes = paragraph.getElementsByTagName('w:t');
-            let fullText = '';
-            for (let j = 0; j < textNodes.length; j++) {
-              fullText += textNodes[j].textContent || '';
-            }
-            
-            // Verificar si aquest paràgraf conté el text seleccionat
-            if (fullText.includes(mapping.selectedText)) {
-              console.log(`[generatePlaceholderDocxWithIds] 🎯 Text trobat en paràgraf ${i}: "${fullText.substring(0, 50)}..."`);
-              
-              const placeholder = `{{${mapping.excelHeader || 'EXCEL_FIELD'}}}`;
-              const result = replaceSelectedTextWithPlaceholder(
-                paragraph, 
-                mapping.selectedText, 
-                placeholder
-              );
-              
-              if (result) {
-                modificationsCount++;
-                textFallbackSuccess = true;
-                console.log(`[generatePlaceholderDocxWithIds] ✅ (TEXT) Substituït text "${mapping.selectedText}" per "${placeholder}" en paràgraf ${i}`);
-              }
-            }
-          }
-          
-          if (!textFallbackSuccess) {
-            console.log(`[generatePlaceholderDocxWithIds] ❌ No s'ha pogut trobar el text "${mapping.selectedText}" en cap paràgraf`);
-          }
-        }
-      }
-    }
-    
-    // Processar instruccions d'IA
-    if (aiInstructions && aiInstructions.length > 0) {
-      console.log(`[generatePlaceholderDocxWithIds] Processant ${aiInstructions.length} instruccions AI...`);
+      // Trobar el paràgraf (primer per ID, després per text)
+      const paragraphInfo = findParagraphByIdOrText(xmlDoc, paragraphId, data);
       
-      for (const instruction of aiInstructions) {
-        if (!instruction.paragraphId) {
-          console.log(`[generatePlaceholderDocxWithIds] Saltant instrucció sense paragraphId`, instruction);
-          continue;
-        }
-        
-        // Buscar SDT amb l'ID corresponent
-        const sdt = findSdtById(xmlDoc, instruction.paragraphId);
-        
-        if (sdt) {
-          // Trobar el contingut del paràgraf dins de l'SDT
-          const paragraphContent = getParagraphContentFromSdt(sdt);
-          
-          if (paragraphContent) {
-            // Substituir tot el text del paràgraf pel placeholder d'IA
-            const placeholder = `{{IA_${instruction.id || 'INSTRUCTION'}}}`;
-            
-            // Substituïm tot el contingut del paràgraf pel placeholder
-            replaceAllTextInParagraph(paragraphContent, placeholder, xmlDoc);
-            
-            modificationsCount++;
-            console.log(`[generatePlaceholderDocxWithIds] ✅ Paràgraf complet substituït per "${placeholder}" en ID ${instruction.paragraphId}"`);
-          } else {
-            console.log(`[generatePlaceholderDocxWithIds] ❌ No s'ha trobat contingut al paràgraf amb ID ${instruction.paragraphId}`);
-          }
-        } else {
-          console.log(`[generatePlaceholderDocxWithIds] ❌ No s'ha trobat SDT amb ID ${instruction.paragraphId}`);
-        }
+      if (!paragraphInfo.found || !paragraphInfo.paragraphElement) {
+        console.log(`[generatePlaceholderDocxWithIds] ❌ No s'ha trobat el paràgraf ${paragraphId}`);
+        continue;
       }
+      
+      // Generar el placeholder JSON unificat
+      const jsonPlaceholder = generateUnifiedJsonPlaceholder(paragraphId, data, paragraphInfo.originalText);
+      
+      // Substituir tot el paràgraf pel placeholder JSON
+      replaceAllTextInParagraph(paragraphInfo.paragraphElement, jsonPlaceholder, xmlDoc);
+      
+      modificationsCount++;
+      console.log(`[generatePlaceholderDocxWithIds] ✅ Paràgraf substituït per placeholder JSON: ${paragraphId} (${paragraphInfo.method})`);
     }
     
     // Si no hem pogut aplicar cap substitució, afegir un placeholder de test
@@ -376,4 +291,230 @@ function extractAvailableSdtIds(documentXml: string): string[] {
   }
   
   return ids;
+}
+
+// ============================================================================
+// NOVES FUNCIONS PER AL SISTEMA UNIFICAT JSON
+// ============================================================================
+
+/**
+ * Tipus de dades agrupades per paràgraf
+ */
+interface ParagraphData {
+  excelMappings: ExcelLinkMapping[];
+  aiInstructions: AIInstruction[];
+  allSelectedTexts: string[];
+}
+
+/**
+ * Informació trobada sobre un paràgraf
+ */
+interface ParagraphInfo {
+  found: boolean;
+  paragraphElement?: XMLElement;
+  originalText: string;
+  method: 'sdt' | 'text' | 'not_found';
+}
+
+/**
+ * Estructura del placeholder JSON unificat
+ */
+interface UnifiedPlaceholder {
+  paragraphId: string;
+  type: 'excel_only' | 'ai_only' | 'combined';
+  baseText?: string;
+  baseTextWithPlaceholders?: string;
+  aiInstruction?: string;
+}
+
+/**
+ * Agrupa els linkMappings i aiInstructions per paragraphId
+ * @param linkMappings Array de mappings d'Excel
+ * @param aiInstructions Array d'instruccions d'IA
+ * @returns Object amb dades agrupades per paragraphId
+ */
+function groupDataByParagraphId(
+  linkMappings: ExcelLinkMapping[], 
+  aiInstructions: AIInstruction[]
+): Record<string, ParagraphData> {
+  const grouped: Record<string, ParagraphData> = {};
+  
+  // Agrupar Excel mappings
+  linkMappings.forEach(mapping => {
+    const paragraphId = mapping.paragraphId;
+    if (!paragraphId || !mapping.selectedText) return;
+    
+    if (!grouped[paragraphId]) {
+      grouped[paragraphId] = {
+        excelMappings: [],
+        aiInstructions: [],
+        allSelectedTexts: []
+      };
+    }
+    
+    grouped[paragraphId].excelMappings.push(mapping);
+    grouped[paragraphId].allSelectedTexts.push(mapping.selectedText);
+  });
+  
+  // Agrupar AI instructions
+  aiInstructions.forEach(instruction => {
+    const paragraphId = instruction.paragraphId;
+    if (!paragraphId) return;
+    
+    if (!grouped[paragraphId]) {
+      grouped[paragraphId] = {
+        excelMappings: [],
+        aiInstructions: [],
+        allSelectedTexts: []
+      };
+    }
+    
+    grouped[paragraphId].aiInstructions.push(instruction);
+  });
+  
+  return grouped;
+}
+
+/**
+ * Troba un paràgraf per ID (SDT) o per text
+ * @param xmlDoc Document XML
+ * @param paragraphId ID del paràgraf
+ * @param data Dades del paràgraf (per cercar per text si cal)
+ * @returns Informació del paràgraf trobat
+ */
+function findParagraphByIdOrText(
+  xmlDoc: XMLDocument, 
+  paragraphId: string, 
+  data: ParagraphData
+): ParagraphInfo {
+  // MÈTODE 1: Buscar per ID SDT
+  const sdt = findSdtById(xmlDoc, paragraphId);
+  if (sdt) {
+    const paragraphContent = getParagraphContentFromSdt(sdt);
+    if (paragraphContent) {
+      const originalText = extractTextFromParagraph(paragraphContent);
+      return {
+        found: true,
+        paragraphElement: paragraphContent,
+        originalText,
+        method: 'sdt'
+      };
+    }
+  }
+  
+  // MÈTODE 2: Buscar per text (fallback)
+  if (data.allSelectedTexts.length > 0) {
+    const allParagraphs = xmlDoc.getElementsByTagName('w:p');
+    
+    for (let i = 0; i < allParagraphs.length; i++) {
+      const paragraph = allParagraphs[i];
+      const fullText = extractTextFromParagraph(paragraph);
+      
+      // Verificar si aquest paràgraf conté algun dels textos seleccionats
+      const containsSelectedText = data.allSelectedTexts.some(selectedText => 
+        fullText.includes(selectedText)
+      );
+      
+      if (containsSelectedText) {
+        return {
+          found: true,
+          paragraphElement: paragraph,
+          originalText: fullText,
+          method: 'text'
+        };
+      }
+    }
+  }
+  
+  return {
+    found: false,
+    originalText: '',
+    method: 'not_found'
+  };
+}
+
+/**
+ * Extreu tot el text d'un paràgraf
+ * @param paragraph Element del paràgraf
+ * @returns Text complet del paràgraf
+ */
+function extractTextFromParagraph(paragraph: XMLElement): string {
+  const textNodes = paragraph.getElementsByTagName('w:t');
+  let fullText = '';
+  
+  for (let i = 0; i < textNodes.length; i++) {
+    fullText += textNodes[i].textContent || '';
+  }
+  
+  return fullText;
+}
+
+/**
+ * Aplica els placeholders d'Excel a un text
+ * @param text Text original
+ * @param excelMappings Array de mappings d'Excel
+ * @returns Text amb placeholders d'Excel aplicats
+ */
+function applyExcelPlaceholdersToText(text: string, excelMappings: ExcelLinkMapping[]): string {
+  let textWithPlaceholders = text;
+  
+  // Aplicar cada mapping d'Excel
+  excelMappings.forEach(mapping => {
+    if (mapping.selectedText && mapping.excelHeader) {
+      const placeholder = `{{${mapping.excelHeader}}}`;
+      textWithPlaceholders = textWithPlaceholders.replace(mapping.selectedText, placeholder);
+    }
+  });
+  
+  return textWithPlaceholders;
+}
+
+/**
+ * Genera un placeholder JSON unificat per a un paràgraf
+ * @param paragraphId ID del paràgraf
+ * @param data Dades del paràgraf (Excel + IA)
+ * @param originalText Text original del paràgraf
+ * @returns Placeholder JSON com a string
+ */
+function generateUnifiedJsonPlaceholder(
+  paragraphId: string, 
+  data: ParagraphData, 
+  originalText: string
+): string {
+  const hasExcel = data.excelMappings.length > 0;
+  const hasAI = data.aiInstructions.length > 0;
+  
+  let placeholder: UnifiedPlaceholder;
+  
+  if (hasExcel && hasAI) {
+    // COMBINAT: Excel + IA
+    placeholder = {
+      paragraphId,
+      type: 'combined',
+      baseTextWithPlaceholders: applyExcelPlaceholdersToText(originalText, data.excelMappings),
+      aiInstruction: data.aiInstructions[0].content || 'Processa aquest text segons les instruccions.'
+    };
+    console.log(`[generateUnifiedJsonPlaceholder] 🔗 Placeholder COMBINAT per ${paragraphId}`);
+  } else if (hasExcel) {
+    // NOMÉS EXCEL
+    placeholder = {
+      paragraphId,
+      type: 'excel_only',
+      baseTextWithPlaceholders: applyExcelPlaceholdersToText(originalText, data.excelMappings)
+    };
+    console.log(`[generateUnifiedJsonPlaceholder] 📊 Placeholder EXCEL per ${paragraphId}`);
+  } else {
+    // NOMÉS IA
+    placeholder = {
+      paragraphId,
+      type: 'ai_only',
+      baseText: originalText,
+      aiInstruction: data.aiInstructions[0].content || 'Processa aquest text segons les instruccions.'
+    };
+    console.log(`[generateUnifiedJsonPlaceholder] 🤖 Placeholder IA per ${paragraphId}`);
+  }
+  
+  // Convertir a JSON i encapsular
+  const jsonString = JSON.stringify(placeholder, null, 0);
+  return `{{UNIFIED_PLACEHOLDER:${jsonString}}}`;
 }
