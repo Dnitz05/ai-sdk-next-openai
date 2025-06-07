@@ -24,6 +24,15 @@ export async function generatePlaceholderDocxWithIds(
 ): Promise<Buffer> {
   console.log('[generatePlaceholderDocxWithIds] Inici de la generació amb placeholders basats en IDs');
   console.log(`[generatePlaceholderDocxWithIds] Mappings: ${linkMappings.length}, AI Instructions: ${aiInstructions.length}`);
+  
+  // Debug: Mostrar detalls dels mappings
+  linkMappings.forEach((mapping, idx) => {
+    console.log(`[generatePlaceholderDocxWithIds] LinkMapping ${idx}: ID="${mapping.paragraphId}", Text="${mapping.selectedText}", Header="${mapping.excelHeader}"`);
+  });
+  
+  aiInstructions.forEach((instruction, idx) => {
+    console.log(`[generatePlaceholderDocxWithIds] AIInstruction ${idx}: ID="${instruction.paragraphId}", Content="${instruction.content?.substring(0, 50)}..."`);
+  });
 
   try {
     // Carregar el document DOCX
@@ -33,6 +42,11 @@ export async function generatePlaceholderDocxWithIds(
     if (!documentXml) {
       throw new Error('No s\'ha trobat el fitxer document.xml dins del DOCX');
     }
+
+    // Debug: Mostrar els primers SDTs disponibles al document
+    console.log('[generatePlaceholderDocxWithIds] Analitzant SDTs disponibles al document...');
+    const availableSdts = extractAvailableSdtIds(documentXml);
+    console.log(`[generatePlaceholderDocxWithIds] SDTs trobats (${availableSdts.length}):`, availableSdts.slice(0, 5).map(sdt => `"${sdt}"`).join(', ') + (availableSdts.length > 5 ? '...' : ''));
 
     // Parsear l'XML
     const parser = new DOMParser();
@@ -46,38 +60,78 @@ export async function generatePlaceholderDocxWithIds(
       console.log(`[generatePlaceholderDocxWithIds] Processant ${linkMappings.length} linkMappings...`);
       
       for (const mapping of linkMappings) {
-        if (!mapping.paragraphId || !mapping.selectedText) {
-          console.log(`[generatePlaceholderDocxWithIds] Saltant mapping sense paragraphId o selectedText`, mapping);
+        if (!mapping.selectedText) {
+          console.log(`[generatePlaceholderDocxWithIds] Saltant mapping sense selectedText:`, mapping);
           continue;
         }
         
-        // Buscar SDT amb l'ID corresponent
-        const sdt = findSdtById(xmlDoc, mapping.paragraphId);
+        let substitucionFeta = false;
         
-        if (sdt) {
-          // Trobar el text seleccionat dins de l'SDT
-          const paragraphContent = getParagraphContentFromSdt(sdt);
+        // MÈTODE 1: Intentar trobar per ID
+        if (mapping.paragraphId) {
+          const sdt = findSdtById(xmlDoc, mapping.paragraphId);
           
-          if (paragraphContent) {
-            // Substitució del text seleccionat pel placeholder corresponent
-            const placeholder = `{{${mapping.excelHeader || 'EXCEL_FIELD'}}}`;
-            const result = replaceSelectedTextWithPlaceholder(
-              paragraphContent, 
-              mapping.selectedText, 
-              placeholder
-            );
+          if (sdt) {
+            // Trobar el text seleccionat dins de l'SDT
+            const paragraphContent = getParagraphContentFromSdt(sdt);
             
-            if (result) {
-              modificationsCount++;
-              console.log(`[generatePlaceholderDocxWithIds] ✅ Substituït text "${mapping.selectedText}" per "${placeholder}" en paràgraf ${mapping.paragraphId}"`);
-            } else {
-              console.log(`[generatePlaceholderDocxWithIds] ❌ No s'ha pogut substituir "${mapping.selectedText}" en paràgraf ${mapping.paragraphId}"`);
+            if (paragraphContent) {
+              // Substitució del text seleccionat pel placeholder corresponent
+              const placeholder = `{{${mapping.excelHeader || 'EXCEL_FIELD'}}}`;
+              const result = replaceSelectedTextWithPlaceholder(
+                paragraphContent, 
+                mapping.selectedText, 
+                placeholder
+              );
+              
+              if (result) {
+                modificationsCount++;
+                substitucionFeta = true;
+                console.log(`[generatePlaceholderDocxWithIds] ✅ (ID) Substituït text "${mapping.selectedText}" per "${placeholder}" en paràgraf ${mapping.paragraphId}"`);
+              }
             }
-          } else {
-            console.log(`[generatePlaceholderDocxWithIds] ❌ No s'ha trobat contingut al paràgraf amb ID ${mapping.paragraphId}`);
           }
-        } else {
-          console.log(`[generatePlaceholderDocxWithIds] ❌ No s'ha trobat SDT amb ID ${mapping.paragraphId}`);
+        }
+        
+        // MÈTODE 2: Si no troba per ID, intentar fallback per text
+        if (!substitucionFeta) {
+          console.log(`[generatePlaceholderDocxWithIds] 🔄 Intentant fallback per text per "${mapping.selectedText}"...`);
+          
+          const allParagraphs = xmlDoc.getElementsByTagName('w:p');
+          let textFallbackSuccess = false;
+          
+          for (let i = 0; i < allParagraphs.length && !textFallbackSuccess; i++) {
+            const paragraph = allParagraphs[i];
+            
+            // Obtenir tot el text del paràgraf
+            const textNodes = paragraph.getElementsByTagName('w:t');
+            let fullText = '';
+            for (let j = 0; j < textNodes.length; j++) {
+              fullText += textNodes[j].textContent || '';
+            }
+            
+            // Verificar si aquest paràgraf conté el text seleccionat
+            if (fullText.includes(mapping.selectedText)) {
+              console.log(`[generatePlaceholderDocxWithIds] 🎯 Text trobat en paràgraf ${i}: "${fullText.substring(0, 50)}..."`);
+              
+              const placeholder = `{{${mapping.excelHeader || 'EXCEL_FIELD'}}}`;
+              const result = replaceSelectedTextWithPlaceholder(
+                paragraph, 
+                mapping.selectedText, 
+                placeholder
+              );
+              
+              if (result) {
+                modificationsCount++;
+                textFallbackSuccess = true;
+                console.log(`[generatePlaceholderDocxWithIds] ✅ (TEXT) Substituït text "${mapping.selectedText}" per "${placeholder}" en paràgraf ${i}`);
+              }
+            }
+          }
+          
+          if (!textFallbackSuccess) {
+            console.log(`[generatePlaceholderDocxWithIds] ❌ No s'ha pogut trobar el text "${mapping.selectedText}" en cap paràgraf`);
+          }
         }
       }
     }
@@ -303,4 +357,23 @@ function replaceAllTextInParagraph(paragraph: XMLElement, placeholder: string, x
     textElement.textContent = placeholder;
     runElement.appendChild(textElement);
   }
+}
+
+/**
+ * Extreu els IDs disponibles dels SDTs del document
+ * @param documentXml Contingut XML del document
+ * @returns Array amb els IDs dels SDTs disponibles
+ */
+function extractAvailableSdtIds(documentXml: string): string[] {
+  const ids: string[] = [];
+  
+  // Regex per trobar els tags SDT amb w:val
+  const sdtTagRegex = /<w:tag\s+w:val=["']([^"']+)["']/g;
+  let match;
+  
+  while ((match = sdtTagRegex.exec(documentXml)) !== null) {
+    ids.push(match[1]);
+  }
+  
+  return ids;
 }
