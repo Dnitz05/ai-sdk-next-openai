@@ -308,11 +308,15 @@ const PromptCard: React.FC<PromptCardProps> = ({
                 type="checkbox"
                 id={`use-existing-${prompt.id}`}
                 checked={useExistingText}
+                onMouseDown={() => setIsInteractingWithInternalControls(true)}
+                onMouseUp={() => setTimeout(() => setIsInteractingWithInternalControls(false), 150)}
                 onChange={(e) => handleUseExistingTextChange(e.target.checked)}
                 className="h-3 w-3 text-indigo-600 border-gray-300 rounded focus:ring-indigo-500"
               />
               <label 
                 htmlFor={`use-existing-${prompt.id}`}
+                onMouseDown={() => setIsInteractingWithInternalControls(true)}
+                onMouseUp={() => setTimeout(() => setIsInteractingWithInternalControls(false), 150)}
                 className="ml-2 text-xs text-gray-700 cursor-pointer"
               >
                 Usar el paràgraf existent com a base
