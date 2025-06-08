@@ -381,8 +381,8 @@ const TemplateEditor: React.FC<TemplateEditorProps> = ({ initialTemplateData, mo
   // Function to save the template to the backend
   const saveTemplate = async () => {
     try {
-      // Extract Excel mappings from the HTML
-      const linkMappings: Array<{id: string; excelHeader: string; selectedText: string}> = [];
+      // ✅ PAS 2: Extract Excel mappings from the HTML amb paragraphId
+      const linkMappings: Array<{id: string; excelHeader: string; selectedText: string; paragraphId: string}> = [];
       if (contentRef.current) {
         const linkedSpans = contentRef.current.querySelectorAll('span.linked-placeholder');
         linkedSpans.forEach(span => {
@@ -391,12 +391,14 @@ const TemplateEditor: React.FC<TemplateEditorProps> = ({ initialTemplateData, mo
           const linkId = htmlSpan.dataset.linkId;
           // Utilitzar originalText en lloc de textContent (que és la capçalera d'Excel)
           const selectedText = htmlSpan.dataset.originalText || htmlSpan.textContent;
+          const paragraphId = htmlSpan.dataset.paragraphId; // ✅ PAS 2: Extreure paragraphId
           
-          if (excelHeader && linkId && selectedText) {
+          if (excelHeader && linkId && selectedText && paragraphId) {
             linkMappings.push({
               id: linkId,
               excelHeader,
-              selectedText
+              selectedText,
+              paragraphId // ✅ PAS 2: Incloure paragraphId
             });
           }
         });
@@ -472,14 +474,14 @@ const TemplateEditor: React.FC<TemplateEditorProps> = ({ initialTemplateData, mo
         console.log('Dades (updateData) a enviar:', JSON.stringify(updateData, null, 2));
         console.log('Token d\'accés (primeres/últimes 10 lletres):', `${accessToken.substring(0, 10)}...${accessToken.substring(accessToken.length - 10)}`);
         
-        // Primer, actualitzem només les metadades (evitem timeout)
-        const updateDataWithoutPlaceholder = {
+        // Primer, actualitzem les metadades i generem placeholders (correcció: permet la generació)
+        const updateDataWithPlaceholder = {
           ...updateData,
-          skipPlaceholderGeneration: true // Afegim paràmetre per evitar la generació de placeholder
+          skipPlaceholderGeneration: false // ✅ CORRECCIÓ: Permet la generació de placeholder
         };
         
-        // Make API call to update the template (només metadades)
-        console.log('Actualitzant metadades amb skipPlaceholderGeneration:', updateDataWithoutPlaceholder);
+        // Make API call to update the template (amb generació de placeholders)
+        console.log('Actualitzant plantilla amb generació de placeholders:', updateDataWithPlaceholder);
         
         const response = await fetch(templateUrl, {
           method: 'PUT',
@@ -487,7 +489,7 @@ const TemplateEditor: React.FC<TemplateEditorProps> = ({ initialTemplateData, mo
             'Content-Type': 'application/json',
             'Authorization': `Bearer ${accessToken}`
           },
-          body: JSON.stringify(updateDataWithoutPlaceholder),
+          body: JSON.stringify(updateDataWithPlaceholder),
           credentials: 'include' // Include cookies
         });
         
@@ -674,12 +676,32 @@ const TemplateEditor: React.FC<TemplateEditorProps> = ({ initialTemplateData, mo
       sel.removeAllRanges();
       return;
     }
+
+    // ✅ PAS 2: Trobar el paràgraf pare per obtenir el paragraphId
+    let parentParagraph: Node | null = range.commonAncestorContainer;
+    while (parentParagraph && parentParagraph.nodeType !== Node.ELEMENT_NODE) {
+      parentParagraph = parentParagraph.parentNode;
+    }
+    while (parentParagraph && (parentParagraph as Element).tagName !== 'P') {
+      parentParagraph = (parentParagraph as Element).parentElement;
+    }
+    
+    const paragraphId = parentParagraph ? (parentParagraph as HTMLElement).dataset.paragraphId : null;
+    
+    if (!paragraphId) {
+      alert('Error: No s\'ha pogut identificar el paràgraf. Assegura\'t que el text seleccionat està dins d\'un paràgraf.');
+      sel.removeAllRanges();
+      setSelectedExcelHeader(null);
+      return;
+    }
+
     const span = document.createElement('span');
     span.className = 'linked-placeholder';
     span.dataset.excelHeader = selectedExcelHeader;
     const linkId = `link-${Date.now()}-${Math.random().toString(36).substr(2,5)}`;
     span.dataset.linkId = linkId;
     span.dataset.originalText = text; // IMPORTANT: Guardar el text original seleccionat
+    span.dataset.paragraphId = paragraphId; // ✅ PAS 2: Guardar el paragraphId
     span.textContent = selectedExcelHeader; // Visualment mostrem la capçalera
     try {
       range.deleteContents();
