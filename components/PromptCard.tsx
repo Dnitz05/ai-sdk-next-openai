@@ -7,6 +7,7 @@ interface PromptCardProps {
   onUpdate: (prompt: IAPrompt) => void;
   onDelete: (promptId: string) => void;
   onSelect: () => void;
+  excelHeaders: string[];
 }
 
 const PromptCard: React.FC<PromptCardProps> = ({
@@ -14,12 +15,15 @@ const PromptCard: React.FC<PromptCardProps> = ({
   isActive,
   onUpdate,
   onDelete,
-  onSelect
+  onSelect,
+  excelHeaders
 }) => {
   // Use the isEditing property from the prompt if it exists, otherwise use local state
   const [isEditing, setIsEditing] = useState(prompt.isEditing || false);
   const [content, setContent] = useState(prompt.content);
+  const [useExistingText, setUseExistingText] = useState(prompt.useExistingText || false);
   const [isConfirmingDelete, setIsConfirmingDelete] = useState(false);
+  const [showExcelDropdown, setShowExcelDropdown] = useState(false);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
   // Focus textarea when editing starts or when the component mounts with isEditing=true
@@ -123,6 +127,45 @@ const PromptCard: React.FC<PromptCardProps> = ({
     setIsConfirmingDelete(false);
   };
 
+  // Handle insert placeholder function
+  const handleInsertPlaceholder = (header: string) => {
+    if (textareaRef.current) {
+      const textarea = textareaRef.current;
+      const start = textarea.selectionStart;
+      const end = textarea.selectionEnd;
+      const placeholder = `{{${header}}}`;
+      
+      // Insert the placeholder at cursor position
+      const newContent = content.substring(0, start) + placeholder + content.substring(end);
+      setContent(newContent);
+      
+      // Update the prompt immediately
+      onUpdate({
+        ...prompt,
+        content: newContent,
+        updatedAt: new Date()
+      });
+      
+      // Set cursor position after the inserted placeholder
+      setTimeout(() => {
+        const newPosition = start + placeholder.length;
+        textarea.setSelectionRange(newPosition, newPosition);
+        textarea.focus();
+      }, 0);
+    }
+    setShowExcelDropdown(false);
+  };
+
+  // Handle checkbox change
+  const handleUseExistingTextChange = (checked: boolean) => {
+    setUseExistingText(checked);
+    onUpdate({
+      ...prompt,
+      useExistingText: checked,
+      updatedAt: new Date()
+    });
+  };
+
   // Determine if the order number should be displayed
   // Only show the order number if the prompt has been saved with content
   const showOrderNumber = prompt.status === 'saved' && prompt.order !== undefined;
@@ -193,6 +236,34 @@ const PromptCard: React.FC<PromptCardProps> = ({
       <div className="prompt-content p-2">
         {isEditing ? (
           <div className="editing-container">
+            {/* Excel dropdown button */}
+            {excelHeaders.length > 0 && (
+              <div className="relative mb-2">
+                <button
+                  onClick={() => setShowExcelDropdown(!showExcelDropdown)}
+                  className="w-full px-2 py-1 text-xs bg-green-100 border border-green-300 rounded hover:bg-green-200 text-green-800 flex items-center justify-between"
+                  type="button"
+                >
+                  <span>＋ Inserir camp d'Excel ▼</span>
+                </button>
+                
+                {showExcelDropdown && (
+                  <div className="absolute z-10 w-full mt-1 bg-white border border-gray-200 rounded shadow-lg max-h-32 overflow-y-auto">
+                    {excelHeaders.map((header, index) => (
+                      <button
+                        key={index}
+                        onClick={() => handleInsertPlaceholder(header)}
+                        className="w-full px-3 py-1 text-xs text-left hover:bg-gray-100 first:rounded-t last:rounded-b"
+                        type="button"
+                      >
+                        {header}
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
+            
             <textarea
               ref={textareaRef}
               value={content}
@@ -219,6 +290,24 @@ const PromptCard: React.FC<PromptCardProps> = ({
               }}
               placeholder="Escriu el teu prompt d'IA aquí..."
             />
+            
+            {/* Checkbox for using existing text */}
+            <div className="flex items-center mt-2 mb-2">
+              <input
+                type="checkbox"
+                id={`use-existing-${prompt.id}`}
+                checked={useExistingText}
+                onChange={(e) => handleUseExistingTextChange(e.target.checked)}
+                className="h-3 w-3 text-indigo-600 border-gray-300 rounded focus:ring-indigo-500"
+              />
+              <label 
+                htmlFor={`use-existing-${prompt.id}`}
+                className="ml-2 text-xs text-gray-700 cursor-pointer"
+              >
+                Usar el paràgraf existent com a base
+              </label>
+            </div>
+            
             <div className="flex justify-end space-x-2 mt-2">
               <button
                 onClick={handleCancel}

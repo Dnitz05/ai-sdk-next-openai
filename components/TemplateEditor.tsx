@@ -67,6 +67,7 @@ const TemplateEditor: React.FC<TemplateEditorProps> = ({ initialTemplateData, mo
   const [excelNameValue, setExcelNameValue] = useState<string>(excelName);
   const contentWrapperRef = useRef<HTMLDivElement>(null);
   const contentRef = useRef<HTMLDivElement>(null);
+  const documentRef = useRef<HTMLDivElement>(null); // Afegim documentRef
   const titleInputRef = useRef<HTMLInputElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -1135,15 +1136,16 @@ const TemplateEditor: React.FC<TemplateEditorProps> = ({ initialTemplateData, mo
           {/* Main document area with 3 columns - equal width sidebars */}
           <div className="col-span-3 grid grid-cols-[280px_1fr_280px] bg-gray-100 border-x border-b border-gray-200 shadow-md">
           {/* Left sidebar - Prompt sidebar - always visible */}
-          <PromptSidebar
-            prompts={prompts}
-            documentRef={contentRef}
-            contentWrapperRef={contentWrapperRef}
-            onPromptUpdate={handlePromptUpdate}
-            onPromptDelete={handlePromptDelete}
-            onPromptSelect={handlePromptSelect}
-            activePromptId={activePromptId}
-          />
+            <PromptSidebar
+              prompts={prompts}
+              documentRef={documentRef}
+              contentWrapperRef={contentWrapperRef}
+              onPromptUpdate={handlePromptUpdate}
+              onPromptDelete={handlePromptDelete}
+              onPromptSelect={handlePromptSelect}
+              activePromptId={activePromptId}
+              excelHeaders={excelHeaders}
+            />
         
           {/* Content area - A4 paper style that auto-expands based on content */}
           <div className="flex justify-center py-6 bg-gray-100 min-h-[calc(100vh-140px)]">

@@ -18,11 +18,14 @@ export interface ExcelLinkMapping {
  * Interfície per a les instruccions IA
  */
 export interface AIInstruction {
-  id?: string;
-  paragraphId?: string;
-  content?: string;
-  prompt?: string;
-  originalParagraphText?: string;
+  id: string;
+  paragraphId: string;
+  originalParagraphText: string;
+  status: 'saved' | 'editing';
+  order: number;
+  // Els dos camps que defineixen la instrucció
+  prompt: string;
+  useExistingText: boolean;
 }
 
 /**

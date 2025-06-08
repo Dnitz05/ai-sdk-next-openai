@@ -32,7 +32,7 @@ export async function generatePlaceholderDocxWithIds(
   });
   
   aiInstructions.forEach((instruction, idx) => {
-    console.log(`[generatePlaceholderDocxWithIds] AIInstruction ${idx}: ID="${instruction.paragraphId}", Content="${instruction.content?.substring(0, 50)}..."`);
+    console.log(`[generatePlaceholderDocxWithIds] AIInstruction ${idx}: ID="${instruction.paragraphId}", Content="${instruction.prompt?.substring(0, 50)}..."`);
   });
 
   try {
@@ -259,7 +259,10 @@ interface UnifiedPlaceholder {
   type: 'excel_only' | 'ai_only' | 'combined';
   baseText?: string;
   baseTextWithPlaceholders?: string;
-  aiInstruction?: string;
+  aiInstruction?: {
+    prompt: string;
+    useExistingText: boolean;
+  };
 }
 
 /**
@@ -445,7 +448,10 @@ function generateUnifiedJsonPlaceholder(
       paragraphId,
       type: 'combined',
       baseTextWithPlaceholders: applyExcelPlaceholdersToText(originalText, data.excelMappings),
-      aiInstruction: data.aiInstructions[0].content || 'Processa aquest text segons les instruccions.'
+      aiInstruction: {
+        prompt: data.aiInstructions[0].prompt || 'Processa aquest text segons les instruccions.',
+        useExistingText: data.aiInstructions[0].useExistingText
+      }
     };
     console.log(`[generateUnifiedJsonPlaceholder] 🔗 Placeholder COMBINAT per ${paragraphId}`);
   } else if (hasExcel) {
@@ -462,7 +468,10 @@ function generateUnifiedJsonPlaceholder(
       paragraphId,
       type: 'ai_only',
       baseText: originalText,
-      aiInstruction: data.aiInstructions[0].content || 'Processa aquest text segons les instruccions.'
+      aiInstruction: {
+        prompt: data.aiInstructions[0].prompt || 'Processa aquest text segons les instruccions.',
+        useExistingText: data.aiInstructions[0].useExistingText
+      }
     };
     console.log(`[generateUnifiedJsonPlaceholder] 🤖 Placeholder IA per ${paragraphId}`);
   }

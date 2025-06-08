@@ -4,8 +4,9 @@ import PromptCard from './PromptCard';
 export interface IAPrompt {
   id: string;
   paragraphId: string;
-  content: string;
+  content: string; // Aquest camp ara contindrà SEMPRE el text del prompt
   status: 'draft' | 'saved';
+  useExistingText: boolean; // El nou flag
   createdAt: Date;
   updatedAt: Date;
   position: number;
@@ -23,6 +24,7 @@ interface PromptSidebarProps {
   onPromptDelete: (promptId: string) => void;
   onPromptSelect: (paragraphId: string) => void;
   activePromptId: string | null;
+  excelHeaders: string[];
 }
 
 const PromptSidebar: React.FC<PromptSidebarProps> = ({
@@ -32,7 +34,8 @@ const PromptSidebar: React.FC<PromptSidebarProps> = ({
   onPromptUpdate,
   onPromptDelete,
   onPromptSelect,
-  activePromptId
+  activePromptId,
+  excelHeaders
 }) => {
   const sidebarRef = useRef<HTMLDivElement>(null);
 
@@ -96,6 +99,7 @@ const PromptSidebar: React.FC<PromptSidebarProps> = ({
                 onUpdate={onPromptUpdate}
                 onDelete={onPromptDelete}
                 onSelect={() => onPromptSelect(prompt.paragraphId)}
+                excelHeaders={excelHeaders}
               />
             ))
           ) : (
