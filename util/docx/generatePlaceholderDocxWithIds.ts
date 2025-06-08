@@ -181,71 +181,6 @@ function getParagraphContentFromSdt(sdt: XMLElement): XMLElement | undefined {
   return undefined;
 }
 
-/**
- * Substitueix una part del text d'un paràgraf per un placeholder
- * @param paragraph Element del paràgraf
- * @param selectedText Text a substituir
- * @param placeholder Text del placeholder
- * @returns true si s'ha fet la substitució, false si no
- */
-function replaceSelectedTextWithPlaceholder(paragraph: XMLElement, selectedText: string, placeholder: string): boolean {
-  const textNodes = paragraph.getElementsByTagName('w:t');
-  let fullText = '';
-  
-  // Recollir tot el text del paràgraf
-  for (let i = 0; i < textNodes.length; i++) {
-    fullText += textNodes[i].textContent || '';
-  }
-  
-  // Verificar si el text seleccionat existeix dins del paràgraf
-  if (fullText.indexOf(selectedText) === -1) {
-    console.log(`[replaceSelectedTextWithPlaceholder] Text seleccionat no trobat: "${selectedText}" en "${fullText.substring(0, 50)}..."`);
-    return false;
-  }
-  
-  // Ara necessitem fer la substitució als nodes w:t que contenen el text
-  let textRemaining = selectedText;
-  let startNodeIndex = -1;
-  let startPosition = -1;
-  
-  // Trobar el node d'inici i la posició
-  for (let i = 0; i < textNodes.length && startNodeIndex === -1; i++) {
-    const nodeText = textNodes[i].textContent || '';
-    const position = nodeText.indexOf(textRemaining.substring(0, Math.min(textRemaining.length, nodeText.length)));
-    
-    if (position !== -1) {
-      startNodeIndex = i;
-      startPosition = position;
-    }
-  }
-  
-  if (startNodeIndex === -1) {
-    // Text no trobat en cap node individual 
-    // (podria estar dividit entre múltiples nodes)
-    console.log(`[replaceSelectedTextWithPlaceholder] Text seleccionat dividit entre nodes: "${selectedText}"`);
-    
-    // Estratègia alternativa per a text dividit entre múltiples nodes
-    // Aquí hi hauria d'haver una implementació més sofisticada
-    return false;
-  }
-  
-  // Fer la substitució al node inicial
-  const startNode = textNodes[startNodeIndex];
-  const nodeText = startNode.textContent || '';
-  
-  if (startPosition + selectedText.length <= nodeText.length) {
-    // El text a substituir està completament dins d'aquest node
-    startNode.textContent = 
-      nodeText.substring(0, startPosition) + 
-      placeholder + 
-      nodeText.substring(startPosition + selectedText.length);
-    return true;
-  } else {
-    // El text està dividit en múltiples nodes
-    // Aquí hi hauria d'haver una implementació més sofisticada
-    return false;
-  }
-}
 
 /**
  * Substitueix tot el text d'un paràgraf per un placeholder
@@ -402,20 +337,27 @@ function findParagraphByIdOrText(
     }
   }
   
-  // MÈTODE 2: Buscar per text (fallback)
-  if (data.allSelectedTexts.length > 0) {
+  // MÈTODE 2: Buscar per text (fallback) - ✅ CORREGIT
+  // Crear llista de textos de cerca incloent Excel + IA
+  const searchTexts = [
+    ...data.allSelectedTexts, // Textos d'Excel mappings
+    // ✅ CRÍTIC: Afegir textos d'instruccions d'IA
+    ...data.aiInstructions.map(instr => instr.originalParagraphText).filter(Boolean) as string[]
+  ];
+
+  if (searchTexts.length > 0) {
     const allParagraphs = xmlDoc.getElementsByTagName('w:p');
     
     for (let i = 0; i < allParagraphs.length; i++) {
       const paragraph = allParagraphs[i];
       const fullText = extractTextFromParagraph(paragraph);
       
-      // Verificar si aquest paràgraf conté algun dels textos seleccionats
-      const containsSelectedText = data.allSelectedTexts.some(selectedText => 
-        fullText.includes(selectedText)
+      // Verificar si aquest paràgraf conté algun dels textos de cerca
+      const containsSearchText = searchTexts.some(searchText => 
+        fullText.includes(searchText)
       );
       
-      if (containsSelectedText) {
+      if (containsSearchText) {
         return {
           found: true,
           paragraphElement: paragraph,
@@ -450,7 +392,16 @@ function extractTextFromParagraph(paragraph: XMLElement): string {
 }
 
 /**
- * Aplica els placeholders d'Excel a un text
+ * Funció auxiliar per escapar caràcters especials per a la RegExp
+ * @param string String a escapar
+ * @returns String amb caràcters especials escapats
+ */
+function escapeRegExp(string: string): string {
+  return string.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
+/**
+ * Aplica els placeholders d'Excel a un text - ✅ MILLORAT
  * @param text Text original
  * @param excelMappings Array de mappings d'Excel
  * @returns Text amb placeholders d'Excel aplicats
@@ -458,11 +409,13 @@ function extractTextFromParagraph(paragraph: XMLElement): string {
 function applyExcelPlaceholdersToText(text: string, excelMappings: ExcelLinkMapping[]): string {
   let textWithPlaceholders = text;
   
-  // Aplicar cada mapping d'Excel
+  // ✅ MILLORA: Aplicar cada mapping d'Excel amb substitució global
   excelMappings.forEach(mapping => {
     if (mapping.selectedText && mapping.excelHeader) {
       const placeholder = `{{${mapping.excelHeader}}}`;
-      textWithPlaceholders = textWithPlaceholders.replace(mapping.selectedText, placeholder);
+      // Crear RegExp per reemplaçar totes les ocurrències (flag 'g')
+      const searchRegExp = new RegExp(escapeRegExp(mapping.selectedText), 'g');
+      textWithPlaceholders = textWithPlaceholders.replace(searchRegExp, placeholder);
     }
   });
   
