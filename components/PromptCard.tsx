@@ -24,6 +24,7 @@ const PromptCard: React.FC<PromptCardProps> = ({
   const [useExistingText, setUseExistingText] = useState(prompt.useExistingText || false);
   const [isConfirmingDelete, setIsConfirmingDelete] = useState(false);
   const [showExcelDropdown, setShowExcelDropdown] = useState(false);
+  const [isInteractingWithInternalControls, setIsInteractingWithInternalControls] = useState(false);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
   // Focus textarea when editing starts or when the component mounts with isEditing=true
@@ -92,16 +93,22 @@ const PromptCard: React.FC<PromptCardProps> = ({
     setIsEditing(false);
   };
 
-  // Handle blur event on textarea
+  // Handle blur event on textarea with delay to allow internal interactions
   const handleBlur = () => {
-    // If content is empty, delete the prompt
-    if (content.trim() === '') {
-      onDelete(prompt.id);
-      return;
-    }
-    
-    // Otherwise save the content
-    handleSave();
+    // Add small delay to check if user is interacting with internal controls
+    setTimeout(() => {
+      // Only proceed with blur handling if we're not interacting with internal controls
+      if (!isInteractingWithInternalControls) {
+        // If content is empty, delete the prompt
+        if (content.trim() === '') {
+          onDelete(prompt.id);
+          return;
+        }
+        
+        // Otherwise save the content
+        handleSave();
+      }
+    }, 100); // Small delay to allow internal clicks to register
   };
 
   // Handle expand/collapse toggle
@@ -240,6 +247,8 @@ const PromptCard: React.FC<PromptCardProps> = ({
             {excelHeaders.length > 0 && (
               <div className="relative mb-2">
                 <button
+                  onMouseDown={() => setIsInteractingWithInternalControls(true)}
+                  onMouseUp={() => setTimeout(() => setIsInteractingWithInternalControls(false), 150)}
                   onClick={() => setShowExcelDropdown(!showExcelDropdown)}
                   className="w-full px-2 py-1 text-xs bg-green-100 border border-green-300 rounded hover:bg-green-200 text-green-800 flex items-center justify-between"
                   type="button"
@@ -252,6 +261,8 @@ const PromptCard: React.FC<PromptCardProps> = ({
                     {excelHeaders.map((header, index) => (
                       <button
                         key={index}
+                        onMouseDown={() => setIsInteractingWithInternalControls(true)}
+                        onMouseUp={() => setTimeout(() => setIsInteractingWithInternalControls(false), 150)}
                         onClick={() => handleInsertPlaceholder(header)}
                         className="w-full px-3 py-1 text-xs text-left hover:bg-gray-100 first:rounded-t last:rounded-b"
                         type="button"
