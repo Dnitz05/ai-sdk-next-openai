@@ -88,3 +88,98 @@ export interface LegacyTemplate {
   updated_at: string;
   user_id: string;
 }
+
+/**
+ * Interfícies per al Mòdul de Generació d'Informes
+ */
+
+/**
+ * Interfície per a un projecte de generació d'informes
+ */
+export interface Project {
+  id: string;
+  user_id: string;
+  template_id: string;
+  project_name: string;
+  excel_filename: string;
+  excel_data?: any; // JSONB
+  total_rows?: number;
+  created_at: string;
+  updated_at: string;
+}
+
+/**
+ * Interfície per a l'estat d'una generació (fila de l'Excel)
+ */
+export interface Generation {
+  id: string;
+  project_id: string;
+  excel_row_index: number;
+  row_data?: any; // JSONB - dades específiques de la fila
+  status: 'pending' | 'generated' | 'reviewed' | 'completed' | 'error';
+  error_message?: string;
+  retry_count: number;
+  created_at: string;
+  updated_at: string;
+}
+
+/**
+ * Interfície per al contingut generat per la IA
+ */
+export interface GeneratedContent {
+  id: string;
+  generation_id: string;
+  placeholder_id: string; // Correspon al 'paragraphId' del placeholder
+  final_content?: string;
+  is_refined: boolean;
+  created_at: string;
+  updated_at: string;
+}
+
+/**
+ * Interfície per a un projecte amb estadístiques incloses
+ */
+export interface ProjectWithStats extends Omit<Project, 'excel_data'> {
+  template_name: string;
+  template_docx_name?: string;
+  stats: {
+    total: number;
+    completed: number;
+    pending: number;
+    errors: number;
+    progress: number; // Percentatge (0-100)
+  };
+}
+
+/**
+ * Interfície per a la resposta de l'API de projectes
+ */
+export interface ProjectsResponse {
+  projects: ProjectWithStats[];
+}
+
+/**
+ * Interfície per a crear un nou projecte
+ */
+export interface CreateProjectRequest {
+  template_id: string;
+  project_name: string;
+  excel_filename: string;
+  excel_data: any[];
+  total_rows?: number;
+}
+
+/**
+ * Interfície per al contingut individual de cada secció
+ */
+export interface Content {
+  id: string;
+  generation_id: string;
+  placeholder_id: string;
+  ai_instructions?: string;
+  generated_text?: string;
+  status: 'pending' | 'generated' | 'refined' | 'error';
+  error_message?: string;
+  created_at: string;
+  updated_at: string;
+}
