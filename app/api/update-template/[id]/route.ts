@@ -4,6 +4,7 @@ import { createClient } from '@supabase/supabase-js'; // Per al client de servei
 import { generatePlaceholderDocx } from '@util/generatePlaceholderDocx';
 import { indexDocxWithSdts, isDocxIndexed } from '@/util/docx/indexDocxWithSdts';
 import { generatePlaceholderDocxWithIds } from '@/util/docx/generatePlaceholderDocxWithIds';
+import { AIInstruction, ExcelLinkMapping } from '@/app/types';
 
 // Interfície per a les dades esperades al body (pot ser més específica)
 interface UpdateTemplatePayload {
@@ -12,21 +13,10 @@ interface UpdateTemplatePayload {
   excel_file_name?: string | null;
   final_html?: string;
   excel_headers?: string[];
-  link_mappings?: any[]; // Especificar tipus més concret si és possible
-  ai_instructions?: IAInstruction[];
+  link_mappings?: ExcelLinkMapping[];
+  ai_instructions?: any[]; // Rebem qualsevol cosa i la validarem
   originalDocxPath?: string | null; // Ruta del DOCX original a Supabase Storage
   skipPlaceholderGeneration?: boolean; // Permet ometre la generació del placeholder
-}
-
-// Interfície per a les instruccions d'IA (ja existent)
-interface IAInstruction {
-  id?: string;
-  paragraphId?: string;
-  content?: string;
-  prompt?: string;
-  status?: string;
-  order?: number;
-  originalParagraphText?: string; // Text original del paràgraf per trobar-lo al document DOCX
 }
 
 export async function PUT(request: NextRequest) {
@@ -91,9 +81,9 @@ export async function PUT(request: NextRequest) {
     }
   }
   
-  // Gestió especial per a 'ai_instructions'
+  // Gestió especial per a 'ai_instructions' amb validació robusta
   if (body.ai_instructions && Array.isArray(body.ai_instructions)) {
-    updateData.ai_instructions = body.ai_instructions.map((instr: IAInstruction) => ({
+    updateData.ai_instructions = body.ai_instructions.map((instr: any) => ({
       id: instr.id || `ia-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
       paragraphId: instr.paragraphId || '',
       prompt: instr.content || instr.prompt || '',
@@ -229,7 +219,7 @@ export async function PUT(request: NextRequest) {
         
         // 2. Convertir a buffer
         const arrayBuffer = await fileData.arrayBuffer();
-        const originalBuffer = Buffer.from(arrayBuffer as ArrayBuffer);
+        const originalBuffer = Buffer.from(arrayBuffer);
         
         // ==========================================
         // NOVA LÒGICA AMB INDEXACIÓ AUTOMÀTICA
@@ -345,14 +335,35 @@ export async function PUT(request: NextRequest) {
           }
         }
         
-        // 3. Generar placeholder amb la nova funció basada en IDs
+        // 3. Validar i mapejar les instruccions d'IA segons el pla de l'arquitecte
+        console.log(`[API UPDATE-TEMPLATE] 🔍 Validant instruccions d'IA...`);
+        const validatedAiInstructions: AIInstruction[] = (body.ai_instructions || []).map((instr: any) => {
+          if (!instr.id || !instr.paragraphId) {
+            // Ometem instruccions sense dades essencials
+            console.warn('Ometent instrucció d\'IA invàlida:', instr);
+            return null;
+          }
+          return {
+            id: instr.id,
+            paragraphId: instr.paragraphId,
+            originalParagraphText: instr.originalParagraphText || '',
+            status: instr.status || 'saved',
+            order: instr.order || 0,
+            prompt: instr.prompt || instr.content || '', // Assegurem que 'prompt' sempre existeix
+            useExistingText: instr.useExistingText ?? true, // Valor per defecte 'true'
+          };
+        }).filter(Boolean) as AIInstruction[]; // Filtrem els nuls per seguretat
+
+        console.log(`[API UPDATE-TEMPLATE] ✅ Validades ${validatedAiInstructions.length} instruccions d'IA`);
+        
+        // 4. Generar placeholder amb la nova funció basada en IDs
         console.log(`[API UPDATE-TEMPLATE] 🎯 Generant placeholder amb tecnologia SDT...`);
-        console.log(`[API UPDATE-TEMPLATE] Mappings: ${body.link_mappings?.length || 0} links, ${body.ai_instructions?.length || 0} instruccions AI`);
+        console.log(`[API UPDATE-TEMPLATE] Mappings: ${body.link_mappings?.length || 0} links, ${validatedAiInstructions.length} instruccions AI validades`);
         
         const placeholderBuffer = await generatePlaceholderDocxWithIds(
           indexedBuffer,
           body.link_mappings ?? [],
-          body.ai_instructions ?? []
+          validatedAiInstructions // Passem l'array validat i amb el tipus correcte
         );
         
         console.log(`[API UPDATE-TEMPLATE] ✅ Placeholder generat amb èxit: ${placeholderBuffer.length} bytes`);

@@ -140,6 +140,7 @@ export const createPromptForParagraph = (
     updatedAt: new Date(),
     position,
     isExpanded: true,
-    originalParagraphText: normalizedParagraphText // Afegir el text original del paràgraf
+    originalParagraphText: normalizedParagraphText, // Afegir el text original del paràgraf
+    useExistingText: true // Valor per defecte segons el pla de l'arquitecte
   };
 };
