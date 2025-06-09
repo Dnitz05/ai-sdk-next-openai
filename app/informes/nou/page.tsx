@@ -5,18 +5,21 @@ import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { createBrowserSupabaseClient } from '@/lib/supabase/browserClient';
 import { Template } from '@/app/types';
-import * as XLSX from 'xlsx';
 
 const NoouProjectePage: React.FC = () => {
   const [templates, setTemplates] = useState<Template[]>([]);
   const [selectedTemplate, setSelectedTemplate] = useState<string>('');
   const [projectName, setProjectName] = useState<string>('');
-  const [excelFile, setExcelFile] = useState<File | null>(null);
-  const [excelData, setExcelData] = useState<any[]>([]);
-  const [excelHeaders, setExcelHeaders] = useState<string[]>([]);
+  const [templateExcelInfo, setTemplateExcelInfo] = useState<{
+    hasExcel: boolean;
+    fileName?: string;
+    headers?: string[];
+    totalRows?: number;
+  } | null>(null);
   const [loading, setLoading] = useState(false);
+  const [loadingExcelInfo, setLoadingExcelInfo] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [step, setStep] = useState<number>(1); // 1: Plantilla, 2: Fitxer Excel, 3: Revisió
+  const [step, setStep] = useState<number>(1); // 1: Plantilla, 2: Revisió i Creació
   
   const router = useRouter();
   const supabase = createBrowserSupabaseClient();
@@ -24,6 +27,15 @@ const NoouProjectePage: React.FC = () => {
   useEffect(() => {
     checkUserAndLoadTemplates();
   }, []);
+
+  // Quan es selecciona una plantilla, obtenir info de l'Excel
+  useEffect(() => {
+    if (selectedTemplate) {
+      loadTemplateExcelInfo();
+    } else {
+      setTemplateExcelInfo(null);
+    }
+  }, [selectedTemplate]);
 
   const checkUserAndLoadTemplates = async () => {
     const { data: { user }, error } = await supabase.auth.getUser();
@@ -62,63 +74,55 @@ const NoouProjectePage: React.FC = () => {
     }
   };
 
-  const handleExcelUpload = (event: React.ChangeEvent<HTMLInputElement>) => {
-    const file = event.target.files?.[0];
-    if (!file) return;
+  const loadTemplateExcelInfo = async () => {
+    if (!selectedTemplate) return;
 
-    setExcelFile(file);
+    setLoadingExcelInfo(true);
     setError(null);
 
-    const reader = new FileReader();
-    reader.onload = (e) => {
-      try {
-        const data = new Uint8Array(e.target?.result as ArrayBuffer);
-        const workbook = XLSX.read(data, { type: 'array' });
-        const worksheetName = workbook.SheetNames[0];
-        const worksheet = workbook.Sheets[worksheetName];
-        const jsonData = XLSX.utils.sheet_to_json(worksheet, { header: 1 });
-
-        if (jsonData.length === 0) {
-          setError('El fitxer Excel està buit.');
-          return;
-        }
-
-        // Primera fila com a headers
-        const headers = jsonData[0] as string[];
-        const rows = jsonData.slice(1).filter(row => 
-          Array.isArray(row) && row.some(cell => cell !== null && cell !== undefined && cell !== '')
-        );
-
-        if (rows.length === 0) {
-          setError('No hi ha dades al fitxer Excel.');
-          return;
-        }
-
-        // Convertir files a objectes amb claus dels headers
-        const processedData = rows.map((row: any) => {
-          const rowObj: any = {};
-          headers.forEach((header, index) => {
-            rowObj[header] = row[index] || '';
-          });
-          return rowObj;
-        });
-
-        setExcelHeaders(headers);
-        setExcelData(processedData);
-        console.log(`Excel processat: ${headers.length} columnes, ${processedData.length} files`);
-        
-      } catch (err) {
-        console.error('Error processant Excel:', err);
-        setError('Error processant el fitxer Excel. Assegura\'t que sigui un fitxer vàlid.');
+    try {
+      const { data: { session }, error: sessionError } = await supabase.auth.getSession();
+      if (sessionError || !session) {
+        router.push('/');
+        return;
       }
-    };
 
-    reader.readAsArrayBuffer(file);
+      // Cridem una nova API per obtenir info de l'Excel sense carregar totes les dades
+      const response = await fetch(`/api/reports/template-excel-info/${selectedTemplate}`, {
+        headers: {
+          'Authorization': `Bearer ${session.access_token}`,
+          'Content-Type': 'application/json',
+        },
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json();
+        if (response.status === 404) {
+          setTemplateExcelInfo({ hasExcel: false });
+        } else {
+          throw new Error(errorData.error || 'Error obtenint informació de l\'Excel');
+        }
+      } else {
+        const data = await response.json();
+        setTemplateExcelInfo(data);
+      }
+    } catch (err) {
+      console.error('Error carregant info Excel:', err);
+      setError(err instanceof Error ? err.message : 'Error carregant informació de l\'Excel');
+      setTemplateExcelInfo({ hasExcel: false });
+    } finally {
+      setLoadingExcelInfo(false);
+    }
   };
 
   const handleCreateProject = async () => {
-    if (!selectedTemplate || !projectName || !excelFile || excelData.length === 0) {
+    if (!selectedTemplate || !projectName) {
       setError('Tots els camps són obligatoris.');
+      return;
+    }
+
+    if (!templateExcelInfo?.hasExcel) {
+      setError('La plantilla seleccionada no té un fitxer Excel associat.');
       return;
     }
 
@@ -140,10 +144,7 @@ const NoouProjectePage: React.FC = () => {
         },
         body: JSON.stringify({
           template_id: selectedTemplate,
-          project_name: projectName,
-          excel_filename: excelFile.name,
-          excel_data: excelData,
-          total_rows: excelData.length
+          project_name: projectName
         })
       });
 
@@ -186,14 +187,14 @@ const NoouProjectePage: React.FC = () => {
             <h1 className="text-3xl font-bold text-gray-900">Nou Projecte d'Informes</h1>
           </div>
           <p className="mt-2 text-gray-600">
-            Crea un nou projecte per generar informes automàticament amb IA
+            Crea un nou projecte per generar informes automàticament amb IA utilitzant les dades d'Excel de la plantilla
           </p>
         </div>
 
         {/* Progress Steps */}
         <div className="mb-8">
           <div className="flex items-center justify-center space-x-8">
-            {[1, 2, 3].map((stepNumber) => (
+            {[1, 2].map((stepNumber) => (
               <div key={stepNumber} className="flex items-center">
                 <div className={`flex items-center justify-center w-8 h-8 rounded-full ${
                   step >= stepNumber ? 'bg-blue-600 text-white' : 'bg-gray-200 text-gray-600'
@@ -203,11 +204,10 @@ const NoouProjectePage: React.FC = () => {
                 <div className={`ml-2 text-sm ${
                   step >= stepNumber ? 'text-blue-600 font-medium' : 'text-gray-500'
                 }`}>
-                  {stepNumber === 1 && 'Plantilla'}
-                  {stepNumber === 2 && 'Fitxer Excel'}
-                  {stepNumber === 3 && 'Revisió'}
+                  {stepNumber === 1 && 'Seleccionar Plantilla'}
+                  {stepNumber === 2 && 'Revisió i Creació'}
                 </div>
-                {stepNumber < 3 && (
+                {stepNumber < 2 && (
                   <div className={`w-12 h-0.5 ml-4 ${
                     step > stepNumber ? 'bg-blue-600' : 'bg-gray-200'
                   }`} />
@@ -233,7 +233,7 @@ const NoouProjectePage: React.FC = () => {
           {/* Step 1: Seleccionar Plantilla */}
           {step === 1 && (
             <div>
-              <h2 className="text-xl font-semibold text-gray-900 mb-4">Selecciona una Plantilla</h2>
+              <h2 className="text-xl font-semibold text-gray-900 mb-4">Selecciona una Plantilla amb Excel</h2>
               <div className="mb-6">
                 <label htmlFor="project-name" className="block text-sm font-medium text-gray-700 mb-2">
                   Nom del projecte
@@ -260,47 +260,117 @@ const NoouProjectePage: React.FC = () => {
                 </div>
               ) : (
                 <div className="space-y-3">
-                  {templates.map((template) => (
-                    <div
-                      key={template.id}
-                      className={`border rounded-lg p-4 cursor-pointer transition-colors ${
-                        selectedTemplate === template.id
-                          ? 'border-blue-500 bg-blue-50'
-                          : 'border-gray-200 hover:border-gray-300'
-                      }`}
-                      onClick={() => setSelectedTemplate(template.id)}
-                    >
-                      <div className="flex items-start justify-between">
-                        <div>
-                          <h3 className="font-medium text-gray-900">{template.config_name}</h3>
-                          <p className="text-sm text-gray-600 mt-1">
-                            Document: {template.base_docx_name || 'No especificat'}
-                          </p>
-                          <p className="text-sm text-gray-500 mt-1">
-                            Instruccions IA: {template.ai_instructions?.length || 0} configurades
-                          </p>
-                        </div>
-                        <div className={`w-4 h-4 rounded-full border-2 ${
-                          selectedTemplate === template.id
-                            ? 'border-blue-500 bg-blue-500'
-                            : 'border-gray-300'
-                        }`}>
-                          {selectedTemplate === template.id && (
-                            <svg className="w-3 h-3 text-white" fill="currentColor" viewBox="0 0 20 20">
-                              <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
-                            </svg>
-                          )}
+                  {templates.map((template) => {
+                    const isSelected = selectedTemplate === template.id;
+                    const hasExcelInfo = isSelected && templateExcelInfo !== null;
+                    const hasExcel = hasExcelInfo && templateExcelInfo.hasExcel;
+                    
+                    return (
+                      <div
+                        key={template.id}
+                        className={`border rounded-lg p-4 cursor-pointer transition-colors ${
+                          isSelected
+                            ? hasExcel 
+                              ? 'border-green-500 bg-green-50'
+                              : 'border-red-500 bg-red-50'
+                            : 'border-gray-200 hover:border-gray-300'
+                        }`}
+                        onClick={() => setSelectedTemplate(template.id)}
+                      >
+                        <div className="flex items-start justify-between">
+                          <div className="flex-1">
+                            <h3 className="font-medium text-gray-900">{template.config_name}</h3>
+                            <p className="text-sm text-gray-600 mt-1">
+                              Document: {template.base_docx_name || 'No especificat'}
+                            </p>
+                            <p className="text-sm text-gray-500 mt-1">
+                              Instruccions IA: {template.ai_instructions?.length || 0} configurades
+                            </p>
+                            
+                            {/* Informació Excel */}
+                            {isSelected && (
+                              <div className="mt-3 p-3 bg-white rounded border">
+                                {loadingExcelInfo ? (
+                                  <div className="flex items-center text-sm text-gray-600">
+                                    <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-blue-600 mr-2"></div>
+                                    Carregant informació de l'Excel...
+                                  </div>
+                                ) : hasExcelInfo ? (
+                                  hasExcel ? (
+                                    <div>
+                                      <div className="flex items-center text-sm text-green-700 font-medium mb-2">
+                                        <svg className="w-4 h-4 mr-1" fill="currentColor" viewBox="0 0 20 20">
+                                          <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
+                                        </svg>
+                                        Excel disponible
+                                      </div>
+                                      <p className="text-sm text-gray-600">
+                                        <strong>Fitxer:</strong> {templateExcelInfo.fileName}
+                                      </p>
+                                      <p className="text-sm text-gray-600">
+                                        <strong>Files de dades:</strong> {templateExcelInfo.totalRows}
+                                      </p>
+                                      {templateExcelInfo.headers && (
+                                        <div className="mt-2">
+                                          <p className="text-xs text-gray-500 mb-1">Columnes:</p>
+                                          <div className="flex flex-wrap gap-1">
+                                            {templateExcelInfo.headers.slice(0, 3).map((header, index) => (
+                                              <span
+                                                key={index}
+                                                className="bg-blue-100 text-blue-800 px-2 py-1 rounded text-xs"
+                                              >
+                                                {header}
+                                              </span>
+                                            ))}
+                                            {templateExcelInfo.headers.length > 3 && (
+                                              <span className="text-xs text-gray-500">
+                                                ... i {templateExcelInfo.headers.length - 3} més
+                                              </span>
+                                            )}
+                                          </div>
+                                        </div>
+                                      )}
+                                    </div>
+                                  ) : (
+                                    <div className="flex items-center text-sm text-red-700">
+                                      <svg className="w-4 h-4 mr-1" fill="currentColor" viewBox="0 0 20 20">
+                                        <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clipRule="evenodd" />
+                                      </svg>
+                                      Aquesta plantilla no té Excel associat
+                                    </div>
+                                  )
+                                ) : null}
+                              </div>
+                            )}
+                          </div>
+                          <div className={`w-4 h-4 rounded-full border-2 flex-shrink-0 ${
+                            isSelected
+                              ? hasExcel 
+                                ? 'border-green-500 bg-green-500'
+                                : 'border-red-500 bg-red-500'
+                              : 'border-gray-300'
+                          }`}>
+                            {isSelected && (
+                              <svg className="w-3 h-3 text-white" fill="currentColor" viewBox="0 0 20 20">
+                                {hasExcel ? (
+                                  <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
+                                ) : (
+                                  <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clipRule="evenodd" />
+                                )}
+                              </svg>
+                            )}
+                          </div>
                         </div>
                       </div>
-                    </div>
-                  ))}
+                    );
+                  })}
                 </div>
               )}
 
               <div className="mt-6 flex justify-end">
                 <button
                   onClick={() => setStep(2)}
-                  disabled={!selectedTemplate || !projectName}
+                  disabled={!selectedTemplate || !projectName || !templateExcelInfo?.hasExcel}
                   className="bg-blue-600 text-white px-6 py-2 rounded-md font-medium hover:bg-blue-700 disabled:bg-gray-300 disabled:cursor-not-allowed transition-colors"
                 >
                   Següent
@@ -309,85 +379,12 @@ const NoouProjectePage: React.FC = () => {
             </div>
           )}
 
-          {/* Step 2: Pujar Excel */}
+          {/* Step 2: Revisió i Creació */}
           {step === 2 && (
-            <div>
-              <h2 className="text-xl font-semibold text-gray-900 mb-4">Puja el Fitxer Excel</h2>
-              <p className="text-gray-600 mb-6">
-                El fitxer Excel ha de tenir una fila d'encapçalaments i les dades de cada informe a generar.
-              </p>
-
-              <div className="border-2 border-dashed border-gray-300 rounded-lg p-8 text-center">
-                <input
-                  type="file"
-                  accept=".xlsx,.xls"
-                  onChange={handleExcelUpload}
-                  className="hidden"
-                  id="excel-upload"
-                />
-                <label htmlFor="excel-upload" className="cursor-pointer">
-                  <svg className="mx-auto h-12 w-12 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" />
-                  </svg>
-                  <p className="mt-2 text-sm text-gray-600">
-                    Clica per seleccionar un fitxer Excel o arrossega'l aquí
-                  </p>
-                  <p className="text-xs text-gray-500 mt-1">
-                    Formats admesos: .xlsx, .xls
-                  </p>
-                </label>
-              </div>
-
-              {excelFile && (
-                <div className="mt-6 bg-gray-50 rounded-lg p-4">
-                  <h3 className="font-medium text-gray-900 mb-2">Fitxer seleccionat:</h3>
-                  <p className="text-sm text-gray-700">{excelFile.name}</p>
-                  <p className="text-sm text-gray-500 mt-1">
-                    {excelData.length} files de dades, {excelHeaders.length} columnes
-                  </p>
-                  
-                  {excelHeaders.length > 0 && (
-                    <div className="mt-4">
-                      <h4 className="text-sm font-medium text-gray-700 mb-2">Columnes detectades:</h4>
-                      <div className="flex flex-wrap gap-2">
-                        {excelHeaders.map((header, index) => (
-                          <span
-                            key={index}
-                            className="bg-blue-100 text-blue-800 px-2 py-1 rounded text-xs"
-                          >
-                            {header}
-                          </span>
-                        ))}
-                      </div>
-                    </div>
-                  )}
-                </div>
-              )}
-
-              <div className="mt-6 flex justify-between">
-                <button
-                  onClick={() => setStep(1)}
-                  className="bg-gray-500 text-white px-6 py-2 rounded-md font-medium hover:bg-gray-600 transition-colors"
-                >
-                  Anterior
-                </button>
-                <button
-                  onClick={() => setStep(3)}
-                  disabled={!excelFile || excelData.length === 0}
-                  className="bg-blue-600 text-white px-6 py-2 rounded-md font-medium hover:bg-blue-700 disabled:bg-gray-300 disabled:cursor-not-allowed transition-colors"
-                >
-                  Següent
-                </button>
-              </div>
-            </div>
-          )}
-
-          {/* Step 3: Revisió */}
-          {step === 3 && (
             <div>
               <h2 className="text-xl font-semibold text-gray-900 mb-4">Revisió del Projecte</h2>
               <p className="text-gray-600 mb-6">
-                Revisa la configuració abans de crear el projecte.
+                Revisa la configuració abans de crear el projecte. L'Excel de la plantilla s'utilitzarà automàticament.
               </p>
 
               <div className="space-y-6">
@@ -402,66 +399,41 @@ const NoouProjectePage: React.FC = () => {
                   <p className="text-sm text-gray-500">
                     Document: {selectedTemplateData?.base_docx_name}
                   </p>
-                </div>
-
-                <div>
-                  <h3 className="font-medium text-gray-900">Fitxer Excel</h3>
-                  <p className="text-gray-700">{excelFile?.name}</p>
                   <p className="text-sm text-gray-500">
-                    {excelData.length} informes a generar
+                    Instruccions IA: {selectedTemplateData?.ai_instructions?.length || 0}
                   </p>
                 </div>
 
-                <div>
-                  <h3 className="font-medium text-gray-900 mb-2">Previsualització de dades</h3>
-                  <div className="border rounded-lg overflow-hidden">
-                    <div className="overflow-x-auto">
-                      <table className="min-w-full">
-                        <thead className="bg-gray-50">
-                          <tr>
-                            {excelHeaders.slice(0, 5).map((header, index) => (
-                              <th key={index} className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">
-                                {header}
-                              </th>
-                            ))}
-                            {excelHeaders.length > 5 && (
-                              <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">
-                                ... i {excelHeaders.length - 5} més
-                              </th>
-                            )}
-                          </tr>
-                        </thead>
-                        <tbody className="bg-white">
-                          {excelData.slice(0, 3).map((row, rowIndex) => (
-                            <tr key={rowIndex} className="border-t">
-                              {excelHeaders.slice(0, 5).map((header, colIndex) => (
-                                <td key={colIndex} className="px-4 py-2 text-sm text-gray-900">
-                                  {String(row[header] || '').substring(0, 30)}
-                                  {String(row[header] || '').length > 30 && '...'}
-                                </td>
-                              ))}
-                              {excelHeaders.length > 5 && (
-                                <td className="px-4 py-2 text-sm text-gray-500">...</td>
-                              )}
-                            </tr>
+                {templateExcelInfo?.hasExcel && (
+                  <div>
+                    <h3 className="font-medium text-gray-900">Fitxer Excel (de la plantilla)</h3>
+                    <p className="text-gray-700">{templateExcelInfo.fileName}</p>
+                    <p className="text-sm text-gray-500">
+                      {templateExcelInfo.totalRows} informes a generar
+                    </p>
+                    
+                    {templateExcelInfo.headers && (
+                      <div className="mt-3">
+                        <h4 className="text-sm font-medium text-gray-700 mb-2">Columnes de l'Excel:</h4>
+                        <div className="flex flex-wrap gap-2">
+                          {templateExcelInfo.headers.map((header, index) => (
+                            <span
+                              key={index}
+                              className="bg-blue-100 text-blue-800 px-2 py-1 rounded text-xs"
+                            >
+                              {header}
+                            </span>
                           ))}
-                          {excelData.length > 3 && (
-                            <tr className="border-t">
-                              <td colSpan={Math.min(excelHeaders.length, 6)} className="px-4 py-2 text-sm text-gray-500 text-center">
-                                ... i {excelData.length - 3} files més
-                              </td>
-                            </tr>
-                          )}
-                        </tbody>
-                      </table>
-                    </div>
+                        </div>
+                      </div>
+                    )}
                   </div>
-                </div>
+                )}
               </div>
 
               <div className="mt-8 flex justify-between">
                 <button
-                  onClick={() => setStep(2)}
+                  onClick={() => setStep(1)}
                   className="bg-gray-500 text-white px-6 py-2 rounded-md font-medium hover:bg-gray-600 transition-colors"
                 >
                   Anterior

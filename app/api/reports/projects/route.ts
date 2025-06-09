@@ -3,6 +3,7 @@ import { createServerSupabaseClient } from '@/lib/supabase/serverClient';
 import { createClient } from '@supabase/supabase-js';
 import { createUserSupabaseClient } from '@/lib/supabase/userClient';
 import { Generation } from '@/app/types';
+import { readExcelFromStorage, getExcelInfoFromTemplate } from '@/util/excel/readExcelFromStorage';
 
 /**
  * GET /api/reports/projects
@@ -125,17 +126,17 @@ export async function GET(request: NextRequest) {
 
 /**
  * POST /api/reports/projects
- * Crea un nou projecte amb plantilla i Excel
+ * Crea un nou projecte llegint l'Excel automàticament de la plantilla
  */
 export async function POST(request: NextRequest) {
   console.log("[API reports/projects] Rebuda petició POST");
   
   try {
-    const { template_id, project_name, excel_filename, excel_data, total_rows } = await request.json();
+    const { template_id, project_name } = await request.json();
     
     // Validacions bàsiques
-    if (!template_id || !project_name || !excel_filename || !excel_data) {
-      return NextResponse.json({ error: 'Falten camps obligatoris.' }, { status: 400 });
+    if (!template_id || !project_name) {
+      return NextResponse.json({ error: 'template_id i project_name són obligatoris.' }, { status: 400 });
     }
     
     // Autenticació de l'usuari
@@ -173,6 +174,8 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Usuari no autenticat.' }, { status: 401 });
     }
     
+    console.log(`[API reports/projects] Usuari autenticat: ${userId}, llegint Excel de plantilla: ${template_id}`);
+    
     // Client amb service role key
     const serviceClient = createClient(
       process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -180,16 +183,57 @@ export async function POST(request: NextRequest) {
       { auth: { persistSession: false, autoRefreshToken: false } }
     );
     
-    // Crear el projecte
+    // Verificar que la plantilla existeix i té Excel associat
+    const { data: template, error: templateError } = await serviceClient
+      .from('plantilla_configs')
+      .select('excel_storage_path, excel_file_name')
+      .eq('id', template_id)
+      .eq('user_id', userId)
+      .single();
+    
+    if (templateError) {
+      console.error("[API reports/projects] Error obtenint plantilla:", templateError);
+      return NextResponse.json({ 
+        error: 'Plantilla no trobada o no accessible.',
+        details: templateError.message 
+      }, { status: 404 });
+    }
+    
+    if (!template.excel_storage_path) {
+      return NextResponse.json({ 
+        error: 'La plantilla seleccionada no té un fitxer Excel associat. Puja un Excel a la plantilla primer.' 
+      }, { status: 400 });
+    }
+    
+    // Llegir les dades de l'Excel des de Storage
+    let excelData;
+    try {
+      excelData = await readExcelFromStorage(template.excel_storage_path);
+      console.log(`[API reports/projects] ✅ Excel llegit: ${excelData.totalRows} files, ${excelData.headers.length} columnes`);
+    } catch (excelError) {
+      console.error("[API reports/projects] Error llegint Excel:", excelError);
+      return NextResponse.json({ 
+        error: 'Error llegint el fitxer Excel de la plantilla.',
+        details: excelError instanceof Error ? excelError.message : String(excelError)
+      }, { status: 500 });
+    }
+    
+    if (excelData.totalRows === 0) {
+      return NextResponse.json({ 
+        error: 'El fitxer Excel de la plantilla està buit o no conté dades vàlides.' 
+      }, { status: 400 });
+    }
+    
+    // Crear el projecte amb les dades llegides de l'Excel
     const { data: newProject, error: projectError } = await serviceClient
       .from('projects')
       .insert([{
         user_id: userId,
         template_id,
         project_name,
-        excel_filename,
-        excel_data,
-        total_rows: total_rows || (Array.isArray(excel_data) ? excel_data.length : 1)
+        excel_filename: template.excel_file_name || 'data.xlsx',
+        excel_data: excelData.rows,
+        total_rows: excelData.totalRows
       }])
       .select()
       .single();
@@ -203,31 +247,34 @@ export async function POST(request: NextRequest) {
     }
     
     // Crear registres de generació per a cada fila de l'Excel
-    if (Array.isArray(excel_data) && excel_data.length > 0) {
-      const generationRecords = excel_data.map((rowData, index) => ({
-        project_id: newProject.id,
-        excel_row_index: index,
-        row_data: rowData,
-        status: 'pending'
-      }));
-      
-      const { error: generationsError } = await serviceClient
-        .from('generations')
-        .insert(generationRecords);
-      
-      if (generationsError) {
-        console.warn("[API reports/projects] Error creant registres de generació:", generationsError);
-        // No fallem completament, el projecte ja està creat
-      } else {
-        console.log(`[API reports/projects] ✅ Creats ${generationRecords.length} registres de generació`);
-      }
+    const generationRecords = excelData.rows.map((rowData, index) => ({
+      project_id: newProject.id,
+      excel_row_index: index,
+      row_data: rowData,
+      status: 'pending'
+    }));
+    
+    const { error: generationsError } = await serviceClient
+      .from('generations')
+      .insert(generationRecords);
+    
+    if (generationsError) {
+      console.warn("[API reports/projects] Error creant registres de generació:", generationsError);
+      // No fallem completament, el projecte ja està creat
+    } else {
+      console.log(`[API reports/projects] ✅ Creats ${generationRecords.length} registres de generació`);
     }
     
     console.log(`[API reports/projects] ✅ Projecte creat amb ID: ${newProject.id}`);
     
     return NextResponse.json({
       message: 'Projecte creat correctament!',
-      project: newProject
+      project: newProject,
+      excelInfo: {
+        filename: template.excel_file_name,
+        totalRows: excelData.totalRows,
+        headers: excelData.headers
+      }
     }, { status: 201 });
     
   } catch (err) {
