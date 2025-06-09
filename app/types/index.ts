@@ -65,6 +65,7 @@ export interface Template {
   docx_storage_path?: string;
   excel_file_name?: string;
   excel_headers?: string[];
+  excel_storage_path?: string; // Nova columna per emmagatzemar la ruta del fitxer Excel complet
   link_mappings?: ExcelLinkMapping[];
   ai_instructions?: AIInstruction[];
   final_html?: string;

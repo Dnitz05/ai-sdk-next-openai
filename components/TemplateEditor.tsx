@@ -826,11 +826,55 @@ const TemplateEditor: React.FC<TemplateEditorProps> = ({ initialTemplateData, mo
         setTimeout(() => document.body.removeChild(messageElement), 3000);
         
       } else if (fileType === 'excel') {
-        // Process Excel file using XLSX library
+        if (!currentTemplateId) {
+          document.body.removeChild(loadingMessage);
+          alert("Error: Falta l'ID de la plantilla per pujar el fitxer Excel.");
+          if (fileInputRef.current) fileInputRef.current.value = '';
+          return;
+        }
+
         setExcelNameValue(file.name);
         setHasUnsavedChanges(true);
-        
-        // Read the Excel file
+
+        // 1. Primer pujar l'Excel a Supabase Storage
+        const formDataUpload = new FormData();
+        formDataUpload.append('file', file);
+        formDataUpload.append('templateId', currentTemplateId);
+
+        // Obtenir token d'autenticació
+        const supabaseClient = createBrowserSupabaseClient();
+        await supabaseClient.auth.refreshSession();
+        const { data: { session } } = await supabaseClient.auth.getSession();
+        const accessTokenUpload = session?.access_token;
+
+        const uploadResponse = await fetch('/api/upload-excel', {
+          method: 'POST',
+          headers: {
+            ...(accessTokenUpload ? { Authorization: `Bearer ${accessTokenUpload}` } : {}),
+          },
+          credentials: 'include',
+          body: formDataUpload,
+        });
+
+        if (!uploadResponse.ok) {
+          document.body.removeChild(loadingMessage);
+          const errorData = await uploadResponse.json().catch(() => ({}));
+          alert(`Error pujant Excel: ${errorData.error || uploadResponse.statusText}`);
+          if (fileInputRef.current) fileInputRef.current.value = '';
+          return;
+        }
+
+        const uploadData = await uploadResponse.json();
+        if (!uploadData.success) {
+          document.body.removeChild(loadingMessage);
+          alert(`Error confirmant la pujada de l'Excel: ${uploadData.error || 'Error desconegut.'}`);
+          if (fileInputRef.current) fileInputRef.current.value = '';
+          return;
+        }
+
+        console.log("Excel pujat a Storage:", uploadData.excelStoragePath);
+
+        // 2. Després processar els headers per a la UI
         const reader = new FileReader();
         reader.onload = (e) => {
           try {
@@ -848,16 +892,12 @@ const TemplateEditor: React.FC<TemplateEditorProps> = ({ initialTemplateData, mo
             const headers = jsonData[0] as string[];
             
             // Update the Excel headers state
-            // This is the real implementation that extracts headers from the Excel file
             if (headers && headers.length > 0) {
-              // Update the excelHeaders state with the extracted headers
-              const updatedExcelHeaders = [...headers];
-              // Actually update the state with the extracted headers
-              setExcelHeaders(updatedExcelHeaders);
+              setExcelHeaders([...headers]);
               
               // Show success message
               document.body.removeChild(loadingMessage);
-              const successMessage = `Arxiu Excel processat: ${file.name}`;
+              const successMessage = `Excel processat i desat: ${file.name}`;
               const messageElement = document.createElement('div');
               messageElement.className = 'fixed top-4 right-4 bg-green-100 border border-green-400 text-green-700 px-4 py-3 rounded z-50';
               messageElement.innerHTML = `
