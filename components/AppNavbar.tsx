@@ -118,6 +118,9 @@ export default function AppNavbar() {
           <Link href="/plantilles" className="text-sm font-medium text-blue-700 hover:text-blue-900 transition hidden sm:inline">
             Les meves plantilles
           </Link>
+          <Link href="/informes" className="text-sm font-medium text-blue-700 hover:text-blue-900 transition hidden sm:inline">
+            Generació d'informes
+          </Link>
         </div>
         <div className="flex items-center gap-4">
           <UserMenu onLogin={() => setShowAuth(true)} user={user} loading={loading} />
