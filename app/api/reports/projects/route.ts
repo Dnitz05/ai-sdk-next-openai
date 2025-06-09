@@ -50,6 +50,19 @@ export async function GET(request: NextRequest) {
     
     console.log("[API reports/projects] Usuari autenticat:", userId);
     
+    // Verificar variables d'entorn críticas
+    if (!process.env.NEXT_PUBLIC_SUPABASE_URL) {
+      console.error("[API reports/projects] ❌ NEXT_PUBLIC_SUPABASE_URL no està configurada");
+      return NextResponse.json({ error: 'Error de configuració del servidor' }, { status: 500 });
+    }
+    
+    if (!process.env.SUPABASE_SERVICE_ROLE_KEY) {
+      console.error("[API reports/projects] ❌ SUPABASE_SERVICE_ROLE_KEY no està configurada");
+      return NextResponse.json({ error: 'Error de configuració del servidor' }, { status: 500 });
+    }
+    
+    console.log("[API reports/projects] ✅ Variables d'entorn correctes");
+    
     // Client amb service role key per bypassejar RLS (només després de verificar l'usuari)
     const serviceClient = createClient(
       process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -57,7 +70,26 @@ export async function GET(request: NextRequest) {
       { auth: { persistSession: false, autoRefreshToken: false } }
     );
     
-    // Obtenir projectes amb informació relacionada
+    console.log("[API reports/projects] Intent d'obtenir projectes per usuari:", userId);
+    
+    // Primer, intentem una consulta simple per verificar l'accés bàsic
+    const { data: simpleProjects, error: simpleError } = await serviceClient
+      .from('projects')
+      .select('id, project_name, template_id, created_at')
+      .eq('user_id', userId)
+      .order('created_at', { ascending: false });
+      
+    if (simpleError) {
+      console.error("[API reports/projects] ❌ Error en consulta simple:", simpleError);
+      return NextResponse.json({ 
+        error: 'Error accedint a projectes (consulta bàsica).',
+        details: simpleError.message 
+      }, { status: 500 });
+    }
+    
+    console.log(`[API reports/projects] ✅ Consulta simple OK: ${simpleProjects?.length || 0} projectes trobats`);
+    
+    // Ara intentem la consulta complexa
     const { data: projects, error: projectsError } = await serviceClient
       .from('projects')
       .select(`

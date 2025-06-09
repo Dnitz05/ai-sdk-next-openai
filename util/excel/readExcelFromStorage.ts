@@ -111,7 +111,20 @@ export async function getExcelInfoFromTemplate(templateId: string, userId: strin
   headers?: string[];
   totalRows?: number;
 }> {
-  console.log(`[getExcelInfoFromTemplate] Obtenint info Excel per plantilla: ${templateId}`);
+  console.log(`[getExcelInfoFromTemplate] Obtenint info Excel per plantilla: ${templateId}, usuari: ${userId}`);
+  
+  // Verificar variables d'entorn
+  if (!process.env.NEXT_PUBLIC_SUPABASE_URL) {
+    console.error("[getExcelInfoFromTemplate] ❌ NEXT_PUBLIC_SUPABASE_URL no està configurada");
+    throw new Error("Variables d'entorn no configurades correctament");
+  }
+  
+  if (!process.env.SUPABASE_SERVICE_ROLE_KEY) {
+    console.error("[getExcelInfoFromTemplate] ❌ SUPABASE_SERVICE_ROLE_KEY no està configurada");
+    throw new Error("Variables d'entorn no configurades correctament");
+  }
+  
+  console.log("[getExcelInfoFromTemplate] ✅ Variables d'entorn correctes");
   
   const serviceClient = createClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -120,6 +133,8 @@ export async function getExcelInfoFromTemplate(templateId: string, userId: strin
   );
 
   try {
+    console.log(`[getExcelInfoFromTemplate] Consultant BD per plantilla ${templateId}...`);
+    
     // Obtenir informació de la plantilla
     const { data: template, error: templateError } = await serviceClient
       .from('plantilla_configs')
@@ -129,17 +144,34 @@ export async function getExcelInfoFromTemplate(templateId: string, userId: strin
       .single();
 
     if (templateError) {
-      console.error(`[getExcelInfoFromTemplate] Error obtenint plantilla: ${templateError.message}`);
+      console.error(`[getExcelInfoFromTemplate] ❌ Error BD plantilla: ${templateError.message}`, templateError);
       throw new Error(`Error accedint a la plantilla: ${templateError.message}`);
     }
 
+    if (!template) {
+      console.error(`[getExcelInfoFromTemplate] ❌ Plantilla no trobada: ${templateId}`);
+      throw new Error(`Plantilla ${templateId} no trobada`);
+    }
+
+    console.log(`[getExcelInfoFromTemplate] ✅ Plantilla trobada:`, {
+      excel_storage_path: template.excel_storage_path || 'NULL',
+      excel_file_name: template.excel_file_name || 'NULL'
+    });
+
     if (!template.excel_storage_path) {
-      console.log(`[getExcelInfoFromTemplate] Plantilla ${templateId} no té Excel associat`);
+      console.log(`[getExcelInfoFromTemplate] ⚠️ Plantilla ${templateId} no té Excel associat`);
       return { hasExcel: false };
     }
 
+    console.log(`[getExcelInfoFromTemplate] Llegint Excel de Storage: ${template.excel_storage_path}`);
+    
     // Llegir només els headers per eficiència (primera fila)
     const excelData = await readExcelFromStorage(template.excel_storage_path);
+
+    console.log(`[getExcelInfoFromTemplate] ✅ Excel llegit correctament:`, {
+      headers: excelData.headers.length,
+      totalRows: excelData.totalRows
+    });
 
     return {
       hasExcel: true,
@@ -149,7 +181,7 @@ export async function getExcelInfoFromTemplate(templateId: string, userId: strin
     };
 
   } catch (error) {
-    console.error('[getExcelInfoFromTemplate] Error:', error);
+    console.error('[getExcelInfoFromTemplate] ❌ Error general:', error);
     throw error;
   }
 }

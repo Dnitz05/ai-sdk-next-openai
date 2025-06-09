@@ -19,47 +19,71 @@ export async function GET(
     const { templateId } = params;
     
     if (!templateId) {
+      console.error("[API template-excel-info] ❌ templateId buit o undefined");
       return NextResponse.json({ error: 'templateId és obligatori.' }, { status: 400 });
     }
+
+    // Verificar variables d'entorn críticas
+    if (!process.env.NEXT_PUBLIC_SUPABASE_URL) {
+      console.error("[API template-excel-info] ❌ NEXT_PUBLIC_SUPABASE_URL no està configurada");
+      return NextResponse.json({ error: 'Error de configuració del servidor' }, { status: 500 });
+    }
+    
+    if (!process.env.SUPABASE_SERVICE_ROLE_KEY) {
+      console.error("[API template-excel-info] ❌ SUPABASE_SERVICE_ROLE_KEY no està configurada");
+      return NextResponse.json({ error: 'Error de configuració del servidor' }, { status: 500 });
+    }
+    
+    console.log("[API template-excel-info] ✅ Variables d'entorn correctes");
 
     // Autenticació de l'usuari
     let userId: string | null = null;
     let userError: any = null;
     
+    console.log("[API template-excel-info] Iniciant autenticació...");
+    
     const authHeader = request.headers.get('authorization') ?? request.headers.get('Authorization');
     if (authHeader?.startsWith('Bearer ')) {
       const accessToken = authHeader.slice(7).trim();
+      console.log("[API template-excel-info] Intentant autenticació via Bearer token");
       try {
         const userClient = createUserSupabaseClient(accessToken);
         const { data: userDataAuth, error: authError } = await userClient.auth.getUser();
         if (!authError && userDataAuth.user) {
           userId = userDataAuth.user.id;
+          console.log("[API template-excel-info] ✅ Autenticat via Bearer token");
         } else {
           userError = authError;
+          console.log("[API template-excel-info] ⚠️ Error autenticació Bearer:", authError);
         }
       } catch (e) {
         userError = e;
+        console.log("[API template-excel-info] ⚠️ Excepció autenticació Bearer:", e);
       }
     }
     
     if (!userId) {
+      console.log("[API template-excel-info] Intentant autenticació via cookies...");
       const supabaseServer = await createServerSupabaseClient();
       const { data: userDataAuth2, error: serverError } = await supabaseServer.auth.getUser();
       if (!serverError && userDataAuth2.user) {
         userId = userDataAuth2.user.id;
+        console.log("[API template-excel-info] ✅ Autenticat via cookies");
       } else {
         userError = serverError;
+        console.log("[API template-excel-info] ❌ Error autenticació cookies:", serverError);
       }
     }
     
     if (!userId) {
-      console.error("[API template-excel-info] Error obtenint informació de l'usuari:", userError);
+      console.error("[API template-excel-info] ❌ Error obtenint informació de l'usuari:", userError);
       return NextResponse.json({ error: 'Usuari no autenticat.' }, { status: 401 });
     }
 
-    console.log(`[API template-excel-info] Usuari autenticat: ${userId}`);
+    console.log(`[API template-excel-info] ✅ Usuari autenticat: ${userId}, templateId: ${templateId}`);
 
     // Obtenir informació de l'Excel de la plantilla
+    console.log(`[API template-excel-info] Cridant getExcelInfoFromTemplate(${templateId}, ${userId})`);
     try {
       const excelInfo = await getExcelInfoFromTemplate(templateId, userId);
       
