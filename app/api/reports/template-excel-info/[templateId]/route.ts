@@ -10,12 +10,13 @@ import { getExcelInfoFromTemplate } from '@/util/excel/readExcelFromStorage';
  */
 export async function GET(
   request: NextRequest,
-  context: { params: { templateId: string } }
+  context: { params: Promise<{ templateId: string }> }
 ) {
-  console.log(`[API template-excel-info] Rebuda petició GET per plantilla: ${context.params.templateId}`);
+  const params = await context.params;
+  console.log(`[API template-excel-info] Rebuda petició GET per plantilla: ${params.templateId}`);
   
   try {
-    const { templateId } = context.params;
+    const { templateId } = params;
     
     if (!templateId) {
       return NextResponse.json({ error: 'templateId és obligatori.' }, { status: 400 });
