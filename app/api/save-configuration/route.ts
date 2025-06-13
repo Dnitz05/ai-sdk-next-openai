@@ -20,7 +20,7 @@ interface SaveConfigPayload {
   id: string; // UUID generat pel frontend
   baseDocxName: string | null; // Nom original del fitxer DOCX
   config_name?: string;
-  excelInfo: { fileName: string | null; headers: string[] | null } | null;
+  excelInfo: { fileName: string | null; headers: string[] | null; excelStoragePath?: string | null } | null;
   linkMappings: { id: string; excelHeader: string; selectedText: string }[];
   aiInstructions: IAInstruction[]; // Antic format
   ai_instructions?: IAInstruction[]; // Nou format
