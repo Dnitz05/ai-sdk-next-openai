@@ -1,28 +1,56 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
 import { createUserSupabaseClient } from '@/lib/supabase/userClient';
+import { createServerSupabaseClient } from '@/lib/supabase/serverClient';
 
 export async function POST(request: NextRequest) {
   console.log("[API upload-excel] Rebuda petició POST");
   
   try {
-    // 1. Autenticació de l'usuari
-    const authHeader = request.headers.get('authorization') || request.headers.get('Authorization');
+    // 1. Autenticació de l'usuari: primer via header Authorization (Bearer), després cookies
     let userId: string | null = null;
+    let userError: any = null;
+    const authHeader = request.headers.get('authorization') ?? request.headers.get('Authorization');
+    console.log('[API upload-excel] HEADER Authorization:', authHeader ? 'present' : 'missing');
     
     if (authHeader?.startsWith('Bearer ')) {
       const accessToken = authHeader.slice(7).trim();
-      const userClient = createUserSupabaseClient(accessToken);
-      const { data: userDataAuth, error: authError } = await userClient.auth.getUser();
-      if (!authError && userDataAuth.user) {
-        userId = userDataAuth.user.id;
+      console.log('[API upload-excel] accessToken present:', accessToken ? 'yes' : 'no');
+      try {
+        const userClient = createUserSupabaseClient(accessToken);
+        const { data: userDataAuth, error: authError } = await userClient.auth.getUser();
+        if (!authError && userDataAuth.user) {
+          userId = userDataAuth.user.id;
+          console.log("[API upload-excel] Usuari autenticat via Bearer token:", userId);
+        } else {
+          userError = authError;
+          console.log("[API upload-excel] Bearer token invalid, trying fallback...");
+        }
+      } catch (e) {
+        userError = e;
+        console.log("[API upload-excel] Bearer token error, trying fallback...");
       }
     }
     
     if (!userId) {
-      return NextResponse.json({ 
-        error: 'Usuari no autenticat.' 
-      }, { status: 401 });
+      console.log("[API upload-excel] Trying authentication via cookies...");
+      try {
+        const supabaseServer = await createServerSupabaseClient();
+        const { data: userDataAuth2, error: serverError } = await supabaseServer.auth.getUser();
+        if (!serverError && userDataAuth2.user) {
+          userId = userDataAuth2.user.id;
+          console.log("[API upload-excel] Usuari autenticat via cookies:", userId);
+        } else {
+          userError = serverError;
+        }
+      } catch (e) {
+        userError = e;
+      }
+    }
+    
+    if (!userId) {
+      console.error("[API upload-excel] Error obtenint informació de l'usuari:", userError);
+      return NextResponse.json({ error: 'Usuari no autenticat.' }, { status: 401 });
     }
     
     console.log("[API upload-excel] Usuari autenticat:", userId);
