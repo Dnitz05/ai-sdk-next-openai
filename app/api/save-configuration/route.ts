@@ -135,10 +135,10 @@ export async function POST(request: NextRequest) {
       config_name: configurationData.config_name || configurationData.baseDocxName || 'Sense nom',
       base_docx_name: configurationData.baseDocxName, // Nom original del fitxer
       base_docx_storage_path: configurationData.originalDocxPath || null, // Ruta a Storage
-      // ✅ PRESERVAR camps Excel existents per evitar sobreescriure amb null
-      excel_storage_path: existingTemplate?.excel_storage_path || null,
-      excel_file_name: existingTemplate?.excel_file_name || null,
-      excel_headers: existingTemplate?.excel_headers || null,
+      // ✅ SOLUCIÓ: Utilitzar dades d'Excel del frontend amb fallback a existents
+      excel_storage_path: configurationData.excelInfo?.excelStoragePath || existingTemplate?.excel_storage_path || null,
+      excel_file_name: configurationData.excelInfo?.fileName || existingTemplate?.excel_file_name || null,
+      excel_headers: configurationData.excelInfo?.headers || existingTemplate?.excel_headers || null,
       link_mappings: configurationData.linkMappings || [],
       ai_instructions: processedAiInstructions,
       final_html: configurationData.finalHtml,
