@@ -95,19 +95,42 @@ export default function NovaPlantilla() {
       const accessToken = session?.access_token;
       try {
       if (!wordFile || !excelFile) throw new Error('Falten fitxers');
-      // Processa DOCX i Excel
+      
+      // 1. Processa DOCX
       const html = await processDocx(wordFile);
       setFinalHtml(html);
+      
+      // 2. Processa Excel localment per obtenir headers
       const headers = await processExcel(excelFile);
       setExcelHeaders(headers);
 
-      // Desa la plantilla
+      // 3. Puja Excel a Storage
+      const excelFormData = new FormData();
+      excelFormData.append('file', excelFile);
+      excelFormData.append('templateId', templateId);
+      const excelUploadRes = await fetch('/api/upload-excel', {
+        method: 'POST',
+        credentials: 'include',
+        body: excelFormData,
+        headers: accessToken ? { Authorization: `Bearer ${accessToken}` } : {},
+      });
+      if (!excelUploadRes.ok) throw new Error('Error pujant Excel');
+      const excelUploadData = await excelUploadRes.json();
+      if (!excelUploadData.success || !excelUploadData.excelStoragePath) {
+        throw new Error('No s\'ha rebut la ruta de l\'Excel');
+      }
+
+      // 4. Desa la plantilla amb tota la informació
       const config = {
         id: templateId,
         originalDocxPath: originalDocxPath,
         baseDocxName: wordFile.name,
         config_name: templateName,
-        excelInfo: { fileName: excelFile.name, headers },
+        excelInfo: { 
+          fileName: excelFile.name, 
+          headers,
+          excelStoragePath: excelUploadData.excelStoragePath 
+        },
         linkMappings: [],
         aiInstructions: [],
         finalHtml: html,
@@ -127,6 +150,7 @@ export default function NovaPlantilla() {
       router.push(`/plantilles/editar/${id}`);
     } catch (err: any) {
       setError('Error processant o desant la plantilla');
+      console.error('Error detallat:', err);
     } finally {
       setIsSaving(false);
     }

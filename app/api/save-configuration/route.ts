@@ -107,19 +107,49 @@ export async function POST(request: NextRequest) {
       processedAiInstructions = [];
     }
 
+    // ✅ SOLUCIÓ BUG: Consultar camps Excel existents abans de l'UPSERT
+    console.log("[API save-configuration] Consultant camps Excel existents...");
+    const { data: existingTemplate, error: queryError } = await serviceClient
+      .from('plantilla_configs')
+      .select('excel_storage_path, excel_file_name, excel_headers')
+      .eq('id', configurationData.id)
+      .eq('user_id', userId)
+      .single();
+
+    if (queryError && queryError.code !== 'PGRST116') { // PGRST116 = no trobat (OK per plantilles noves)
+      console.error("[API save-configuration] Error consultant plantilla existent:", queryError);
+      return NextResponse.json({ 
+        error: `Error consultant plantilla: ${queryError.message}` 
+      }, { status: 500 });
+    }
+
+    console.log("[API save-configuration] Plantilla existent:", {
+      hasExcel: !!existingTemplate?.excel_storage_path,
+      excel_storage_path: existingTemplate?.excel_storage_path || 'NULL',
+      excel_file_name: existingTemplate?.excel_file_name || 'NULL'
+    });
+
     const configToInsert = {
       id: configurationData.id, // Utilitzem l'UUID del frontend com a ID
       user_id: userId,
       config_name: configurationData.config_name || configurationData.baseDocxName || 'Sense nom',
       base_docx_name: configurationData.baseDocxName, // Nom original del fitxer
       base_docx_storage_path: configurationData.originalDocxPath || null, // Ruta a Storage
+      // ✅ PRESERVAR camps Excel existents per evitar sobreescriure amb null
+      excel_storage_path: existingTemplate?.excel_storage_path || null,
+      excel_file_name: existingTemplate?.excel_file_name || null,
+      excel_headers: existingTemplate?.excel_headers || null,
       link_mappings: configurationData.linkMappings || [],
       ai_instructions: processedAiInstructions,
       final_html: configurationData.finalHtml,
       // created_at i updated_at seran gestionats per la BD (DEFAULT now())
-      // NOTA: Camps Excel (excel_file_name, excel_headers, excel_storage_path) eliminats
-      // per evitar sobreescriure valors desats per upload-excel
     };
+
+    console.log("[API save-configuration] Configuració a inserir (amb camps Excel preservats):", {
+      excel_storage_path: configToInsert.excel_storage_path || 'NULL',
+      excel_file_name: configToInsert.excel_file_name || 'NULL',
+      preservedFromExisting: !!existingTemplate?.excel_storage_path
+    });
 
     console.log("[API save-configuration] Iniciant operació UPSERT amb payload:", JSON.stringify(configToInsert, null, 2));
     
