@@ -16,6 +16,16 @@ import {
 export async function POST(request: NextRequest) {
   console.log("[API reports/generate] Rebuda petició POST");
   
+  // Debug environment variables immediately
+  const mistralKey = process.env.MISTRAL_API_KEY;
+  console.log("[API reports/generate] MISTRAL_API_KEY check:", {
+    exists: !!mistralKey,
+    length: mistralKey?.length || 0,
+    first_chars: mistralKey ? mistralKey.substring(0, 8) + '...' : 'NOT_FOUND',
+    typeof: typeof mistralKey,
+    all_mistral_keys: Object.keys(process.env).filter(k => k.includes('MISTRAL'))
+  });
+  
   try {
     const { generation_id, use_fast_model = false, specific_placeholders = null } = await request.json();
     
@@ -27,8 +37,18 @@ export async function POST(request: NextRequest) {
     // Verificar que tenim la clau de Mistral AI
     if (!process.env.MISTRAL_API_KEY) {
       console.error("[API reports/generate] MISTRAL_API_KEY no configurada");
+      console.error("[API reports/generate] Environment debug:", {
+        total_env_vars: Object.keys(process.env).length,
+        node_env: process.env.NODE_ENV,
+        has_supabase: !!process.env.NEXT_PUBLIC_SUPABASE_URL,
+        relevant_keys: Object.keys(process.env).filter(k => 
+          k.includes('MISTRAL') || k.includes('NEXT_') || k.includes('SUPABASE')
+        ).slice(0, 10)
+      });
       return NextResponse.json({ error: 'Mistral AI no està configurat.' }, { status: 500 });
     }
+    
+    console.log("[API reports/generate] ✅ MISTRAL_API_KEY verified successfully");
     
     // Autenticació de l'usuari
     let userId: string | null = null;
