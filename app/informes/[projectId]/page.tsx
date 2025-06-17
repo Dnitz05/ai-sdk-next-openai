@@ -5,6 +5,7 @@ import { useRouter, useParams } from 'next/navigation';
 import Link from 'next/link';
 import { createBrowserSupabaseClient } from '@/lib/supabase/browserClient';
 import { ProjectWithStats, Generation } from '@/app/types';
+import AsyncJobProgress from '@/components/AsyncJobProgress';
 
 interface GenerationItemProps {
   generation: Generation & {
@@ -157,6 +158,7 @@ const ProjectDetailPage: React.FC = () => {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [generatingIds, setGeneratingIds] = useState<Set<string>>(new Set());
+  const [asyncJobsActive, setAsyncJobsActive] = useState(false);
   
   const router = useRouter();
   const params = useParams();
@@ -296,6 +298,49 @@ const ProjectDetailPage: React.FC = () => {
     }
   };
 
+  const handleGenerateAllAsync = async () => {
+    try {
+      const { data: { session }, error: sessionError } = await supabase.auth.getSession();
+      if (sessionError || !session) {
+        router.push('/');
+        return;
+      }
+
+      const response = await fetch('/api/reports/generate-async', {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${session.access_token}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          projectId: projectId
+        })
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.error || 'Error iniciant generació asíncrona');
+      }
+
+      const result = await response.json();
+      setAsyncJobsActive(true);
+      setError(null);
+      
+      // Mostrar missatge d'èxit
+      console.log(`${result.jobs.length} jobs de generació iniciats`);
+
+    } catch (err) {
+      console.error('Error iniciant generació asíncrona:', err);
+      setError(err instanceof Error ? err.message : 'Error iniciant generació asíncrona');
+    }
+  };
+
+  const handleAsyncJobsCompleted = () => {
+    setAsyncJobsActive(false);
+    // Recarregar dades del projecte
+    loadProjectData();
+  };
+
   if (loading) {
     return (
       <div className="min-h-screen bg-gray-50 flex items-center justify-center">
@@ -391,21 +436,33 @@ const ProjectDetailPage: React.FC = () => {
         )}
 
         {/* Accions principals */}
-        <div className="mb-6 flex gap-4">
+        <div className="mb-6 flex flex-wrap gap-4">
+          <button
+            onClick={handleGenerateAllAsync}
+            disabled={pendingCount === 0 || generatingCount > 0 || asyncJobsActive}
+            className="bg-blue-600 text-white px-6 py-3 rounded-lg font-medium hover:bg-blue-700 disabled:bg-gray-300 disabled:cursor-not-allowed transition-colors flex items-center"
+          >
+            <svg className="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
+            </svg>
+            Generació Asíncrona ({pendingCount} pendents)
+          </button>
+          
           <button
             onClick={handleGenerateAll}
-            disabled={pendingCount === 0 || generatingCount > 0}
+            disabled={pendingCount === 0 || generatingCount > 0 || asyncJobsActive}
             className="bg-green-600 text-white px-6 py-3 rounded-lg font-medium hover:bg-green-700 disabled:bg-gray-300 disabled:cursor-not-allowed transition-colors flex items-center"
           >
             {generatingCount > 0 && (
               <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2"></div>
             )}
-            Generar Tot ({pendingCount} pendents)
+            Generació Individual ({pendingCount} pendents)
           </button>
           
           <button
             onClick={loadProjectData}
-            className="bg-gray-100 text-gray-700 px-6 py-3 rounded-lg font-medium hover:bg-gray-200 transition-colors flex items-center"
+            disabled={asyncJobsActive}
+            className="bg-gray-100 text-gray-700 px-6 py-3 rounded-lg font-medium hover:bg-gray-200 disabled:bg-gray-300 transition-colors flex items-center"
           >
             <svg className="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
@@ -413,6 +470,16 @@ const ProjectDetailPage: React.FC = () => {
             Actualitzar
           </button>
         </div>
+
+        {/* Component de progrés asíncron */}
+        {asyncJobsActive && (
+          <div className="mb-6">
+            <AsyncJobProgress 
+              projectId={projectId}
+              onAllJobsCompleted={handleAsyncJobsCompleted}
+            />
+          </div>
+        )}
 
         {/* Llista de generacions */}
         <div>
