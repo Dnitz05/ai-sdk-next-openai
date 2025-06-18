@@ -22,7 +22,7 @@ export async function POST(request: NextRequest) {
       .from('projects')
       .select(`
         *,
-        template:plantilla_configs(*)
+        template:plantilla_configs(id, config_name, base_docx_name, docx_storage_path, excel_file_name, excel_headers, link_mappings, ai_instructions, final_html, base_docx_storage_path, user_id, placeholder_docx_storage_path, indexed_docx_storage_path, paragraph_mappings, excel_storage_path, created_at, updated_at)
       `)
       .eq('id', projectId)
       .single()
