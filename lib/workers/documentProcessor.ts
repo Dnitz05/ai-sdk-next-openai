@@ -9,6 +9,14 @@ import { createClient } from '@supabase/supabase-js';
 import { CONTENT_GENERATION_PROMPT, MISTRAL_CONFIG } from '@/lib/ai/system-prompts';
 import pLimit from 'p-limit';
 
+// Interfície per als placeholders
+interface PlaceholderConfig {
+  paragraphId: string;
+  prompt: string;
+  baseText?: string;
+  [key: string]: any; // Per permetre propietats addicionals
+}
+
 // Client de Supabase amb permisos de servei per operar en segon pla
 const supabaseAdmin = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -56,7 +64,7 @@ export class DocumentProcessor {
       const concurrencyLimit = pLimit(5); // Límit de 5 crides simultànies a Mistral
       console.log(`[Worker] 🚀 Iniciant generació paral·lela amb límit de concurrència: 5`);
 
-      const aiGenerationTasks = placeholders.map((placeholderConfig, index) => 
+      const aiGenerationTasks = placeholders.map((placeholderConfig: PlaceholderConfig, index: number) =>
         concurrencyLimit(async () => {
           const placeholderIndex = index + 1;
           console.log(`[Worker] Generant contingut per placeholder ${placeholderIndex}/${placeholders.length}: ${placeholderConfig.paragraphId}`);
@@ -239,7 +247,7 @@ export class DocumentProcessor {
   /**
    * Genera contingut amb Mistral AI basant-se en la configuració del placeholder
    */
-  private async generateAiContent(placeholderConfig: any, excelData: any): Promise<string> {
+  private async generateAiContent(placeholderConfig: PlaceholderConfig, excelData: any): Promise<string> {
     // Preparar el prompt amb les dades d'Excel substituïdes
     let processedPrompt = placeholderConfig.prompt || 'Genera contingut professional per aquest paràgraf.';
     

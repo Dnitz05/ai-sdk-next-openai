@@ -45,12 +45,15 @@ export async function POST(request: NextRequest) {
       throw new Error(`Projecte no trobat: ${projectError?.message}`);
     }
 
-    if (!project.template) {
+    if (!project.template || (Array.isArray(project.template) && project.template.length === 0)) {
       throw new Error('El projecte no té una plantilla assignada');
     }
 
+    // Si template és un array, agafem el primer element
+    const template = Array.isArray(project.template) ? project.template[0] : project.template;
+
     console.log(`Projecte carregat: ${project.name} (${project.id})`);
-    console.log(`Plantilla: ${project.template.name} amb ${project.template.prompts?.length || 0} prompts`);
+    console.log(`Plantilla: ${template.name} amb ${template.prompts?.length || 0} prompts`);
 
     // Obtenir totes les generacions pendents del projecte
     const { data: generations, error: generationsError } = await supabase
@@ -74,7 +77,7 @@ export async function POST(request: NextRequest) {
     console.log(`Trobades ${generations.length} generacions pendents per processar`);
 
     // Preparar dades per als jobs
-    const totalPlaceholders = project.template.prompts?.length || 0;
+    const totalPlaceholders = template.prompts?.length || 0;
     
     if (totalPlaceholders === 0) {
       throw new Error('La plantilla no conté cap prompt/placeholder configurat');
@@ -91,8 +94,8 @@ export async function POST(request: NextRequest) {
       job_config: {
         project_id: projectId,
         template_id: project.template_id,
-        template_document_path: project.template.template_document_path,
-        prompts: project.template.prompts || []
+        template_document_path: template.template_document_path,
+        prompts: template.prompts || []
       },
       created_at: new Date().toISOString(),
       updated_at: new Date().toISOString()
