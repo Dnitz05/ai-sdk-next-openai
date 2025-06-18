@@ -7,6 +7,7 @@ import * as JSZip from 'jszip';
 import { DOMParser, XMLSerializer } from '@xmldom/xmldom';
 import { createClient } from '@supabase/supabase-js';
 import { CONTENT_GENERATION_PROMPT, MISTRAL_CONFIG } from '@/lib/ai/system-prompts';
+import pLimit from 'p-limit';
 
 // Client de Supabase amb permisos de servei per operar en segon pla
 const supabaseAdmin = createClient(
@@ -37,43 +38,126 @@ export class DocumentProcessor {
 
       const templateBuffer = await this.downloadTemplateDocx(jobData.generation.template_document_path);
 
-      // --- LÒGICA MVP: PROCESSAR NOMÉS EL PRIMER PLACEHOLDER ---
-      const firstPlaceholderConfig = jobData.generation.template_placeholders?.[0];
-      if (!firstPlaceholderConfig || !firstPlaceholderConfig.paragraphId) {
-        throw new Error("La plantilla no conté cap placeholder vàlid per processar.");
+      // --- LÒGICA PARAL·LELA: GENERAR CONTINGUT EN PARAL·LEL, APLICAR SEQÜENCIALMENT ---
+      const placeholders = jobData.generation.template_placeholders || [];
+      if (placeholders.length === 0) {
+        throw new Error("La plantilla no conté cap placeholder per processar.");
       }
 
-      console.log(`[Worker] Processant el primer placeholder:`, {
-        paragraphId: firstPlaceholderConfig.paragraphId,
-        prompt: firstPlaceholderConfig.prompt?.substring(0, 100) + '...'
+      console.log(`[Worker] Iniciant processament paral·lel de ${placeholders.length} placeholders`);
+
+      // Actualitzar total_placeholders al job
+      await this.updateJobStatus(jobId, 'processing', {
+        total_placeholders: placeholders.length,
+        started_at: new Date().toISOString()
       });
 
-      const aiContent = await this.generateAiContent(
-        firstPlaceholderConfig, 
-        jobData.generation.row_data
+      // FASE 1: GENERAR TOT EL CONTINGUT EN PARAL·LEL
+      const concurrencyLimit = pLimit(5); // Límit de 5 crides simultànies a Mistral
+      console.log(`[Worker] 🚀 Iniciant generació paral·lela amb límit de concurrència: 5`);
+
+      const aiGenerationTasks = placeholders.map((placeholderConfig, index) => 
+        concurrencyLimit(async () => {
+          const placeholderIndex = index + 1;
+          console.log(`[Worker] Generant contingut per placeholder ${placeholderIndex}/${placeholders.length}: ${placeholderConfig.paragraphId}`);
+          
+          try {
+            const aiContent = await this.generateAiContent(
+              placeholderConfig, 
+              jobData.generation.row_data
+            );
+            
+            console.log(`[Worker] ✅ Contingut generat per placeholder ${placeholderIndex} (${aiContent.length} chars)`);
+            
+            return {
+              success: true,
+              placeholderConfig,
+              aiContent,
+              index: placeholderIndex
+            };
+          } catch (error: any) {
+            console.error(`[Worker] ❌ Error generant contingut per placeholder ${placeholderIndex}:`, error);
+            return {
+              success: false,
+              placeholderConfig,
+              error: error.message,
+              index: placeholderIndex
+            };
+          }
+        })
       );
+
+      console.log(`[Worker] Esperant generació paral·lela de ${placeholders.length} continguts...`);
+      const generationResults = await Promise.all(aiGenerationTasks);
       
-      console.log(`[Worker] Contingut generat per Mistral (${aiContent.length} chars):`, 
-        aiContent.substring(0, 200) + '...'
-      );
+      // Analitzar resultats de la generació paral·lela
+      const successfulGenerations = generationResults.filter(result => result.success);
+      const failedGenerations = generationResults.filter(result => !result.success);
+      
+      console.log(`[Worker] Generació paral·lela completada: ${successfulGenerations.length} èxits, ${failedGenerations.length} errors`);
+      
+      if (failedGenerations.length > 0) {
+        console.warn(`[Worker] ⚠️ Errors de generació:`, failedGenerations.map(f => `Placeholder ${f.index}: ${f.error}`));
+      }
 
-      const modifiedBuffer = await this.modifyDocumentInMemory(
-        templateBuffer, 
-        firstPlaceholderConfig.paragraphId, 
-        aiContent
-      );
+      // Si totes les generacions han fallat, aturar el processament
+      if (successfulGenerations.length === 0) {
+        throw new Error("Totes les generacions de contingut han fallat. Revisa la configuració de l'API de Mistral.");
+      }
 
+      // FASE 2: APLICAR MODIFICACIONS AL DOCUMENT SEQÜENCIALMENT
+      console.log(`[Worker] 📝 Iniciant aplicació seqüencial de ${successfulGenerations.length} modificacions al document`);
+      let currentDocumentBuffer = templateBuffer;
+      let appliedModifications = 0;
+
+      for (const result of successfulGenerations) {
+        if (!result.success) continue; // Saltar els fallits
+        
+        try {
+          console.log(`[Worker] Aplicant modificació ${appliedModifications + 1}/${successfulGenerations.length}: ${result.placeholderConfig.paragraphId}`);
+          
+          currentDocumentBuffer = await this.modifyDocumentInMemory(
+            currentDocumentBuffer, 
+            result.placeholderConfig.paragraphId, 
+            result.aiContent
+          );
+
+          appliedModifications++;
+          
+          // Actualitzar progrés basant-se en modificacions aplicades
+          const progress = (appliedModifications / placeholders.length) * 100;
+          await this.updateJobStatus(jobId, 'processing', {
+            progress: Math.round(progress * 100) / 100, // 2 decimals
+            completed_placeholders: appliedModifications
+          });
+
+          console.log(`[Worker] ✅ Modificació aplicada ${appliedModifications}/${successfulGenerations.length} (${progress.toFixed(1)}%)`);
+
+        } catch (modificationError: any) {
+          console.error(`[Worker] ❌ Error aplicant modificació per ${result.placeholderConfig.paragraphId}:`, modificationError);
+          
+          // Registrar error però continuar amb la resta
+          await this.updateJobStatus(jobId, 'processing', {
+            error_message: `Error aplicant modificació ${result.placeholderConfig.paragraphId}: ${modificationError.message}`,
+            completed_placeholders: appliedModifications
+          });
+        }
+      }
+
+      console.log(`[Worker] 🎯 Processament paral·lel completat: ${appliedModifications}/${placeholders.length} placeholders processats correctament`);
+
+      // Pujar document final amb tots els canvis aplicats
       const finalDocumentPath = `public/generated_reports/${jobId}_final.docx`;
-      await this.uploadFinalDocx(finalDocumentPath, modifiedBuffer);
+      await this.uploadFinalDocx(finalDocumentPath, currentDocumentBuffer);
 
       await this.updateJobStatus(jobId, 'completed', {
         progress: 100,
-        completed_placeholders: 1,
+        completed_placeholders: placeholders.length,
         final_document_path: finalDocumentPath,
         completed_at: new Date().toISOString()
       });
 
-      console.log(`[Worker] Job ${jobId} completat amb èxit. Document final: ${finalDocumentPath}`);
+      console.log(`[Worker] 🎉 Job ${jobId} completat amb èxit! Processats ${placeholders.length} placeholders. Document final: ${finalDocumentPath}`);
     } catch (error: any) {
       console.error(`[Worker] Error catastròfic processant el job ${jobId}:`, error);
       await this.updateJobStatus(jobId, 'failed', { 

@@ -306,7 +306,7 @@ const ProjectDetailPage: React.FC = () => {
         return;
       }
 
-      const response = await fetch('/api/reports/generate-async', {
+      const response = await fetch('/api/jobs/generate', {
         method: 'POST',
         headers: {
           'Authorization': `Bearer ${session.access_token}`,
@@ -319,19 +319,22 @@ const ProjectDetailPage: React.FC = () => {
 
       if (!response.ok) {
         const errorData = await response.json();
-        throw new Error(errorData.error || 'Error iniciant generació asíncrona');
+        throw new Error(errorData.error || 'Error iniciant generació automàtica');
       }
 
       const result = await response.json();
       setAsyncJobsActive(true);
       setError(null);
       
-      // Mostrar missatge d'èxit
-      console.log(`${result.jobs.length} jobs de generació iniciats`);
+      // Mostrar missatge d'èxit amb informació detallada
+      console.log(`🎉 ${result.jobsCreated} jobs creats correctament!`);
+      console.log(`📊 ${result.totalPlaceholders} placeholders per job`);
+      console.log(`⏱️ Temps estimat: ${result.webhook_info.estimated_time}`);
+      console.log(`🚀 Els jobs s'estan processant automàticament en paral·lel`);
 
     } catch (err) {
-      console.error('Error iniciant generació asíncrona:', err);
-      setError(err instanceof Error ? err.message : 'Error iniciant generació asíncrona');
+      console.error('Error iniciant generació automàtica:', err);
+      setError(err instanceof Error ? err.message : 'Error iniciant generació automàtica');
     }
   };
 
