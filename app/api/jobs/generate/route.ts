@@ -31,8 +31,7 @@ export async function POST(request: NextRequest) {
             config_name, 
             ai_instructions, 
             docx_storage_path,
-            excel_storage_path,
-            template_document_path
+            excel_storage_path
         )
       `)
       .eq('id', projectId)
@@ -92,7 +91,7 @@ export async function POST(request: NextRequest) {
       job_config: {
         project_id: projectId,
         template_id: project.template_id,
-        template_document_path: template.template_document_path,
+        template_document_path: template.docx_storage_path,
         prompts: template.ai_instructions || []
       },
       created_at: new Date().toISOString(),
