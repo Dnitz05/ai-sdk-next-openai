@@ -32,7 +32,6 @@ export async function POST(request: NextRequest) {
             ai_instructions, 
             docx_storage_path,
             excel_storage_path,
-            prompts,
             template_document_path
         )
       `)
@@ -52,7 +51,7 @@ export async function POST(request: NextRequest) {
     const template = Array.isArray(project.template) ? project.template[0] : project.template;
 
     console.log(`Projecte carregat: ${project.project_name} (${project.id})`); // Assuming project_name is the correct field from projects table after selecting *
-    console.log(`Plantilla: ${template.config_name} amb ${template.prompts?.length || 0} prompts`);
+    console.log(`Plantilla: ${template.config_name} amb ${template.ai_instructions?.length || 0} prompts`);
 
     // Obtenir totes les generacions pendents del projecte
     const { data: generations, error: generationsError } = await supabase
@@ -76,7 +75,7 @@ export async function POST(request: NextRequest) {
     console.log(`Trobades ${generations.length} generacions pendents per processar`);
 
     // Preparar dades per als jobs
-    const totalPlaceholders = template.prompts?.length || 0;
+    const totalPlaceholders = template.ai_instructions?.length || 0;
     
     if (totalPlaceholders === 0) {
       throw new Error('La plantilla no conté cap prompt/placeholder configurat');
@@ -94,7 +93,7 @@ export async function POST(request: NextRequest) {
         project_id: projectId,
         template_id: project.template_id,
         template_document_path: template.template_document_path,
-        prompts: template.prompts || []
+        prompts: template.ai_instructions || []
       },
       created_at: new Date().toISOString(),
       updated_at: new Date().toISOString()
