@@ -25,16 +25,15 @@ export async function POST(request: NextRequest) {
     const { data: project, error: projectError } = await supabase
       .from('projects')
       .select(`
-        id,
-        name,
-        user_id,
-        template_id,
-        excel_data,
+        *,
         template:plantilla_configs(
-          id,
-          name,
-          prompts,
-          template_document_path
+            id,
+            config_name, 
+            ai_instructions, 
+            docx_storage_path,
+            excel_storage_path,
+            prompts,
+            template_document_path
         )
       `)
       .eq('id', projectId)
@@ -52,8 +51,8 @@ export async function POST(request: NextRequest) {
     // Si template és un array, agafem el primer element
     const template = Array.isArray(project.template) ? project.template[0] : project.template;
 
-    console.log(`Projecte carregat: ${project.name} (${project.id})`);
-    console.log(`Plantilla: ${template.name} amb ${template.prompts?.length || 0} prompts`);
+    console.log(`Projecte carregat: ${project.project_name} (${project.id})`); // Assuming project_name is the correct field from projects table after selecting *
+    console.log(`Plantilla: ${template.config_name} amb ${template.prompts?.length || 0} prompts`);
 
     // Obtenir totes les generacions pendents del projecte
     const { data: generations, error: generationsError } = await supabase
