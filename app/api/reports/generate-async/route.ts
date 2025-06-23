@@ -61,6 +61,10 @@ export async function POST(request: NextRequest) {
       throw new Error('No s\'han trobat dades a l\'Excel o el fitxer està buit.');
     }
     console.log(`[generate-async] ${excelData.rows.length} files llegides de l'Excel.`);
+    
+    // DEBUG: Imprimir una mostra de les dades de l'Excel
+    console.log('[generate-async] Mostra de dades Excel (primeres 2 files):', JSON.stringify(excelData.rows.slice(0, 2), null, 2));
+
 
     // 4. Preparar UNA ÚNICA configuració de feina (JobConfig)
     const jobConfig: JobConfig = {
@@ -83,6 +87,9 @@ export async function POST(request: NextRequest) {
       progress: 0,
       job_config: jobConfig,
     };
+
+    // DEBUG: Imprimir la configuració del job abans de desar
+    console.log('[generate-async] Contingut de jobConfig abans de desar:', JSON.stringify(jobConfig, null, 2));
 
     console.log('[generate-async] Creant nou job a la base de dades...');
     const { data: createdJob, error: createJobError } = await supabaseAdmin
