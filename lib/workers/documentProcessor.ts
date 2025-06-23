@@ -180,31 +180,29 @@ export class DocumentProcessor {
    * Obté les dades completes del job incloent la generació associada
    */
   private async getJobData(jobId: string) {
-    console.log(`[Worker] Carregant dades del job: ${jobId}`);
+    console.log(`[Worker] Obtenint dades per al job ${jobId}`);
     const { data: job, error } = await supabaseAdmin
       .from('generation_jobs')
-      .select(`
-        *,
-        generation:generations(
-          id,
-          template_document_path,
-          template_placeholders,
-          row_data,
-          project_id
-        )
-      `)
+      .select('id, status, job_config, total_reports, generation:generations(*)') // <-- CONSULTA CORREGIDA I SIMPLIFICADA
       .eq('id', jobId)
       .single();
 
-    if (error) {
-      throw new Error(`Error obtenint dades del job: ${error.message}`);
+    if (error || !job) {
+      // Aquest throw és el que genera l'error que veiem als logs, la qual cosa és correcte.
+      throw new Error(`Error obtenint dades del job: ${error?.message}`);
     }
 
+    // Comprovem que job_config no sigui null
+    if (!job.job_config) {
+      throw new Error(`El job_config per al job ${jobId} es null.`);
+    }
+    
     if (!job.generation) {
       throw new Error(`No s'ha trobat la generació associada al job ${jobId}`);
     }
 
-    return job;
+    console.log(`[Worker] Dades del job ${jobId} obtingudes correctament.`);
+    return job as any; // Afegim 'as any' per simplicitat de tipat en aquest punt
   }
 
   /**
