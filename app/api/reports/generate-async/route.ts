@@ -1,134 +1,109 @@
-import { NextRequest, NextResponse } from 'next/server'
-import { createServerSupabaseClient } from '@/lib/supabase/serverClient'
-import { documentProcessor } from '@/lib/workers/documentProcessor' // Canviat DocumentProcessor a documentProcessor
-import { readExcelFromStorage } from '@/util/excel/readExcelFromStorage'; // Pas 1: Importar la Utilitat de Lectura
+// CODI COMPLET I CORREGIT PER A: src/app/api/reports/generate-async/route.ts
+
+import { NextRequest, NextResponse } from 'next/server';
+import { createServerSupabaseClient } from '@/lib/supabase/serverClient';
+import { createClient } from '@supabase/supabase-js'; // Import per al client admin
+import { readExcelFromStorage } from '@/util/excel/readExcelFromStorage';
+import { GenerationJob, JobConfig } from '@/app/types';
+import { z } from 'zod';
+
+// Creació del client admin de Supabase per a operacions de backend
+const supabaseAdmin = createClient(
+  process.env.NEXT_PUBLIC_SUPABASE_URL!,
+  process.env.SUPABASE_SERVICE_ROLE_KEY!
+);
+
+const generateJobSchema = z.object({
+  projectId: z.string().uuid(),
+});
 
 export async function POST(request: NextRequest) {
-  console.log('🚀 Iniciant generació asíncrona d\'informes...')
-  
+  console.log('🚀 [generate-async] Iniciant creació de job de generació asíncrona...');
+
   try {
-    const { projectId } = await request.json()
-    
-    if (!projectId) {
-      return NextResponse.json({
-        success: false,
-        error: 'projectId és obligatori'
-      }, { status: 400 })
+    // 1. Autenticació i validació de l'entrada
+    const supabaseUserClient = await createServerSupabaseClient();
+    const { data: { user } } = await supabaseUserClient.auth.getUser();
+
+    if (!user) {
+      return NextResponse.json({ error: 'No autoritzat' }, { status: 401 });
     }
 
-    const supabase = await createServerSupabaseClient()
-    
-    // Obtenir informació del projecte
-    const { data: project, error: projectError } = await supabase
+    const body = await request.json();
+    const validation = generateJobSchema.safeParse(body);
+
+    if (!validation.success) {
+      return NextResponse.json({ error: 'Dades d\'entrada invàlides', details: validation.error.format() }, { status: 400 });
+    }
+    const { projectId } = validation.data;
+    console.log(`[generate-async] Usuari ${user.id} ha sol·licitat un job per al projecte ${projectId}`);
+
+    // 2. Obtenir la configuració del projecte i la plantilla associada
+    const { data: project, error: projectError } = await supabaseAdmin
       .from('projects')
-      .select(`
-        *,
-        template:plantilla_configs(id, config_name, base_docx_name, docx_storage_path, excel_file_name, excel_headers, link_mappings, ai_instructions, final_html, base_docx_storage_path, user_id, placeholder_docx_storage_path, indexed_docx_storage_path, paragraph_mappings, excel_storage_path, created_at, updated_at)
-      `)
+      .select('*, template:plantilla_configs(*)')
       .eq('id', projectId)
-      .single()
+      .single();
 
-    if (projectError || !project) {
-      throw new Error(`Projecte no trobat: ${projectError?.message}`)
+    if (projectError || !project || !project.template) {
+      throw new Error(`Projecte o plantilla associada no trobats: ${projectError?.message}`);
     }
+    console.log(`[generate-async] Configuració de plantilla "${project.template.config_name}" carregada.`);
 
-    // Pas 2: NOU BLOC DE CODI PER LLEGIR L'EXCEL
-    console.log('[API /reports/generate-async] Llegint Excel des de la configuració de la plantilla...');
-    const excelPath = project.template?.excel_storage_path;
+    // 3. Llegir les dades de l'Excel associat a la plantilla
+    const excelPath = project.template.excel_storage_path;
     if (!excelPath) {
-      return NextResponse.json({ error: 'La plantilla del projecte no té un fitxer Excel configurat.' }, { status: 400 });
+      throw new Error('La plantilla no té un fitxer Excel configurat.');
     }
-
-    const excelDataFromStorage = await readExcelFromStorage(excelPath);
-    if (!excelDataFromStorage || excelDataFromStorage.rows.length === 0) { // Corregit: excelDataFromStorage.rows.length
-      return NextResponse.json({ error: 'No s\'han trobat dades a l\'Excel o el fitxer està buit.' }, { status: 400 });
-    }
-    console.log(`[API /reports/generate-async] ${excelDataFromStorage.rows.length} files llegides de l'Excel.`); // Corregit: excelDataFromStorage.rows.length
-    // FI DEL NOU BLOC
-
-    // Obtenir totes les generacions del projecte
-    const { data: generations, error: generationsError } = await supabase
-      .from('generations')
-      .select('*')
-      .eq('project_id', projectId)
-      .eq('status', 'pending')
-
-    if (generationsError) {
-      throw new Error(`Error obtenint generacions: ${generationsError.message}`)
-    }
-
-    if (!generations || generations.length === 0) {
-      return NextResponse.json({
-        success: false,
-        error: 'No hi ha generacions pendents per processar'
-      }, { status: 400 })
-    }
-
-    // Comptar placeholders per calcular el progrés total
-    const totalPlaceholders = project.template?.prompts?.length || 0
-    const totalGenerations = generations.length
-    const totalTasks = totalPlaceholders * totalGenerations
-
-    // Crear job de generació per cada generation
-    const jobsToCreate = generations.map(generation => ({
-      generation_id: generation.id,
-      user_id: project.user_id,
-      status: 'pending',
-      progress: 0.00,
-      total_placeholders: totalPlaceholders,
-      completed_placeholders: 0,
-      job_config: {
-        project_id: projectId,
-        template_id: project.template_id,
-        excel_data: excelDataFromStorage, // Pas 3: Utilitzar les Dades Correctes
-        prompts: project.template?.prompts || []
-      }
-    }))
-
-    // Inserir els jobs a la base de dades
-    const { data: createdJobs, error: jobsError } = await supabase
-      .from('generation_jobs')
-      .insert(jobsToCreate)
-      .select('*')
-
-    if (jobsError) {
-      throw new Error(`Error creant jobs: ${jobsError.message}`)
-    }
-
-    // Iniciar processament REAL en background per cada job
-    // const processor = new DocumentProcessor() // Eliminat - utilitzem la instància importada
-    const processingPromises = createdJobs.map(job => 
-      documentProcessor.processJob(job.id).catch(error => { // Canviat processor a documentProcessor
-        console.error(`Error processant job ${job.id}:`, error)
-      })
-    )
-
-    // No esperem que acabin - processament asíncron real
-    Promise.all(processingPromises).catch(error => {
-      console.error('Error en processament asíncron real:', error)
-    })
-
-    console.log(`✅ ${createdJobs.length} jobs creats i iniciats`)
-
-    return NextResponse.json({
-      success: true,
-      message: `${createdJobs.length} jobs de generació iniciats`,
-      jobs: createdJobs.map(job => ({
-        id: job.id,
-        generation_id: job.generation_id,
-        status: job.status,
-        progress: job.progress
-      }))
-    })
     
-  } catch (error) {
-    console.error('❌ Error iniciant generació asíncrona:', error)
+    const excelData = await readExcelFromStorage(excelPath);
+    if (!excelData || !excelData.rows || excelData.rows.length === 0) {
+      throw new Error('No s\'han trobat dades a l\'Excel o el fitxer està buit.');
+    }
+    console.log(`[generate-async] ${excelData.rows.length} files llegides de l'Excel.`);
+
+    // 4. Preparar UNA ÚNICA configuració de feina (JobConfig)
+    const jobConfig: JobConfig = {
+      template_id: project.template.id,
+      project_id: project.id,
+      template_document_path: project.template.placeholder_docx_storage_path || project.template.base_docx_storage_path,
+      excel_data: excelData.rows, // <-- CORREGIT: Assignem l'array de files
+      prompts: project.template.ai_instructions || [], // <-- CORREGIT: Utilitzem ai_instructions
+    };
+
+    if (!jobConfig.template_document_path) {
+      throw new Error('La plantilla no té un document DOCX base configurat.');
+    }
+
+    // 5. Crear UN ÚNIC registre de job a la taula 'generation_jobs'
+    const newJobData: Partial<GenerationJob> = {
+      user_id: user.id,
+      project_id: project.id,
+      status: 'pending',
+      progress: 0,
+      job_config: jobConfig,
+    };
+
+    console.log('[generate-async] Creant nou job a la base de dades...');
+    const { data: createdJob, error: createJobError } = await supabaseAdmin
+      .from('generation_jobs')
+      .insert(newJobData)
+      .select()
+      .single();
+
+    if (createJobError) {
+      throw new Error(`Error creant el job a la base de dades: ${createJobError.message}`);
+    }
+
+    console.log(`[generate-async] ✅ Job ${createdJob.id} creat amb èxit. El webhook s'encarregarà de la resta.`);
+
     return NextResponse.json({
-      success: false,
-      error: error instanceof Error ? error.message : 'Error desconegut'
-    }, { status: 500 })
+      message: 'Job de generació creat amb èxit. El processament començarà en segon pla.',
+      job: createdJob,
+    }, { status: 201 });
+
+  } catch (error: any) {
+    console.error('❌ [generate-async] Error inesperat:', error.message);
+    return NextResponse.json({ error: 'Error intern del servidor.', details: error.message }, { status: 500 });
   }
 }
-
-// Ara utilitza el DocumentProcessor real per processar els jobs
-// Les funcions de simulació han estat eliminades perquè el Worker MVP real està implementat

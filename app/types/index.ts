@@ -184,3 +184,43 @@ export interface Content {
   created_at: string;
   updated_at: string;
 }
+
+/**
+ * Interfícies per al sistema de Jobs Asíncrons
+ */
+
+/**
+ * Interfície per a la configuració d'un job de generació.
+ * Aquest objecte es desa a la columna JSONB 'job_config' de la taula 'generation_jobs'.
+ */
+export interface JobConfig {
+  template_id: string;
+  project_id: string | null;
+  template_document_path: string;
+  excel_data: any[];
+  prompts: any[]; // Pot ser AIInstruction[]
+  template_name?: string;
+  num_excel_rows?: number;
+  num_prompts?: number;
+}
+
+/**
+ * Interfície per a un job de generació de la taula 'generation_jobs'.
+ */
+export interface GenerationJob {
+  id: string;
+  user_id: string;
+  project_id?: string;
+  template_id?: string;
+  generation_id?: string; // Si un job correspon a una única 'generation'
+  status: 'pending' | 'processing' | 'completed' | 'failed';
+  progress: number;
+  job_config: JobConfig;
+  total_placeholders?: number;
+  completed_placeholders?: number;
+  error_message?: string;
+  created_at: string;
+  updated_at: string;
+  started_at?: string;
+  completed_at?: string;
+}
