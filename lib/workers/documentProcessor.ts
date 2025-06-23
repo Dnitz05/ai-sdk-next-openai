@@ -34,20 +34,28 @@ export class DocumentProcessor {
       await this.updateJobStatus(jobId, 'processing', { started_at: new Date().toISOString() });
 
       const jobData = await this.getJobData(jobId);
-      if (!jobData || !jobData.generation) {
-        throw new Error(`No s'han trobat dades completes per al job ${jobId}`);
-      }
+      // getJobData ara llença un error si jobData o jobData.job_config és null/undefined.
+      // Assumim que job_config conté els camps necessaris que abans estaven a 'generation'.
+      const generationDetails = jobData.job_config as any; // Utilitzem 'as any' per simplicitat com a l'exemple de l'usuari
 
+      if (!generationDetails.template_document_path || !generationDetails.template_placeholders) {
+        throw new Error(`job_config per al job ${jobId} no conté template_document_path o template_placeholders.`);
+      }
+      
       console.log(`[Worker] Dades del job carregades:`, {
-        generationId: jobData.generation.id,
-        templatePath: jobData.generation.template_document_path,
-        placeholdersCount: jobData.generation.template_placeholders?.length || 0
+        // Si generationDetails (job_config) té un camp 'id' per a la generació:
+        // generationId: generationDetails.id, 
+        // Si no, potser l'ID del job és suficient o cal ajustar el que es desa a job_config.
+        // De moment, comentem generationId si no està clar d'on treure'l des de job_config.
+        // generationId: generationDetails.id, // Descomentar si job_config.id és l'ID de la generació
+        templatePath: generationDetails.template_document_path,
+        placeholdersCount: generationDetails.template_placeholders?.length || 0
       });
 
-      const templateBuffer = await this.downloadTemplateDocx(jobData.generation.template_document_path);
+      const templateBuffer = await this.downloadTemplateDocx(generationDetails.template_document_path);
 
       // --- LÒGICA PARAL·LELA: GENERAR CONTINGUT EN PARAL·LEL, APLICAR SEQÜENCIALMENT ---
-      const placeholders = jobData.generation.template_placeholders || [];
+      const placeholders = generationDetails.template_placeholders || [];
       if (placeholders.length === 0) {
         throw new Error("La plantilla no conté cap placeholder per processar.");
       }
@@ -72,7 +80,7 @@ export class DocumentProcessor {
           try {
             const aiContent = await this.generateAiContent(
               placeholderConfig, 
-              jobData.generation.row_data
+              generationDetails.row_data // Canviat de jobData.generation.row_data
             );
             
             console.log(`[Worker] ✅ Contingut generat per placeholder ${placeholderIndex} (${aiContent.length} chars)`);
@@ -176,14 +184,11 @@ export class DocumentProcessor {
     }
   }
 
-  /**
-   * Obté les dades completes del job incloent la generació associada
-   */
   private async getJobData(jobId: string) {
     console.log(`[Worker] Obtenint dades per al job ${jobId}`);
     const { data: job, error } = await supabaseAdmin
       .from('generation_jobs')
-      .select('id, status, job_config, total_reports, generation:generations(*)') // <-- CONSULTA CORREGIDA I SIMPLIFICADA
+      .select('id, status, job_config, total_reports') // <-- CONSULTA CORREGIDA I SIMPLIFICADA
       .eq('id', jobId)
       .single();
 
@@ -194,11 +199,7 @@ export class DocumentProcessor {
 
     // Comprovem que job_config no sigui null
     if (!job.job_config) {
-      throw new Error(`El job_config per al job ${jobId} es null.`);
-    }
-    
-    if (!job.generation) {
-      throw new Error(`No s'ha trobat la generació associada al job ${jobId}`);
+      throw new Error(`El job_config per al job ${jobId} és null.`);
     }
 
     console.log(`[Worker] Dades del job ${jobId} obtingudes correctament.`);
