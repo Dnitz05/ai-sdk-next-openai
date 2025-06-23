@@ -90,9 +90,10 @@ export async function POST(request: NextRequest) {
       completed_placeholders: 0,
       job_config: {
         project_id: projectId,
-        template_id: project.template_id,
+        template_id: template.id, // CORREGIT: Utilitzar template.id directe de l'objecte plantilla
         template_document_path: template.docx_storage_path,
-        prompts: template.ai_instructions || []
+        prompts: template.ai_instructions || [],
+        excel_data: [generation.row_data] // AFEGIT: Incloure les dades de la fila específica de l'Excel per aquest job
       },
       created_at: new Date().toISOString(),
       updated_at: new Date().toISOString()
