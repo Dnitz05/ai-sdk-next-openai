@@ -340,8 +340,10 @@ const ProjectDetailPage: React.FC = () => {
 
   const handleAsyncJobsCompleted = () => {
     setAsyncJobsActive(false);
-    // Recarregar dades del projecte
-    loadProjectData();
+    // Afegim un petit retard per donar temps a la BD a actualitzar-se abans de refrescar
+    setTimeout(() => {
+      loadProjectData();
+    }, 2000); // 2 segons de retard
   };
 
   if (loading) {
