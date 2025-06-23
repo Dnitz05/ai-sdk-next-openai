@@ -36,8 +36,7 @@ export async function POST(request: NextRequest) {
         *,
         projects!inner(
           user_id,
-          template_id,
-          plantilla_configs!inner(
+          template:plantilla_configs!inner(
             id,
             ai_instructions,
             docx_storage_path
@@ -58,7 +57,7 @@ export async function POST(request: NextRequest) {
     }
     
     const project = generation.projects;
-    const template = project.plantilla_configs;
+    const template = project.template;
 
     if (!template) {
         return NextResponse.json({ error: 'La plantilla associada no s\'ha trobat.' }, { status: 404 });
