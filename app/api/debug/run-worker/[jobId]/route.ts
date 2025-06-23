@@ -3,7 +3,7 @@
  * Permet provar el processament de jobs específics
  */
 
-import { DocumentProcessor } from '@/lib/workers/documentProcessor';
+import { documentProcessor } from '@/lib/workers/documentProcessor'; // Canviat DocumentProcessor a documentProcessor
 import { NextResponse } from 'next/server';
 
 export async function GET(
@@ -53,10 +53,10 @@ export async function GET(
     });
 
     // Executar el worker en segon pla (no bloquejar la resposta)
-    const processor = new DocumentProcessor();
+    // const processor = new DocumentProcessor(); // Eliminat - utilitzem la instància importada
     
     // Executar de manera asíncrona
-    processor.processJob(resolvedParams.jobId)
+    documentProcessor.processJob(resolvedParams.jobId) // Canviat processor a documentProcessor
       .then(() => {
         console.log(`[Debug] ✅ Worker completat amb èxit per al job: ${resolvedParams.jobId}`);
       })
@@ -148,8 +148,8 @@ export async function POST(
     console.log(`[Debug] Job resetejat a 'pending', iniciant worker...`);
 
     // Executar el worker
-    const processor = new DocumentProcessor();
-    processor.processJob(resolvedParams.jobId)
+    // const processor = new DocumentProcessor(); // Eliminat - utilitzem la instància importada
+    documentProcessor.processJob(resolvedParams.jobId) // Canviat processor a documentProcessor
       .then(() => {
         console.log(`[Debug] ✅ Worker RE-executat amb èxit per al job: ${resolvedParams.jobId}`);
       })

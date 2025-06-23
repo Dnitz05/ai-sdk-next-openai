@@ -5,7 +5,7 @@
  */
 
 import { NextRequest, NextResponse } from 'next/server';
-import { DocumentProcessor } from '@/lib/workers/documentProcessor';
+import { documentProcessor } from '@/lib/workers/documentProcessor'; // Canviat DocumentProcessor a documentProcessor
 
 export async function POST(request: NextRequest) {
   try {
@@ -69,10 +69,10 @@ export async function POST(request: NextRequest) {
     }
     
     // Iniciar el processament en background (no bloquejar la resposta del webhook)
-    const processor = new DocumentProcessor();
+    // const processor = new DocumentProcessor(); // Eliminat - utilitzem la instància importada
     
     // Executar de manera asíncrona
-    processor.processJob(jobId)
+    documentProcessor.processJob(jobId) // Canviat processor a documentProcessor
       .then(() => {
         console.log(`[Webhook] ✅ Worker completat amb èxit per al job: ${jobId}`);
       })

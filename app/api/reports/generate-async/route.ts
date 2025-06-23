@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createServerSupabaseClient } from '@/lib/supabase/serverClient'
-import { DocumentProcessor } from '@/lib/workers/documentProcessor'
+import { documentProcessor } from '@/lib/workers/documentProcessor' // Canviat DocumentProcessor a documentProcessor
 
 export async function POST(request: NextRequest) {
   console.log('🚀 Iniciant generació asíncrona d\'informes...')
@@ -81,9 +81,9 @@ export async function POST(request: NextRequest) {
     }
 
     // Iniciar processament REAL en background per cada job
-    const processor = new DocumentProcessor()
+    // const processor = new DocumentProcessor() // Eliminat - utilitzem la instància importada
     const processingPromises = createdJobs.map(job => 
-      processor.processJob(job.id).catch(error => {
+      documentProcessor.processJob(job.id).catch(error => { // Canviat processor a documentProcessor
         console.error(`Error processant job ${job.id}:`, error)
       })
     )
