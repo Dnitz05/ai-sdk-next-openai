@@ -264,8 +264,9 @@ const ProjectDetailPage: React.FC = () => {
         throw new Error(errorData.error || 'Error generant contingut');
       }
 
-      // Recarregar dades
-      await loadProjectData();
+      // Activar el monitor de progrés asíncron
+      setAsyncJobsActive(true);
+      setError(null);
 
     } catch (err) {
       console.error('Error generant:', err);
