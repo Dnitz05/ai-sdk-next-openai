@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createServerSupabaseClient } from '@/lib/supabase/serverClient'
 import { documentProcessor } from '@/lib/workers/documentProcessor' // Canviat DocumentProcessor a documentProcessor
+import { readExcelFromStorage } from '@/util/excel/readExcelFromStorage'; // Pas 1: Importar la Utilitat de Lectura
 
 export async function POST(request: NextRequest) {
   console.log('🚀 Iniciant generació asíncrona d\'informes...')
@@ -30,6 +31,20 @@ export async function POST(request: NextRequest) {
     if (projectError || !project) {
       throw new Error(`Projecte no trobat: ${projectError?.message}`)
     }
+
+    // Pas 2: NOU BLOC DE CODI PER LLEGIR L'EXCEL
+    console.log('[API /reports/generate-async] Llegint Excel des de la configuració de la plantilla...');
+    const excelPath = project.template?.excel_storage_path;
+    if (!excelPath) {
+      return NextResponse.json({ error: 'La plantilla del projecte no té un fitxer Excel configurat.' }, { status: 400 });
+    }
+
+    const excelDataFromStorage = await readExcelFromStorage(excelPath);
+    if (!excelDataFromStorage || excelDataFromStorage.rows.length === 0) { // Corregit: excelDataFromStorage.rows.length
+      return NextResponse.json({ error: 'No s\'han trobat dades a l\'Excel o el fitxer està buit.' }, { status: 400 });
+    }
+    console.log(`[API /reports/generate-async] ${excelDataFromStorage.rows.length} files llegides de l'Excel.`); // Corregit: excelDataFromStorage.rows.length
+    // FI DEL NOU BLOC
 
     // Obtenir totes les generacions del projecte
     const { data: generations, error: generationsError } = await supabase
@@ -65,7 +80,7 @@ export async function POST(request: NextRequest) {
       job_config: {
         project_id: projectId,
         template_id: project.template_id,
-        excel_data: project.excel_data,
+        excel_data: excelDataFromStorage, // Pas 3: Utilitzar les Dades Correctes
         prompts: project.template?.prompts || []
       }
     }))
