@@ -22,7 +22,7 @@ class DocumentProcessor {
     console.log(`[Worker] Obtenint dades per al job ${jobId}`);
     const { data: job, error } = await this.supabase
       .from('generation_jobs')
-      .select('id, status, job_config') // <-- CONSULTA FINAL I MÍNIMA
+      .select('*') // <-- SELECCIONEM TOT PER ASSEGURAR QUE TENIM TOTES LES DADES
       .eq('id', jobId)
       .single();
 
