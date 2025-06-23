@@ -72,18 +72,19 @@ export async function POST(request: NextRequest) {
     const jobToCreate = {
       generation_id: generation.id,
       user_id: user.id,
-      project_id: generation.project_id,
+      // project_id: generation.project_id, // ELIMINAT: Aquesta columna no existeix a la taula generation_jobs
       status: 'pending' as const,
       progress: 0,
       total_placeholders: totalPlaceholders,
       completed_placeholders: 0,
       job_config: {
-        project_id: generation.project_id,
+        project_id: generation.project_id, // Correcte: project_id dins de job_config
         template_id: template.id,
         template_document_path: template.docx_storage_path,
         prompts: template.ai_instructions || [],
         excel_data: [generation.row_data] // Important: passem només la fila d'aquesta generació
       }
+      // created_at i updated_at seran gestionats per la BD per defecte
     };
 
     // 3. Inserir el nou job a la base de dades
