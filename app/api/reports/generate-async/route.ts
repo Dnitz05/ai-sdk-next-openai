@@ -49,6 +49,12 @@ export async function POST(request: NextRequest) {
       throw new Error(`Projecte o plantilla associada no trobats: ${projectError?.message}`);
     }
     console.log(`[generate-async] Configuració de plantilla "${project.template.config_name}" carregada.`);
+    console.log(`[generate-async] DEBUG: Detalls de la plantilla recuperada:`);
+    console.log(`[generate-async]   - template_id: ${project.template.id}`);
+    console.log(`[generate-async]   - base_docx_storage_path: ${project.template.base_docx_storage_path}`);
+    console.log(`[generate-async]   - placeholder_docx_storage_path: ${project.template.placeholder_docx_storage_path}`);
+    console.log(`[generate-async]   - indexed_docx_storage_path: ${project.template.indexed_docx_storage_path}`);
+
 
     // 3. Llegir les dades de l'Excel associat a la plantilla
     const excelPath = project.template.excel_storage_path;
