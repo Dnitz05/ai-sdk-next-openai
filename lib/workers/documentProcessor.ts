@@ -69,8 +69,12 @@ class DocumentProcessor {
       let completedCount = 0;
       let hasErrors = false;
 
+      console.log(`[Worker] Iniciant bucle de prompts per al job ${jobId}. Total prompts: ${prompts.length}`);
       for (const prompt of prompts) {
         try {
+          console.log(`[Worker] Processant prompt object per al job ${jobId}:`, JSON.stringify(prompt, null, 2));
+          console.log(`[Worker] Utilitzant rowData per al job ${jobId}:`, JSON.stringify(rowData, null, 2));
+
           const mistralPrompt = CONTENT_GENERATION_PROMPT(
             prompt.prompt,
             rowData,
@@ -98,6 +102,7 @@ class DocumentProcessor {
           }
 
           const mistralData = await mistralResponse.json();
+          console.log(`[Worker] Resposta de Mistral AI per al job ${jobId} (prompt ${prompt.paragraphId}):`, JSON.stringify(mistralData, null, 2));
           const generatedContent = mistralData.choices?.[0]?.message?.content;
 
           if (!generatedContent) {
@@ -110,6 +115,8 @@ class DocumentProcessor {
             final_content: generatedContent.trim(),
             is_refined: false,
           }, { onConflict: 'generation_id,placeholder_id' });
+          
+          console.log(`[Worker] Contingut desat per al job ${jobId} (prompt ${prompt.paragraphId}). ID del contingut: (revisar a la BD)`);
 
           completedCount++;
           await this.updateProgress(jobId, completedCount, prompts.length);
