@@ -8,11 +8,24 @@ const supabaseAdmin = createClient(
 
 export async function getDocxTextContent(storagePath: string): Promise<string> {
   try {
+    console.log(`[readDocxFromStorage] Intentant descarregar el document des de la ruta: "${storagePath}"`);
     const { data, error } = await supabaseAdmin.storage.from('documents').download(storagePath);
 
     if (error) {
-      console.error(`[readDocxFromStorage] Supabase storage error details for path "${storagePath}":`, JSON.stringify(error, null, 2));
-      throw new Error(`Error descarregant el document: ${error.message || 'Unknown Supabase storage error'}`);
+      let errorMessage = 'Error desconegut de Supabase Storage.';
+      if (error.message) errorMessage = error.message;
+      
+      console.error(`[readDocxFromStorage] Error de Supabase Storage en descarregar "${storagePath}":`);
+      console.error(`  Nom de l'error: ${error.name}`);
+      console.error(`  Missatge: ${error.message}`);
+      console.error(`  Stack: ${error.stack}`);
+      // Supabase StorageError pot tenir propietats addicionals
+      if ((error as any).status) console.error(`  Status: ${(error as any).status}`);
+      if ((error as any).details) console.error(`  Details: ${(error as any).details}`);
+      if ((error as any).error_description) console.error(`  Error Description: ${(error as any).error_description}`);
+      console.error(`  Error complet (JSON): ${JSON.stringify(error, null, 2)}`);
+
+      throw new Error(`Error descarregant el document "${storagePath}": ${errorMessage}`);
     }
 
     if (!data) {

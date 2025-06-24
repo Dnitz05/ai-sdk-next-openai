@@ -67,7 +67,23 @@ class DocumentProcessor {
         throw new Error('La configuració del job no conté prompts.');
       }
 
-      const fullDocumentText = await getDocxTextContent(config.template_document_path);
+      console.log(`[Worker] Intentant obtenir contingut del document des de: ${config.template_document_path}`);
+      if (!config.template_document_path) {
+        throw new Error(`[Worker] template_document_path és null o undefined per al job ${jobId}. No es pot continuar.`);
+      }
+      
+      let fullDocumentText;
+      try {
+        fullDocumentText = await getDocxTextContent(config.template_document_path);
+        console.log(`[Worker] Contingut del document obtingut amb èxit per al job ${jobId}. Longitud: ${fullDocumentText?.length}`);
+      } catch (docError: any) {
+        console.error(`[Worker] Error crític obtenint contingut del document per al job ${jobId} des de ${config.template_document_path}:`, docError.message, docError.stack);
+        throw new Error(`Error obtenint el document base: ${docError.message}`);
+      }
+      
+      if (!fullDocumentText) {
+        throw new Error(`[Worker] El contingut del document llegit des de ${config.template_document_path} és buit o invàlid per al job ${jobId}.`);
+      }
 
       let completedCount = 0;
       let hasErrors = false;
