@@ -70,13 +70,16 @@ export async function POST(request: NextRequest) {
     const jobConfig: JobConfig = {
       template_id: project.template.id,
       project_id: project.id,
-      template_document_path: project.template.placeholder_docx_storage_path || project.template.base_docx_storage_path,
-      excel_data: excelData.rows, // <-- CORREGIT: Assignem l'array de files
-      prompts: project.template.ai_instructions || [], // <-- CORREGIT: Utilitzem ai_instructions
+      template_document_path: (project.template.placeholder_docx_storage_path && project.template.placeholder_docx_storage_path.trim() !== '') 
+                              ? project.template.placeholder_docx_storage_path 
+                              : project.template.base_docx_storage_path,
+      excel_data: excelData.rows, 
+      prompts: project.template.ai_instructions || [], 
     };
 
-    if (!jobConfig.template_document_path) {
-      throw new Error('La plantilla no té un document DOCX base configurat.');
+    if (!jobConfig.template_document_path || jobConfig.template_document_path.trim() === '') {
+      console.error(`[generate-async] Error: template_document_path és invàlid. placeholder_path: '${project.template.placeholder_docx_storage_path}', base_path: '${project.template.base_docx_storage_path}'`);
+      throw new Error('La plantilla no té un document DOCX (ni base ni placeholder) configurat correctament.');
     }
 
     // 5. Crear UN ÚNIC registre de job a la taula 'generation_jobs'
