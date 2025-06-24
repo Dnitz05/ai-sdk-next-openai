@@ -18,7 +18,14 @@ ${excelData ? `DADES EXCEL DISPONIBLES: ${JSON.stringify(excelData, null, 2)}` :
 
 ${baseText ? `TEXT BASE DEL DOCUMENT: ${baseText}` : ''}
 
-INSTRUCCIÓ: Genera el contingut final per aquest paràgraf del document. El contingut ha de ser coherent amb la instrucció proporcionada i utilitzar les dades Excel quan sigui rellevant. Retorna només el text final, sense explicacions addicionals.
+INSTRUCCIÓ: La teva tasca és completar el paràgraf proporcionat a "TEXT BASE DEL DOCUMENT". Aquest text conté placeholders (marcadors de posició) que has de substituir amb els valors corresponents de les "DADES EXCEL DISPONIBLES".
+
+Regles importants:
+1.  **Substitució directa**: Reemplaça cada placeholder (p. ex., \`[NOM]\`, \`[IMPORT]\`) únicament amb el valor corresponent de les dades Excel.
+2.  **No modificar el text base**: Conserva l'estructura, la redacció i la puntuació del text base intactes. No has d'afegir paraules, frases ni canviar el format.
+3.  **No interpretar**: No generis frases noves ni facis resums. La teva única funció és omplir els buits.
+
+Retorna només el paràgraf complet amb les dades inserides, sense cap explicació addicional.
 `;
 
 /**
