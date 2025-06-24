@@ -108,6 +108,13 @@ export async function GET(request: NextRequest) {
     }
     
     console.log(`[API reports/content] ✅ Retornant ${content.length} elements de contingut per a la generació ${generationId}`);
+
+    const mappedContent = content.map((c: any) => ({
+      ...c,
+      generated_text: c.final_content, // Mapejar final_content a generated_text
+      // Opcional: eliminar final_content si no es vol duplicar i estalviar bytes
+      // final_content: undefined, 
+    }));
     
     return NextResponse.json({
       generation: {
@@ -118,7 +125,7 @@ export async function GET(request: NextRequest) {
         project_name: (generationCheck as any).projects.project_name,
         template_name: (generationCheck as any).projects.plantilla_configs.config_name
       },
-      content: content,
+      content: mappedContent, // Retornar el contingut mapejat
       ai_instructions: (generationCheck as any).projects.plantilla_configs.ai_instructions || []
     }, { status: 200 });
     
