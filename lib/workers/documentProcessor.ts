@@ -4,6 +4,7 @@ import {
   MISTRAL_CONFIG
 } from '@/lib/ai/system-prompts';
 import { JobConfig } from '@/app/types';
+import { getDocxTextContent } from '@/util/docx/readDocxFromStorage';
 
 const supabaseAdmin = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -66,6 +67,8 @@ class DocumentProcessor {
         throw new Error('La configuració del job no conté prompts.');
       }
 
+      const fullDocumentText = await getDocxTextContent(config.template_document_path);
+
       let completedCount = 0;
       let hasErrors = false;
 
@@ -78,7 +81,7 @@ class DocumentProcessor {
           const mistralPrompt = CONTENT_GENERATION_PROMPT(
             prompt.prompt,
             rowData,
-            prompt.useExistingText ? prompt.originalParagraphText : undefined
+            fullDocumentText
           );
 
           const mistralResponse = await fetch('https://api.mistral.ai/v1/chat/completions', {
@@ -103,12 +106,20 @@ class DocumentProcessor {
 
           const mistralData = await mistralResponse.json();
           console.log(`[Worker] Resposta de Mistral AI per al job ${jobId} (prompt ${prompt.paragraphId}):`, JSON.stringify(mistralData, null, 2));
-          const generatedContent = mistralData.choices?.[0]?.message?.content;
+          const fullGeneratedText = mistralData.choices?.[0]?.message?.content;
 
-          if (!generatedContent) {
+          if (!fullGeneratedText) {
             console.error(`[Worker] Contingut generat per Mistral AI és buit o invàlid per al job ${jobId} (prompt ${prompt.paragraphId}). Resposta completa:`, JSON.stringify(mistralData, null, 2));
             throw new Error('Mistral AI ha retornat contingut buit');
           }
+
+          // Find the specific paragraph in the full text
+          const paragraphs = fullGeneratedText.split('\n\n');
+          const originalParagraphs = (await getDocxTextContent(config.template_document_path)).split('\n\n');
+          const promptIndex = originalParagraphs.findIndex(p => p.includes(prompt.originalParagraphText));
+          
+          const generatedContent = paragraphs[promptIndex] || fullGeneratedText;
+
           console.log(`[Worker] Contingut generat per Mistral AI per al job ${jobId} (prompt ${prompt.paragraphId}): "${generatedContent.trim()}"`);
 
           const { error: upsertError } = await this.supabase.from('generated_content').upsert({
