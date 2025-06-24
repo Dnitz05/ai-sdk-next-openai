@@ -106,17 +106,24 @@ class DocumentProcessor {
           const generatedContent = mistralData.choices?.[0]?.message?.content;
 
           if (!generatedContent) {
+            console.error(`[Worker] Contingut generat per Mistral AI és buit o invàlid per al job ${jobId} (prompt ${prompt.paragraphId}). Resposta completa:`, JSON.stringify(mistralData, null, 2));
             throw new Error('Mistral AI ha retornat contingut buit');
           }
+          console.log(`[Worker] Contingut generat per Mistral AI per al job ${jobId} (prompt ${prompt.paragraphId}): "${generatedContent.trim()}"`);
 
-          await this.supabase.from('generated_content').upsert({
+          const { error: upsertError } = await this.supabase.from('generated_content').upsert({
             generation_id: generation.id,
-            placeholder_id: prompt.paragraphId,
+            placeholder_id: prompt.paragraphId, // Assegura't que prompt.paragraphId és el correcte i existeix a la plantilla
             final_content: generatedContent.trim(),
             is_refined: false,
           }, { onConflict: 'generation_id,placeholder_id' });
           
-          console.log(`[Worker] Contingut desat per al job ${jobId} (prompt ${prompt.paragraphId}). ID del contingut: (revisar a la BD)`);
+          if (upsertError) {
+            console.error(`[Worker] Error desant contingut a generated_content per al job ${jobId} (prompt ${prompt.paragraphId}):`, JSON.stringify(upsertError, null, 2));
+            throw new Error(`Error desant contingut: ${upsertError.message}`);
+          } else {
+            console.log(`[Worker] ✅ Contingut desat correctament a generated_content per al job ${jobId} (prompt ${prompt.paragraphId})`);
+          }
 
           completedCount++;
           await this.updateProgress(jobId, completedCount, prompts.length);
