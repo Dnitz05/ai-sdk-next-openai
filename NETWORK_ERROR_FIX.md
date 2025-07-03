@@ -129,10 +129,12 @@ Durant les proves, es va descobrir un **bucle de renderització infinit** al com
 El callback `onAllJobsCompleted()` estava causant re-renderitzacions del component pare, que a la vegada desmuntava i tornava a muntar `AsyncJobProgress`, creant un cicle infinit.
 
 ### Solució Implementada:
-1. **Flag de notificació única**: `hasNotifiedCompletion` per evitar múltiples callbacks
-2. **setTimeout per diferir**: Callback executat amb 100ms de delay per evitar re-renderització immediata
-3. **Reset d'estat**: Quan canvia el `projectId`, es reseteja l'estat completament
-4. **Cleanup robust**: Millor gestió del cleanup dels intervals
+1. **useRef per gestió d'interval**: `intervalRef` per control directe de l'interval
+2. **Flag isFinishedRef**: Evita que l'interval continuï executant-se després d'acabar
+3. **Flag de notificació única**: `hasNotifiedCompletion` per evitar múltiples callbacks
+4. **setTimeout per diferir**: Callback executat amb 100ms de delay per evitar re-renderització immediata
+5. **Reset d'estat complet**: Quan canvia el `projectId`, es reseteja tot l'estat
+6. **Cleanup ultra-robust**: Gestió directa dels intervals amb useRef
 
 ## Resultat Esperat
 

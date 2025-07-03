@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 
 interface Job {
   id: string
@@ -38,8 +38,11 @@ export default function AsyncJobProgress({ projectId, onAllJobsCompleted }: Asyn
   const [summary, setSummary] = useState<JobsSummary | null>(null)
   const [isLoading, setIsLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
-  const [refreshInterval, setRefreshInterval] = useState<NodeJS.Timeout | null>(null)
   const [hasNotifiedCompletion, setHasNotifiedCompletion] = useState(false)
+  
+  // Usar useRef per gestionar l'interval directament
+  const intervalRef = useRef<NodeJS.Timeout | null>(null)
+  const isFinishedRef = useRef(false)
 
   // Funció per obtenir l'estat dels jobs amb retry logic
   const fetchJobsStatus = async (retryCount = 0) => {
@@ -83,12 +86,15 @@ export default function AsyncJobProgress({ projectId, onAllJobsCompleted }: Asyn
                         data.summary.overall_status === 'failed' ||
                         (data.summary.processing_jobs === 0 && data.summary.pending_jobs === 0);
       
-      if (isFinished) {
+      if (isFinished && !isFinishedRef.current) {
         console.log(`[AsyncJobProgress] Jobs finished with status: ${data.summary.overall_status}`);
+        isFinishedRef.current = true;
         
-        if (refreshInterval) {
-          clearInterval(refreshInterval);
-          setRefreshInterval(null);
+        // Aturar l'interval immediatament
+        if (intervalRef.current) {
+          console.log(`[AsyncJobProgress] Clearing interval`);
+          clearInterval(intervalRef.current);
+          intervalRef.current = null;
         }
         
         // Només notificar una vegada quan es completen tots els jobs
@@ -139,22 +145,33 @@ export default function AsyncJobProgress({ projectId, onAllJobsCompleted }: Asyn
     setHasNotifiedCompletion(false);
     setError(null);
     setIsLoading(true);
+    isFinishedRef.current = false;
+    
+    // Netejar interval anterior si existeix
+    if (intervalRef.current) {
+      clearInterval(intervalRef.current);
+      intervalRef.current = null;
+    }
     
     // Fetch inicial
     fetchJobsStatus();
     
-    // Crear nou interval
-    const interval = setInterval(() => {
-      fetchJobsStatus();
-    }, 2000);
-    
-    setRefreshInterval(interval);
+    // Crear nou interval només si els jobs no han acabat
+    if (!isFinishedRef.current) {
+      intervalRef.current = setInterval(() => {
+        if (!isFinishedRef.current) {
+          fetchJobsStatus();
+        }
+      }, 2000);
+    }
     
     // Cleanup function per evitar memory leaks
     return () => {
       console.log(`[AsyncJobProgress] Component unmounting for project ${projectId}`);
-      clearInterval(interval);
-      setRefreshInterval(null);
+      if (intervalRef.current) {
+        clearInterval(intervalRef.current);
+        intervalRef.current = null;
+      }
     }
   }, [projectId]) // Només re-executar si canvia el projectId
 
