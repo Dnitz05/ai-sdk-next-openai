@@ -51,11 +51,59 @@ class DocumentProcessor {
       await this.updateJobStatus(jobId, 'processing', { started_at: new Date().toISOString() });
 
       jobData = await this.getJobData(jobId);
-      const config = jobData.job_config as JobConfig;
+      let config = jobData.job_config as JobConfig;
       const generation = jobData.generation;
 
       if (!generation) {
         throw new Error(`No s'ha trobat la 'generation' associada al job ${jobId}`);
+      }
+
+      // 🔥 FALLBACK: Convertir configuracions antigues a la nova arquitectura
+      if (!config.context_document_path || !config.template_document_path) {
+        console.log(`[Worker] 🔄 MIGRANT configuració antiga per al job ${jobId}`);
+        
+        // Obtenir la configuració de la plantilla per construir els paths
+        const { data: templateData, error: templateError } = await this.supabase
+          .from('plantilla_configs')
+          .select('base_docx_storage_path, placeholder_docx_storage_path, indexed_docx_storage_path')
+          .eq('id', config.template_id)
+          .single();
+
+        if (templateError || !templateData) {
+          throw new Error(`Error obtenint configuració de plantilla ${config.template_id}: ${templateError?.message}`);
+        }
+
+        // Assignar context_document_path
+        if (!config.context_document_path) {
+          if (templateData.base_docx_storage_path) {
+            config.context_document_path = templateData.base_docx_storage_path;
+            console.log(`[Worker] ✅ Context document assignat: ${config.context_document_path}`);
+          } else {
+            throw new Error(`[Worker] No s'ha pogut determinar context_document_path per al job ${jobId}. La plantilla ${config.template_id} no té base_docx_storage_path.`);
+          }
+        }
+
+        // Assignar template_document_path amb fallbacks
+        if (!config.template_document_path) {
+          if (templateData.placeholder_docx_storage_path) {
+            config.template_document_path = templateData.placeholder_docx_storage_path;
+            console.log(`[Worker] ✅ Template document assignat (placeholder): ${config.template_document_path}`);
+          } else if (templateData.indexed_docx_storage_path) {
+            config.template_document_path = templateData.indexed_docx_storage_path;
+            console.log(`[Worker] ✅ Template document assignat (indexed): ${config.template_document_path}`);
+          } else {
+            config.template_document_path = config.context_document_path;
+            console.log(`[Worker] ⚠️ Template document assignat (base com a fallback): ${config.template_document_path}`);
+          }
+        }
+
+        // Actualitzar la configuració del job a la base de dades per futures execucions
+        await this.supabase
+          .from('generation_jobs')
+          .update({ job_config: config })
+          .eq('id', jobId);
+
+        console.log(`[Worker] ✅ Configuració del job ${jobId} migrada i actualitzada`);
       }
 
       const rowData = config.excel_data?.[0];
