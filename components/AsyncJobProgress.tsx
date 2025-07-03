@@ -40,19 +40,42 @@ export default function AsyncJobProgress({ projectId, onAllJobsCompleted }: Asyn
   const [error, setError] = useState<string | null>(null)
   const [refreshInterval, setRefreshInterval] = useState<NodeJS.Timeout | null>(null)
 
-  // Funció per obtenir l'estat dels jobs
-  const fetchJobsStatus = async () => {
+  // Funció per obtenir l'estat dels jobs amb retry logic
+  const fetchJobsStatus = async (retryCount = 0) => {
+    const maxRetries = 3;
+    const retryDelay = Math.min(1000 * Math.pow(2, retryCount), 10000); // Exponential backoff, max 10s
+    
     try {
-      const response = await fetch(`/api/reports/jobs-status?projectId=${projectId}`)
-      const data = await response.json()
+      console.log(`[AsyncJobProgress] Fetching jobs status for project ${projectId} (attempt ${retryCount + 1})`);
       
-      if (!data.success) {
-        throw new Error(data.error)
+      // Afegir timeout a la request
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 10000); // 10 segons timeout
+      
+      const response = await fetch(`/api/reports/jobs-status?projectId=${projectId}`, {
+        signal: controller.signal,
+        headers: {
+          'Cache-Control': 'no-cache',
+          'Pragma': 'no-cache'
+        }
+      });
+      
+      clearTimeout(timeoutId);
+      
+      if (!response.ok) {
+        throw new Error(`HTTP ${response.status}: ${response.statusText}`);
       }
       
-      setJobs(data.jobs)
-      setSummary(data.summary)
-      setError(null)
+      const data = await response.json();
+      
+      if (!data.success) {
+        throw new Error(data.error || 'API returned success: false');
+      }
+      
+      console.log(`[AsyncJobProgress] ✅ Jobs status fetched successfully`);
+      setJobs(data.jobs);
+      setSummary(data.summary);
+      setError(null);
       
       // Si tots els jobs han acabat, aturar l'interval
       if (data.summary.overall_status === 'completed' || 
@@ -60,19 +83,39 @@ export default function AsyncJobProgress({ projectId, onAllJobsCompleted }: Asyn
           (data.summary.processing_jobs === 0 && data.summary.pending_jobs === 0)) {
         
         if (refreshInterval) {
-          clearInterval(refreshInterval)
-          setRefreshInterval(null)
+          clearInterval(refreshInterval);
+          setRefreshInterval(null);
         }
         
         if (data.summary.overall_status === 'completed' && onAllJobsCompleted) {
-          onAllJobsCompleted()
+          onAllJobsCompleted();
         }
       }
       
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Error desconegut')
+      console.error(`[AsyncJobProgress] ❌ Error fetching jobs status (attempt ${retryCount + 1}):`, err);
+      
+      const errorMessage = err instanceof Error ? err.message : 'Error desconegut';
+      
+      // Si és un error de xarxa i encara tenim retries disponibles
+      if (retryCount < maxRetries && (
+        errorMessage.includes('fetch') || 
+        errorMessage.includes('network') || 
+        errorMessage.includes('INTERNET_DISCONNECTED') ||
+        errorMessage.includes('timeout') ||
+        err instanceof TypeError
+      )) {
+        console.log(`[AsyncJobProgress] 🔄 Retrying in ${retryDelay}ms...`);
+        setTimeout(() => {
+          fetchJobsStatus(retryCount + 1);
+        }, retryDelay);
+        return;
+      }
+      
+      // Si hem exhaurit els retries o és un error diferent
+      setError(`${errorMessage} (després de ${retryCount + 1} intents)`);
     } finally {
-      setIsLoading(false)
+      setIsLoading(false);
     }
   }
 
