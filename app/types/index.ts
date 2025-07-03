@@ -192,13 +192,21 @@ export interface Content {
 /**
  * Interfície per a la configuració d'un job de generació.
  * Aquest objecte es desa a la columna JSONB 'job_config' de la taula 'generation_jobs'.
+ * 
+ * ARQUITECTURA CORREGIDA:
+ * - context_document_path: Document original per obtenir context per la IA
+ * - template_document_path: Document amb placeholders per substitucions finals
  */
 export interface JobConfig {
   template_id: string;
   project_id: string | null;
-  template_document_path: string;
+  
+  // 🔥 SEPARACIÓ CLARA DE DOCUMENTS
+  context_document_path: string;    // Per llegir context per la IA (base_docx_storage_path)
+  template_document_path: string;   // Per substitucions finals (placeholder_docx_storage_path)
+  
   excel_data: any[];
-  prompts: any[]; // Pot ser AIInstruction[]
+  prompts: AIInstruction[]; // Ara tipat correctament
   template_name?: string;
   num_excel_rows?: number;
   num_prompts?: number;

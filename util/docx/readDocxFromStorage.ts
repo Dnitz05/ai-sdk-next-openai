@@ -41,3 +41,30 @@ export async function getDocxTextContent(storagePath: string): Promise<string> {
     throw err;
   }
 }
+
+/**
+ * Llegeix un document DOCX des de Supabase Storage i retorna el buffer
+ * @param storagePath Path del document a Supabase Storage
+ * @returns Buffer del document
+ */
+export async function readDocxFromStorage(storagePath: string): Promise<Buffer> {
+  try {
+    console.log(`[readDocxFromStorage] Descarregant buffer del document des de: "${storagePath}"`);
+    const { data, error } = await supabaseAdmin.storage.from('documents').download(storagePath);
+
+    if (error) {
+      console.error(`[readDocxFromStorage] Error de Supabase Storage:`, error);
+      throw new Error(`Error descarregant el document "${storagePath}": ${error.message}`);
+    }
+
+    if (!data) {
+      throw new Error(`No s'han rebut dades del document des de Supabase storage per a la ruta: ${storagePath}`);
+    }
+
+    const arrayBuffer = await data.arrayBuffer();
+    return Buffer.from(arrayBuffer);
+  } catch (err) {
+    console.error(`[readDocxFromStorage] Error obtenint buffer del document ${storagePath}:`, err);
+    throw err;
+  }
+}

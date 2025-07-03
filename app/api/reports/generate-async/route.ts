@@ -72,20 +72,50 @@ export async function POST(request: NextRequest) {
     console.log('[generate-async] Mostra de dades Excel (primeres 2 files):', JSON.stringify(excelData.rows.slice(0, 2), null, 2));
 
 
-    // 4. Preparar UNA ÚNICA configuració de feina (JobConfig)
+    // 4. NOVA ARQUITECTURA: Preparar configuració de feina amb DOCUMENTS SEPARATS
+    let contextDocumentPath = null;
+    let templateDocumentPath = null;
+    
+    // STEP A: Validar context_document_path (document original per la IA)
+    if (project.template.base_docx_storage_path && project.template.base_docx_storage_path.trim() !== '') {
+      contextDocumentPath = project.template.base_docx_storage_path;
+      console.log(`[generate-async] ✅ Context document (per IA): ${contextDocumentPath}`);
+    } else {
+      throw new Error(`La plantilla "${project.template.config_name}" no té un document original (base_docx_storage_path) configurat. Això és necessari per generar context per la IA.`);
+    }
+    
+    // STEP B: Validar template_document_path (document amb placeholders per substitucions)
+    if (project.template.placeholder_docx_storage_path && project.template.placeholder_docx_storage_path.trim() !== '') {
+      templateDocumentPath = project.template.placeholder_docx_storage_path;
+      console.log(`[generate-async] ✅ Template document (per substitucions): ${templateDocumentPath}`);
+    } 
+    // Si no hi ha placeholder_docx, utilitzar indexed_docx com a fallback
+    else if (project.template.indexed_docx_storage_path && project.template.indexed_docx_storage_path.trim() !== '') {
+      templateDocumentPath = project.template.indexed_docx_storage_path;
+      console.log(`[generate-async] ⚠️ Utilitzant indexed_docx_storage_path com a template: ${templateDocumentPath}`);
+    }
+    // Com a últim recurs, duplicar el base_docx (no ideal, però funcional)
+    else {
+      templateDocumentPath = contextDocumentPath;
+      console.log(`[generate-async] ⚠️ WARNING: Utilitzant base_docx_storage_path també com a template. Recomanem generar un placeholder_docx_storage_path.`);
+    }
+
     const jobConfig: JobConfig = {
       template_id: project.template.id,
       project_id: project.id,
-      template_document_path: (project.template.placeholder_docx_storage_path && project.template.placeholder_docx_storage_path.trim() !== '') 
-                              ? project.template.placeholder_docx_storage_path 
-                              : project.template.base_docx_storage_path,
+      context_document_path: contextDocumentPath,     // Document original per context IA
+      template_document_path: templateDocumentPath,   // Document plantilla per substitucions
       excel_data: excelData.rows, 
       prompts: project.template.ai_instructions || [], 
     };
 
-    if (!jobConfig.template_document_path || jobConfig.template_document_path.trim() === '') {
-      console.error(`[generate-async] Error: template_document_path és invàlid. placeholder_path: '${project.template.placeholder_docx_storage_path}', base_path: '${project.template.base_docx_storage_path}'`);
-      throw new Error('La plantilla no té un document DOCX (ni base ni placeholder) configurat correctament.');
+    // Validació final
+    if (!jobConfig.context_document_path || !jobConfig.template_document_path) {
+      console.error(`[generate-async] ERROR: Paths de documents no vàlids`, {
+        context_path: jobConfig.context_document_path,
+        template_path: jobConfig.template_document_path
+      });
+      throw new Error('Error intern: no s\'han pogut determinar paths de documents vàlids.');
     }
 
     // 5. Crear UN ÚNIC registre de job a la taula 'generation_jobs'

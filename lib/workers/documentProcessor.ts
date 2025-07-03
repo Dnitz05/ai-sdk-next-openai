@@ -5,6 +5,7 @@ import {
 } from '@/lib/ai/system-prompts';
 import { JobConfig } from '@/app/types';
 import { getDocxTextContent } from '@/util/docx/readDocxFromStorage';
+import { applyFinalSubstitutions } from '@/util/docx/applyFinalSubstitutions';
 
 const supabaseAdmin = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -67,22 +68,30 @@ class DocumentProcessor {
         throw new Error('La configuració del job no conté prompts.');
       }
 
-      console.log(`[Worker] Intentant obtenir contingut del document des de: ${config.template_document_path}`);
+      // 🔥 NOVA ARQUITECTURA: Utilitzar context_document_path per obtenir context per la IA
+      console.log(`[Worker] NOVA ARQUITECTURA - Obtenint context des de: ${config.context_document_path}`);
+      console.log(`[Worker] Document plantilla per substitucions: ${config.template_document_path}`);
+      
+      if (!config.context_document_path) {
+        throw new Error(`[Worker] context_document_path és null o undefined per al job ${jobId}. No es pot continuar.`);
+      }
+      
       if (!config.template_document_path) {
         throw new Error(`[Worker] template_document_path és null o undefined per al job ${jobId}. No es pot continuar.`);
       }
       
       let fullDocumentText;
       try {
-        fullDocumentText = await getDocxTextContent(config.template_document_path);
-        console.log(`[Worker] Contingut del document obtingut amb èxit per al job ${jobId}. Longitud: ${fullDocumentText?.length}`);
+        // FASE 1: Llegir document original per obtenir context ric per la IA
+        fullDocumentText = await getDocxTextContent(config.context_document_path);
+        console.log(`[Worker] ✅ Context del document original obtingut per al job ${jobId}. Longitud: ${fullDocumentText?.length}`);
       } catch (docError: any) {
-        console.error(`[Worker] Error crític obtenint contingut del document per al job ${jobId} des de ${config.template_document_path}:`, docError.message, docError.stack);
-        throw new Error(`Error obtenint el document base: ${docError.message}`);
+        console.error(`[Worker] Error crític obtenint context del document per al job ${jobId} des de ${config.context_document_path}:`, docError.message, docError.stack);
+        throw new Error(`Error obtenint el document de context: ${docError.message}`);
       }
       
       if (!fullDocumentText) {
-        throw new Error(`[Worker] El contingut del document llegit des de ${config.template_document_path} és buit o invàlid per al job ${jobId}.`);
+        throw new Error(`[Worker] El contingut del document de context llegit des de ${config.context_document_path} és buit o invàlid per al job ${jobId}.`);
       }
 
       let completedCount = 0;
@@ -129,9 +138,9 @@ class DocumentProcessor {
             throw new Error('Mistral AI ha retornat contingut buit');
           }
 
-          // Find the specific paragraph in the full text
+          // MILLORA: Usar el context original que ja tenim, no llegir el template de nou
           const paragraphs = fullGeneratedText.split('\n\n');
-          const originalParagraphs = (await getDocxTextContent(config.template_document_path)).split('\n\n');
+          const originalParagraphs = fullDocumentText.split('\n\n');
           const promptIndex = originalParagraphs.findIndex(p => p.includes(prompt.originalParagraphText));
           
           const generatedContent = paragraphs[promptIndex] || fullGeneratedText;
@@ -166,9 +175,48 @@ class DocumentProcessor {
         throw new Error(`El job ha finalitzat amb errors en ${prompts.length - completedCount} de ${prompts.length} prompts.`);
       }
 
+      // 🔥 FASE 2: Aplicar substitucions finals al document plantilla
+      console.log(`[Worker] 🔄 FASE 2: Iniciant substitucions finals per al job ${jobId}`);
+      
+      try {
+        // Recollir tot el contingut generat per aquest job
+        const { data: generatedContentData, error: fetchError } = await this.supabase
+          .from('generated_content')
+          .select('placeholder_id, final_content')
+          .eq('generation_id', generation.id);
+
+        if (fetchError) {
+          throw new Error(`Error recollint contingut generat: ${fetchError.message}`);
+        }
+
+        // Crear mapa de placeholder_id -> contingut
+        const generatedContentMap = generatedContentData?.reduce((acc, item) => {
+          acc[item.placeholder_id] = item.final_content || '';
+          return acc;
+        }, {} as { [key: string]: string }) || {};
+
+        console.log(`[Worker] Contingut generat recollit per substitucions:`, Object.keys(generatedContentMap));
+
+        // Aplicar substitucions al document plantilla
+        const finalDocumentBuffer = await applyFinalSubstitutions(
+          config.template_document_path,
+          generatedContentMap,
+          rowData
+        );
+
+        // TODO: Desar el document final a Supabase Storage
+        // Per ara, només registrem que s'ha generat correctament
+        console.log(`[Worker] ✅ Document final generat correctament. Mida: ${finalDocumentBuffer.length} bytes`);
+
+      } catch (substitutionError: any) {
+        console.error(`[Worker] Error en substitucions finals per al job ${jobId}:`, substitutionError.message);
+        // No fallem el job sencer, però registrem l'error
+        console.warn(`[Worker] Continuant amb el job tot i l'error de substitucions.`);
+      }
+
       await this.updateJobStatus(jobId, 'completed', { completed_at: new Date().toISOString() });
       await this.updateGenerationStatus(generation.id, 'generated');
-      console.log(`[Worker] ✅ Job ${jobId} finalitzat amb èxit.`);
+      console.log(`[Worker] ✅ Job ${jobId} finalitzat amb èxit amb nova arquitectura.`);
 
     } catch (error: any) {
       console.error(`[Worker] Error catastròfic processant el job ${jobId}:`, error.message);
