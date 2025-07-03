@@ -116,15 +116,34 @@ Amb les millores implementades, ara es poden veure logs detallats:
    NEXT_PUBLIC_SUPABASE_ANON_KEY: MISSING
 ```
 
+## Problema Addicional Descobert: Bucle Infinit
+
+Durant les proves, es va descobrir un **bucle de renderització infinit** al component `AsyncJobProgress`:
+
+### Símptomes:
+- Log repetit constantment: `[AsyncJobProgress] Fetching jobs status for project... (attempt 1)`
+- El component es munta i desmunta constantment
+- Mai es veuen `attempt 2`, `attempt 3`, etc.
+
+### Causa:
+El callback `onAllJobsCompleted()` estava causant re-renderitzacions del component pare, que a la vegada desmuntava i tornava a muntar `AsyncJobProgress`, creant un cicle infinit.
+
+### Solució Implementada:
+1. **Flag de notificació única**: `hasNotifiedCompletion` per evitar múltiples callbacks
+2. **setTimeout per diferir**: Callback executat amb 100ms de delay per evitar re-renderització immediata
+3. **Reset d'estat**: Quan canvia el `projectId`, es reseteja l'estat completament
+4. **Cleanup robust**: Millor gestió del cleanup dels intervals
+
 ## Resultat Esperat
 
 Després d'aplicar aquests canvis i configurar correctament les variables d'entorn a Vercel:
 
 1. ✅ L'error `net::ERR_INTERNET_DISCONNECTED` desapareixerà
-2. ✅ L'AsyncJobProgress funcionarà correctament
+2. ✅ L'AsyncJobProgress funcionarà correctament **sense bucles infinits**
 3. ✅ Els logs mostraran informació clara sobre l'estat de les connexions
 4. ✅ En cas d'errors temporals, el sistema farà retry automàtic
 5. ✅ Els errors es mostraran amb informació útil per debugging
+6. ✅ **SOLUCIONAT**: No més logs repetits constantment
 
 ## Notes Importants
 

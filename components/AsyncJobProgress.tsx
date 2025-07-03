@@ -39,6 +39,7 @@ export default function AsyncJobProgress({ projectId, onAllJobsCompleted }: Asyn
   const [isLoading, setIsLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [refreshInterval, setRefreshInterval] = useState<NodeJS.Timeout | null>(null)
+  const [hasNotifiedCompletion, setHasNotifiedCompletion] = useState(false)
 
   // Funció per obtenir l'estat dels jobs amb retry logic
   const fetchJobsStatus = async (retryCount = 0) => {
@@ -78,17 +79,28 @@ export default function AsyncJobProgress({ projectId, onAllJobsCompleted }: Asyn
       setError(null);
       
       // Si tots els jobs han acabat, aturar l'interval
-      if (data.summary.overall_status === 'completed' || 
-          data.summary.overall_status === 'failed' ||
-          (data.summary.processing_jobs === 0 && data.summary.pending_jobs === 0)) {
+      const isFinished = data.summary.overall_status === 'completed' || 
+                        data.summary.overall_status === 'failed' ||
+                        (data.summary.processing_jobs === 0 && data.summary.pending_jobs === 0);
+      
+      if (isFinished) {
+        console.log(`[AsyncJobProgress] Jobs finished with status: ${data.summary.overall_status}`);
         
         if (refreshInterval) {
           clearInterval(refreshInterval);
           setRefreshInterval(null);
         }
         
-        if (data.summary.overall_status === 'completed' && onAllJobsCompleted) {
-          onAllJobsCompleted();
+        // Només notificar una vegada quan es completen tots els jobs
+        if (data.summary.overall_status === 'completed' && 
+            onAllJobsCompleted && 
+            !hasNotifiedCompletion) {
+          console.log(`[AsyncJobProgress] Notifying completion callback`);
+          setHasNotifiedCompletion(true);
+          // Usar setTimeout per evitar que la notificació causi re-renderització immediata
+          setTimeout(() => {
+            onAllJobsCompleted();
+          }, 100);
         }
       }
       
@@ -121,16 +133,30 @@ export default function AsyncJobProgress({ projectId, onAllJobsCompleted }: Asyn
 
   // Configurar actualització automàtica
   useEffect(() => {
-    fetchJobsStatus()
+    console.log(`[AsyncJobProgress] Component mounted for project ${projectId}`);
     
-    // Actualitzar cada 2 segons si hi ha jobs actius
-    const interval = setInterval(fetchJobsStatus, 2000)
-    setRefreshInterval(interval)
+    // Reset state quan canvia el projectId
+    setHasNotifiedCompletion(false);
+    setError(null);
+    setIsLoading(true);
     
+    // Fetch inicial
+    fetchJobsStatus();
+    
+    // Crear nou interval
+    const interval = setInterval(() => {
+      fetchJobsStatus();
+    }, 2000);
+    
+    setRefreshInterval(interval);
+    
+    // Cleanup function per evitar memory leaks
     return () => {
-      if (interval) clearInterval(interval)
+      console.log(`[AsyncJobProgress] Component unmounting for project ${projectId}`);
+      clearInterval(interval);
+      setRefreshInterval(null);
     }
-  }, [projectId])
+  }, [projectId]) // Només re-executar si canvia el projectId
 
   // Funció per cancel·lar tots els jobs
   const cancelAllJobs = async () => {
