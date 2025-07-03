@@ -1,10 +1,25 @@
 import { createClient } from '@supabase/supabase-js';
 import mammoth from 'mammoth';
 
+// Verificar variables d'entorn abans de crear el client
+console.log(`[readDocxFromStorage] Verificant variables d'entorn...`);
+console.log(`[readDocxFromStorage] NEXT_PUBLIC_SUPABASE_URL: ${process.env.NEXT_PUBLIC_SUPABASE_URL ? 'PRESENT' : 'MISSING'}`);
+console.log(`[readDocxFromStorage] SUPABASE_SERVICE_ROLE_KEY: ${process.env.SUPABASE_SERVICE_ROLE_KEY ? 'PRESENT' : 'MISSING'}`);
+
+if (!process.env.NEXT_PUBLIC_SUPABASE_URL) {
+  throw new Error('NEXT_PUBLIC_SUPABASE_URL no està definida en les variables d\'entorn del worker');
+}
+
+if (!process.env.SUPABASE_SERVICE_ROLE_KEY) {
+  throw new Error('SUPABASE_SERVICE_ROLE_KEY no està definida en les variables d\'entorn del worker');
+}
+
 const supabaseAdmin = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.SUPABASE_SERVICE_ROLE_KEY!
+  process.env.NEXT_PUBLIC_SUPABASE_URL,
+  process.env.SUPABASE_SERVICE_ROLE_KEY
 );
+
+console.log(`[readDocxFromStorage] ✅ Client Supabase creat correctament`);
 
 export async function getDocxTextContent(storagePath: string): Promise<string> {
   try {

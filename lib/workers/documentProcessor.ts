@@ -7,10 +7,30 @@ import { JobConfig } from '@/app/types';
 import { getDocxTextContent } from '@/util/docx/readDocxFromStorage';
 import { applyFinalSubstitutions } from '@/util/docx/applyFinalSubstitutions';
 
+// Verificar variables d'entorn del worker
+console.log(`[DocumentProcessor] Verificant variables d'entorn del worker...`);
+console.log(`[DocumentProcessor] NEXT_PUBLIC_SUPABASE_URL: ${process.env.NEXT_PUBLIC_SUPABASE_URL ? 'PRESENT' : 'MISSING'}`);
+console.log(`[DocumentProcessor] SUPABASE_SERVICE_ROLE_KEY: ${process.env.SUPABASE_SERVICE_ROLE_KEY ? 'PRESENT' : 'MISSING'}`);
+console.log(`[DocumentProcessor] MISTRAL_API_KEY: ${process.env.MISTRAL_API_KEY ? 'PRESENT' : 'MISSING'}`);
+
+if (!process.env.NEXT_PUBLIC_SUPABASE_URL) {
+  throw new Error('[DocumentProcessor] NEXT_PUBLIC_SUPABASE_URL no està definida en les variables d\'entorn del worker');
+}
+
+if (!process.env.SUPABASE_SERVICE_ROLE_KEY) {
+  throw new Error('[DocumentProcessor] SUPABASE_SERVICE_ROLE_KEY no està definida en les variables d\'entorn del worker');
+}
+
+if (!process.env.MISTRAL_API_KEY) {
+  throw new Error('[DocumentProcessor] MISTRAL_API_KEY no està definida en les variables d\'entorn del worker');
+}
+
 const supabaseAdmin = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.SUPABASE_SERVICE_ROLE_KEY!
+  process.env.NEXT_PUBLIC_SUPABASE_URL,
+  process.env.SUPABASE_SERVICE_ROLE_KEY
 );
+
+console.log(`[DocumentProcessor] ✅ Client Supabase del worker creat correctament`);
 
 class DocumentProcessor {
   private supabase = supabaseAdmin;
