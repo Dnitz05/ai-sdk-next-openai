@@ -21,6 +21,8 @@ export default function TemplatesPage() {
   const [debugInfo, setDebugInfo] = useState<any>(null);
   const [user, setUser] = useState<any>(null);
   const [authLoading, setAuthLoading] = useState(true);
+  const [isCleaningUp, setIsCleaningUp] = useState(false);
+  const [showCleanupModal, setShowCleanupModal] = useState(false);
   
   // Verificar autenticació
   useEffect(() => {
@@ -105,6 +107,38 @@ export default function TemplatesPage() {
     }
   };
 
+  // Funció per neteja massiva
+  const handleCleanupAll = async () => {
+    setIsCleaningUp(true);
+    try {
+      const response = await fetch('/api/cleanup/templates', {
+        method: 'DELETE',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.error || 'Error en la neteja massiva');
+      }
+
+      const result = await response.json();
+      console.log('Neteja completada:', result);
+      
+      // Actualitzar la llista de plantilles (buida)
+      setTemplates([]);
+      setShowCleanupModal(false);
+      
+      alert(`✅ Neteja completada! S'han eliminat ${result.deleted} plantilles.`);
+    } catch (err) {
+      console.error('Error en la neteja massiva:', err);
+      alert(`❌ Error en la neteja massiva: ${err instanceof Error ? err.message : 'Error desconegut'}`);
+    } finally {
+      setIsCleaningUp(false);
+    }
+  };
+
   // Carregar plantilles
   useEffect(() => {
     const fetchTemplates = async () => {
@@ -166,15 +200,37 @@ export default function TemplatesPage() {
           </Link>
         </div>
         
-        {/* Cercador */}
-        <div className="mb-6">
+        {/* Cercador i botó de neteja */}
+        <div className="mb-6 flex gap-4">
           <input
             type="text"
             placeholder="Cerca per nom..."
             value={searchTerm}
             onChange={(e) => setSearchTerm(e.target.value)}
-            className="w-full p-2 border rounded"
+            className="flex-1 p-2 border rounded"
           />
+          {templates.length > 0 && (
+            <button
+              onClick={() => setShowCleanupModal(true)}
+              disabled={isCleaningUp}
+              className="px-4 py-2 bg-red-600 text-white rounded hover:bg-red-700 disabled:opacity-50 flex items-center gap-2"
+              title="Eliminar totes les plantilles"
+            >
+              {isCleaningUp ? (
+                <>
+                  <svg className="animate-spin h-4 w-4" fill="none" viewBox="0 0 24 24">
+                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                  </svg>
+                  Netejant...
+                </>
+              ) : (
+                <>
+                  🧹 Neteja Massiva ({templates.length})
+                </>
+              )}
+            </button>
+          )}
         </div>
         
         {/* Estat de càrrega */}
@@ -274,7 +330,7 @@ export default function TemplatesPage() {
           </div>
         )}
 
-        {/* Modal de confirmació d'eliminació */}
+        {/* Modal de confirmació d'eliminació individual */}
         {showDeleteModal && (
           <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
             <div className="bg-white rounded-lg p-6 max-w-md w-full mx-4">
@@ -311,6 +367,65 @@ export default function TemplatesPage() {
                     </>
                   ) : (
                     'Eliminar'
+                  )}
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Modal de confirmació de neteja massiva */}
+        {showCleanupModal && (
+          <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+            <div className="bg-white rounded-lg p-6 max-w-md w-full mx-4">
+              <div className="flex items-center mb-4">
+                <svg className="w-8 h-8 text-red-600 mr-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.964-.833-2.732 0L4.082 16.5c-.77.833.192 2.5 1.732 2.5z" />
+                </svg>
+                <h3 className="text-lg font-medium text-gray-900">🧹 Neteja Massiva</h3>
+              </div>
+              <div className="mb-6">
+                <p className="text-sm text-gray-700 mb-3">
+                  <strong>ATENCIÓ:</strong> Estàs a punt d'eliminar <strong className="text-red-600">{templates.length} plantilles</strong> de forma permanent.
+                </p>
+                <p className="text-sm text-gray-500 mb-2">
+                  Aquesta acció eliminarà:
+                </p>
+                <ul className="text-xs text-gray-500 list-disc list-inside space-y-1">
+                  <li>Tots els registres de plantilles de la base de dades</li>
+                  <li>Tots els fitxers DOCX originals del Storage</li>
+                  <li>Tots els fitxers Excel associats</li>
+                  <li>Tots els fitxers DOCX de placeholders</li>
+                </ul>
+                <p className="text-sm text-red-600 font-medium mt-3">
+                  ⚠️ Aquesta acció NO es pot desfer!
+                </p>
+              </div>
+              <div className="flex gap-3 justify-end">
+                <button
+                  onClick={() => setShowCleanupModal(false)}
+                  disabled={isCleaningUp}
+                  className="px-4 py-2 text-sm font-medium text-gray-700 bg-gray-100 rounded-md hover:bg-gray-200 transition-colors disabled:opacity-50"
+                >
+                  Cancel·lar
+                </button>
+                <button
+                  onClick={handleCleanupAll}
+                  disabled={isCleaningUp}
+                  className="px-4 py-2 text-sm font-medium text-white bg-red-600 rounded-md hover:bg-red-700 transition-colors disabled:opacity-50 flex items-center"
+                >
+                  {isCleaningUp ? (
+                    <>
+                      <svg className="animate-spin -ml-1 mr-2 h-4 w-4 text-white" fill="none" viewBox="0 0 24 24">
+                        <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                        <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                      </svg>
+                      Eliminant {templates.length} plantilles...
+                    </>
+                  ) : (
+                    <>
+                      🗑️ Sí, eliminar totes ({templates.length})
+                    </>
                   )}
                 </button>
               </div>
