@@ -24,6 +24,26 @@ console.log(`[readDocxFromStorage] ✅ Client Supabase creat correctament`);
 export async function getDocxTextContent(storagePath: string): Promise<string> {
   try {
     console.log(`[readDocxFromStorage] Intentant descarregar el document des de la ruta: "${storagePath}"`);
+    
+    // DIAGNÒSTIC AVANÇAT: Verificar si el fitxer existeix primer
+    console.log(`[readDocxFromStorage] Verificant si el fitxer existeix...`);
+    const { data: listData, error: listError } = await supabaseAdmin.storage
+      .from('documents')
+      .list(storagePath.substring(0, storagePath.lastIndexOf('/')), {
+        limit: 100,
+        search: storagePath.substring(storagePath.lastIndexOf('/') + 1)
+      });
+    
+    if (listError) {
+      console.error(`[readDocxFromStorage] Error llistant fitxers:`, listError);
+    } else {
+      console.log(`[readDocxFromStorage] Fitxers trobats al directori:`, listData?.map(f => f.name));
+      const fileName = storagePath.substring(storagePath.lastIndexOf('/') + 1);
+      const fileExists = listData?.some(f => f.name === fileName);
+      console.log(`[readDocxFromStorage] Fitxer "${fileName}" existeix: ${fileExists}`);
+    }
+    
+    // Intentar descarregar el fitxer
     const { data, error } = await supabaseAdmin.storage.from('documents').download(storagePath);
 
     if (error) {
@@ -36,9 +56,32 @@ export async function getDocxTextContent(storagePath: string): Promise<string> {
       console.error(`  Stack: ${error.stack}`);
       // Supabase StorageError pot tenir propietats addicionals
       if ((error as any).status) console.error(`  Status: ${(error as any).status}`);
+      if ((error as any).statusCode) console.error(`  StatusCode: ${(error as any).statusCode}`);
       if ((error as any).details) console.error(`  Details: ${(error as any).details}`);
       if ((error as any).error_description) console.error(`  Error Description: ${(error as any).error_description}`);
+      if ((error as any).hint) console.error(`  Hint: ${(error as any).hint}`);
       console.error(`  Error complet (JSON): ${JSON.stringify(error, null, 2)}`);
+      
+      // DIAGNÒSTIC AVANÇAT: Verificar permisos del bucket
+      console.log(`[readDocxFromStorage] Verificant permisos del bucket 'documents'...`);
+      const { data: buckets, error: bucketsError } = await supabaseAdmin.storage.listBuckets();
+      if (bucketsError) {
+        console.error(`[readDocxFromStorage] Error obtenint buckets:`, bucketsError);
+      } else {
+        console.log(`[readDocxFromStorage] Buckets disponibles:`, buckets?.map(b => b.name));
+        const documentsBucket = buckets?.find(b => b.name === 'documents');
+        if (documentsBucket) {
+          console.log(`[readDocxFromStorage] Bucket 'documents' trobat:`, {
+            id: documentsBucket.id,
+            name: documentsBucket.name,
+            public: documentsBucket.public,
+            file_size_limit: documentsBucket.file_size_limit,
+            allowed_mime_types: documentsBucket.allowed_mime_types
+          });
+        } else {
+          console.error(`[readDocxFromStorage] Bucket 'documents' NO trobat!`);
+        }
+      }
 
       throw new Error(`Error descarregant el document "${storagePath}": ${errorMessage}`);
     }
