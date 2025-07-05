@@ -55,7 +55,47 @@ export async function DELETE(request: Request) {
 
     // 5. Eliminar en ordre per evitar conflictes de claus foranes
     
-    // 5.1. Eliminar generation_jobs relacionats
+    // 5.1. Primer obtenir els arxius generats per eliminar del Storage
+    const { data: generationJobs, error: jobsQueryError } = await serviceClient
+      .from('generation_jobs')
+      .select('final_document_path')
+      .eq('project_id', id);
+
+    if (jobsQueryError) {
+      console.warn("Error obtenint generation_jobs per eliminar arxius:", jobsQueryError);
+    }
+
+    // Recopilar arxius a eliminar del Storage
+    const filesToDelete: string[] = [];
+    if (generationJobs && generationJobs.length > 0) {
+      generationJobs.forEach(job => {
+        if (job.final_document_path) {
+          filesToDelete.push(job.final_document_path);
+          console.log(`[DELETE PROJECT] Arxiu generat a eliminar: ${job.final_document_path}`);
+        }
+      });
+    }
+
+    // Eliminar arxius del Storage si n'hi ha
+    if (filesToDelete.length > 0) {
+      console.log(`[DELETE PROJECT] Eliminant ${filesToDelete.length} arxius generats del Storage...`);
+      
+      const { error: storageError } = await serviceClient.storage
+        .from('documents')
+        .remove(filesToDelete);
+
+      if (storageError) {
+        console.error("Error eliminant arxius generats del Storage:", storageError);
+        // No retornem error aquí per permetre continuar amb l'eliminació de la BD
+        console.warn(`[DELETE PROJECT] Continuant malgrat error del Storage: ${storageError.message}`);
+      } else {
+        console.log(`[DELETE PROJECT] ✅ Arxius generats eliminats del Storage correctament`);
+      }
+    } else {
+      console.log(`[DELETE PROJECT] No hi ha arxius generats per eliminar del Storage`);
+    }
+
+    // 5.2. Eliminar generation_jobs relacionats
     const { error: jobsError } = await serviceClient
       .from('generation_jobs')
       .delete()
@@ -66,7 +106,7 @@ export async function DELETE(request: Request) {
       // No fallem completament, continuem amb la resta
     }
 
-    // 5.2. Primer obtenir els IDs de les generacions
+    // 5.3. Primer obtenir els IDs de les generacions
     const { data: generationIds, error: generationIdsError } = await serviceClient
       .from('generations')
       .select('id')
@@ -75,7 +115,7 @@ export async function DELETE(request: Request) {
     if (generationIdsError) {
       console.warn("Error obtenint generation IDs:", generationIdsError);
     } else if (generationIds && generationIds.length > 0) {
-      // 5.3. Eliminar generated_content relacionat
+      // 5.4. Eliminar generated_content relacionat
       const ids = generationIds.map(g => g.id);
       const { error: contentError } = await serviceClient
         .from('generated_content')
@@ -88,7 +128,7 @@ export async function DELETE(request: Request) {
       }
     }
 
-    // 5.4. Eliminar generations relacionades
+    // 5.5. Eliminar generations relacionades
     const { error: generationsError } = await serviceClient
       .from('generations')
       .delete()
@@ -99,7 +139,7 @@ export async function DELETE(request: Request) {
       // No fallem completament, continuem amb la resta
     }
 
-    // 5.5. Finalment, eliminar el projecte principal
+    // 5.6. Finalment, eliminar el projecte principal
     const { error: deleteError } = await serviceClient
       .from('projects')
       .delete()
@@ -118,7 +158,8 @@ export async function DELETE(request: Request) {
 
     return NextResponse.json({ 
       success: true,
-      message: 'Projecte eliminat correctament'
+      message: 'Projecte eliminat correctament',
+      deletedFiles: filesToDelete.length
     }, { status: 200 });
 
   } catch (error) {
