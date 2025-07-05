@@ -43,29 +43,29 @@ export async function GET(request: NextRequest) {
     
     console.log(`[StorageTest] Buckets trobats:`, buckets?.map(b => b.name));
     
-    // Test 2: Verificar bucket 'documents'
-    const documentsBucket = buckets?.find(b => b.name === 'documents');
-    if (!documentsBucket) {
+    // Test 2: Verificar bucket 'template-docx'
+    const templateDocxBucket = buckets?.find(b => b.name === 'template-docx');
+    if (!templateDocxBucket) {
       return NextResponse.json({
         success: false,
-        error: 'Bucket "documents" no trobat',
+        error: 'Bucket "template-docx" no trobat',
         availableBuckets: buckets?.map(b => b.name) || []
       }, { status: 404 });
     }
     
-    console.log(`[StorageTest] Bucket 'documents' trobat:`, documentsBucket);
+    console.log(`[StorageTest] Bucket 'template-docx' trobat:`, templateDocxBucket);
     
-    // Test 3: Llistar fitxers al bucket documents (primer nivell)
-    console.log(`[StorageTest] Test 3: Llistant fitxers al bucket documents...`);
+    // Test 3: Llistar fitxers al bucket template-docx (primer nivell)
+    console.log(`[StorageTest] Test 3: Llistant fitxers al bucket template-docx...`);
     const { data: files, error: filesError } = await supabaseAdmin.storage
-      .from('documents')
+      .from('template-docx')
       .list('', { limit: 10 });
     
     if (filesError) {
       console.error(`[StorageTest] Error llistant fitxers:`, filesError);
       return NextResponse.json({
         success: false,
-        error: 'Error llistant fitxers del bucket documents',
+        error: 'Error llistant fitxers del bucket template-docx',
         details: filesError
       }, { status: 500 });
     }
@@ -84,7 +84,7 @@ export async function GET(request: NextRequest) {
       const fileName = testPath.substring(testPath.lastIndexOf('/') + 1);
       
       const { data: pathFiles, error: pathError } = await supabaseAdmin.storage
-        .from('documents')
+        .from('template-docx')
         .list(pathDir, { limit: 100 });
       
       if (pathError) {
@@ -111,7 +111,7 @@ export async function GET(request: NextRequest) {
         if (fileExists) {
           console.log(`[StorageTest] Test 5: Intentant descarregar "${testPath}"...`);
           const { data: downloadData, error: downloadError } = await supabaseAdmin.storage
-            .from('documents')
+            .from('template-docx')
             .download(testPath);
           
           if (downloadError) {
@@ -148,12 +148,12 @@ export async function GET(request: NextRequest) {
           public: b.public,
           file_size_limit: b.file_size_limit
         })) || [],
-        documentsBucket: documentsBucket ? {
-          name: documentsBucket.name,
-          id: documentsBucket.id,
-          public: documentsBucket.public,
-          file_size_limit: documentsBucket.file_size_limit,
-          allowed_mime_types: documentsBucket.allowed_mime_types
+        templateDocxBucket: templateDocxBucket ? {
+          name: templateDocxBucket.name,
+          id: templateDocxBucket.id,
+          public: templateDocxBucket.public,
+          file_size_limit: templateDocxBucket.file_size_limit,
+          allowed_mime_types: templateDocxBucket.allowed_mime_types
         } : null,
         topLevelFiles: files?.map(f => ({
           name: f.name,

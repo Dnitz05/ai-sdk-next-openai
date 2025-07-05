@@ -28,7 +28,7 @@ export async function getDocxTextContent(storagePath: string): Promise<string> {
     // DIAGNÒSTIC AVANÇAT: Verificar si el fitxer existeix primer
     console.log(`[readDocxFromStorage] Verificant si el fitxer existeix...`);
     const { data: listData, error: listError } = await supabaseAdmin.storage
-      .from('documents')
+      .from('template-docx')
       .list(storagePath.substring(0, storagePath.lastIndexOf('/')), {
         limit: 100,
         search: storagePath.substring(storagePath.lastIndexOf('/') + 1)
@@ -44,7 +44,7 @@ export async function getDocxTextContent(storagePath: string): Promise<string> {
     }
     
     // Intentar descarregar el fitxer
-    const { data, error } = await supabaseAdmin.storage.from('documents').download(storagePath);
+    const { data, error } = await supabaseAdmin.storage.from('template-docx').download(storagePath);
 
     if (error) {
       let errorMessage = 'Error desconegut de Supabase Storage.';
@@ -63,23 +63,23 @@ export async function getDocxTextContent(storagePath: string): Promise<string> {
       console.error(`  Error complet (JSON): ${JSON.stringify(error, null, 2)}`);
       
       // DIAGNÒSTIC AVANÇAT: Verificar permisos del bucket
-      console.log(`[readDocxFromStorage] Verificant permisos del bucket 'documents'...`);
+      console.log(`[readDocxFromStorage] Verificant permisos del bucket 'template-docx'...`);
       const { data: buckets, error: bucketsError } = await supabaseAdmin.storage.listBuckets();
       if (bucketsError) {
         console.error(`[readDocxFromStorage] Error obtenint buckets:`, bucketsError);
       } else {
         console.log(`[readDocxFromStorage] Buckets disponibles:`, buckets?.map(b => b.name));
-        const documentsBucket = buckets?.find(b => b.name === 'documents');
-        if (documentsBucket) {
-          console.log(`[readDocxFromStorage] Bucket 'documents' trobat:`, {
-            id: documentsBucket.id,
-            name: documentsBucket.name,
-            public: documentsBucket.public,
-            file_size_limit: documentsBucket.file_size_limit,
-            allowed_mime_types: documentsBucket.allowed_mime_types
+        const templateDocxBucket = buckets?.find(b => b.name === 'template-docx');
+        if (templateDocxBucket) {
+          console.log(`[readDocxFromStorage] Bucket 'template-docx' trobat:`, {
+            id: templateDocxBucket.id,
+            name: templateDocxBucket.name,
+            public: templateDocxBucket.public,
+            file_size_limit: templateDocxBucket.file_size_limit,
+            allowed_mime_types: templateDocxBucket.allowed_mime_types
           });
         } else {
-          console.error(`[readDocxFromStorage] Bucket 'documents' NO trobat!`);
+          console.error(`[readDocxFromStorage] Bucket 'template-docx' NO trobat!`);
         }
       }
 
@@ -108,7 +108,7 @@ export async function getDocxTextContent(storagePath: string): Promise<string> {
 export async function readDocxFromStorage(storagePath: string): Promise<Buffer> {
   try {
     console.log(`[readDocxFromStorage] Descarregant buffer del document des de: "${storagePath}"`);
-    const { data, error } = await supabaseAdmin.storage.from('documents').download(storagePath);
+    const { data, error } = await supabaseAdmin.storage.from('template-docx').download(storagePath);
 
     if (error) {
       console.error(`[readDocxFromStorage] Error de Supabase Storage:`, error);
