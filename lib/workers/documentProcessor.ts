@@ -151,10 +151,40 @@ class DocumentProcessor {
       let fullDocumentText;
       try {
         // FASE 1: Llegir document original per obtenir context ric per la IA
+        console.log(`[Worker] 🔍 DIAGNÒSTIC COMPLET - Intentant llegir document de context...`);
+        console.log(`[Worker] Path del document de context: "${config.context_document_path}"`);
+        console.log(`[Worker] Variables d'entorn disponibles al worker:`, {
+          NEXT_PUBLIC_SUPABASE_URL: process.env.NEXT_PUBLIC_SUPABASE_URL ? `${process.env.NEXT_PUBLIC_SUPABASE_URL.substring(0, 30)}...` : 'MISSING',
+          SUPABASE_SERVICE_ROLE_KEY: process.env.SUPABASE_SERVICE_ROLE_KEY ? `${process.env.SUPABASE_SERVICE_ROLE_KEY.substring(0, 30)}...` : 'MISSING',
+          NODE_ENV: process.env.NODE_ENV,
+          VERCEL: process.env.VERCEL,
+          VERCEL_ENV: process.env.VERCEL_ENV
+        });
+        
         fullDocumentText = await getDocxTextContent(config.context_document_path);
         console.log(`[Worker] ✅ Context del document original obtingut per al job ${jobId}. Longitud: ${fullDocumentText?.length}`);
+        console.log(`[Worker] Primeres 200 caràcters del document:`, fullDocumentText?.substring(0, 200));
       } catch (docError: any) {
-        console.error(`[Worker] Error crític obtenint context del document per al job ${jobId} des de ${config.context_document_path}:`, docError.message, docError.stack);
+        console.error(`[Worker] ❌ ERROR CRÍTIC obtenint context del document per al job ${jobId}`);
+        console.error(`[Worker] Path problemàtic: "${config.context_document_path}"`);
+        console.error(`[Worker] Tipus d'error: ${docError.constructor.name}`);
+        console.error(`[Worker] Missatge d'error: ${docError.message}`);
+        console.error(`[Worker] Stack trace complet:`, docError.stack);
+        console.error(`[Worker] Error complet serialitzat:`, JSON.stringify(docError, Object.getOwnPropertyNames(docError), 2));
+        
+        // Intentar diagnòstic addicional
+        try {
+          console.log(`[Worker] 🔧 Intentant diagnòstic addicional del client Supabase...`);
+          const { data: buckets, error: bucketsError } = await this.supabase.storage.listBuckets();
+          if (bucketsError) {
+            console.error(`[Worker] Error llistant buckets:`, bucketsError);
+          } else {
+            console.log(`[Worker] Buckets disponibles des del worker:`, buckets?.map(b => b.name));
+          }
+        } catch (diagError) {
+          console.error(`[Worker] Error en diagnòstic addicional:`, diagError);
+        }
+        
         throw new Error(`Error obtenint el document de context: ${docError.message}`);
       }
       
