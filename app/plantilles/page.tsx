@@ -18,7 +18,57 @@ export default function TemplatesPage() {
   const [searchTerm, setSearchTerm] = useState('');
   const [deletingTemplateId, setDeletingTemplateId] = useState<string | null>(null);
   const [showDeleteModal, setShowDeleteModal] = useState<string | null>(null);
+  const [debugInfo, setDebugInfo] = useState<any>(null);
+  const [user, setUser] = useState<any>(null);
+  const [authLoading, setAuthLoading] = useState(true);
   
+  // Verificar autenticació
+  useEffect(() => {
+    const checkAuth = async () => {
+      try {
+        const { createBrowserSupabaseClient } = await import('@/lib/supabase/browserClient');
+        const supabase = createBrowserSupabaseClient();
+        const { data: { user }, error } = await supabase.auth.getUser();
+        setUser(user);
+        console.log('Usuari autenticat:', user?.id, user?.email);
+      } catch (err) {
+        console.error('Error verificant autenticació:', err);
+        setUser(null);
+      } finally {
+        setAuthLoading(false);
+      }
+    };
+    checkAuth();
+  }, []);
+  
+  // Funció per debug eliminació
+  const handleDebugDelete = async (templateId: string) => {
+    try {
+      const { createBrowserSupabaseClient } = await import('@/lib/supabase/browserClient');
+      const supabase = createBrowserSupabaseClient();
+      const { data: { session }, error: sessionError } = await supabase.auth.getSession();
+      
+      if (sessionError || !session) {
+        throw new Error('No autenticat');
+      }
+
+      const response = await fetch(`/api/debug/test-delete-template/${templateId}`, {
+        method: 'GET',
+        headers: {
+          'Authorization': `Bearer ${session.access_token}`,
+          'Content-Type': 'application/json',
+        },
+      });
+
+      const result = await response.json();
+      setDebugInfo(result);
+      console.log('Debug info:', result);
+    } catch (err) {
+      console.error('Error debug:', err);
+      setDebugInfo({ error: err instanceof Error ? err.message : 'Error desconegut' });
+    }
+  };
+
   // Funció per eliminar plantilla
   const handleDeleteTemplate = async (templateId: string) => {
     setDeletingTemplateId(templateId);
@@ -171,6 +221,13 @@ export default function TemplatesPage() {
                         Editar
                       </Link>
                       <button
+                        onClick={() => handleDebugDelete(template.id)}
+                        className="px-3 py-1 text-sm bg-yellow-100 text-yellow-700 rounded hover:bg-yellow-200 flex items-center mr-2"
+                        title="Debug eliminació"
+                      >
+                        🔍
+                      </button>
+                      <button
                         onClick={() => setShowDeleteModal(template.id)}
                         className="px-3 py-1 text-sm bg-red-100 text-red-700 rounded hover:bg-red-200 flex items-center"
                         title="Eliminar plantilla"
@@ -184,6 +241,36 @@ export default function TemplatesPage() {
                 </div>
               );
             })}
+          </div>
+        )}
+
+        {/* Estat d'autenticació */}
+        {!authLoading && (
+          <div className="mt-6 p-4 bg-blue-50 rounded border border-blue-200">
+            <h3 className="font-bold mb-2 text-blue-800">Estat d'autenticació:</h3>
+            {user ? (
+              <div className="text-sm text-blue-700">
+                ✅ Autenticat com: <strong>{user.email}</strong> (ID: {user.id})
+              </div>
+            ) : (
+              <div className="text-sm text-red-700">
+                ❌ No autenticat. <strong>Fes clic a "Inicia sessió" a la barra superior per autenticar-te.</strong>
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* Debug info */}
+        {debugInfo && (
+          <div className="mt-6 p-4 bg-gray-100 rounded">
+            <h3 className="font-bold mb-2">Debug Info:</h3>
+            <pre className="text-xs overflow-auto">{JSON.stringify(debugInfo, null, 2)}</pre>
+            <button 
+              onClick={() => setDebugInfo(null)}
+              className="mt-2 px-2 py-1 bg-gray-500 text-white rounded text-xs"
+            >
+              Tancar
+            </button>
           </div>
         )}
 
