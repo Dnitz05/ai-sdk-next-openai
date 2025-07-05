@@ -1,12 +1,12 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { createServerSupabaseClient } from '@/lib/supabase/server';
+import supabaseServerClient from '@/lib/supabase/server';
 
 export async function DELETE(request: NextRequest) {
   try {
     console.log('🧹 Iniciant neteja de plantilles...');
     
-    // Crear client de Supabase amb service role (sense autenticació)
-    const supabase = createServerSupabaseClient(true); // true = usar service role
+    // Usar client de Supabase amb service role (sense autenticació)
+    const supabase = supabaseServerClient;
     
     // 1. Obtenir totes les plantilles
     const { data: templates, error: fetchError } = await supabase
@@ -76,3 +76,44 @@ export async function DELETE(request: NextRequest) {
       }
     }
     
+    // 3. Eliminar registres de la base de dades
+    const { error: deleteError } = await supabase
+      .from('templates')
+      .delete()
+      .neq('id', 'impossible-id'); // Elimina tots els registres
+    
+    if (deleteError) {
+      console.error('Error eliminant plantilles de la BD:', deleteError);
+      return NextResponse.json({ 
+        success: false, 
+        error: 'Error eliminant plantilles de la base de dades',
+        details: deleteError,
+        storageErrors 
+      }, { status: 500 });
+    }
+    
+    console.log('✅ Neteja completada amb èxit');
+    
+    return NextResponse.json({ 
+      success: true, 
+      message: `S'han eliminat ${templates.length} plantilles correctament`,
+      deleted: templates.length,
+      storageErrors: storageErrors.length > 0 ? storageErrors : undefined
+    });
+    
+  } catch (error) {
+    console.error('Error general en la neteja:', error);
+    return NextResponse.json({ 
+      success: false, 
+      error: 'Error general en la neteja',
+      details: error instanceof Error ? error.message : 'Error desconegut'
+    }, { status: 500 });
+  }
+}
+
+export async function GET() {
+  return NextResponse.json({ 
+    message: 'Endpoint de neteja de plantilles. Usa DELETE per eliminar totes les plantilles.',
+    usage: 'DELETE /api/cleanup/templates'
+  });
+}
