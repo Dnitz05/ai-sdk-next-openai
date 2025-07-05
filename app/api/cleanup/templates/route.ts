@@ -1,12 +1,19 @@
 import { NextRequest, NextResponse } from 'next/server';
-import supabaseServerClient from '@/lib/supabase/server';
+import { createUserSupabaseClient } from '@/lib/supabase/userClient';
 
 export async function DELETE(request: NextRequest) {
   try {
     console.log('🧹 Iniciant neteja de plantilles...');
     
-    // Usar client de Supabase amb service role (sense autenticació)
-    const supabase = supabaseServerClient;
+    // 1. Llegeix el token de l'Authorization header
+    const authHeader = request.headers.get('authorization') || request.headers.get('Authorization');
+    if (!authHeader || !authHeader.startsWith('Bearer ')) {
+      return NextResponse.json({ error: 'No autenticat. Falten credencials.' }, { status: 401 });
+    }
+    const accessToken = authHeader.replace('Bearer ', '').trim();
+
+    // 2. Crea el client Supabase autenticat amb el token de l'usuari
+    const supabase = createUserSupabaseClient(accessToken);
     
     // 1. Obtenir totes les plantilles
     const { data: templates, error: fetchError } = await supabase

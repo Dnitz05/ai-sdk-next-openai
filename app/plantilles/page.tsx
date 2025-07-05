@@ -111,9 +111,18 @@ export default function TemplatesPage() {
   const handleCleanupAll = async () => {
     setIsCleaningUp(true);
     try {
+      const { createBrowserSupabaseClient } = await import('@/lib/supabase/browserClient');
+      const supabase = createBrowserSupabaseClient();
+      const { data: { session }, error: sessionError } = await supabase.auth.getSession();
+      
+      if (sessionError || !session) {
+        throw new Error('No autenticat');
+      }
+
       const response = await fetch('/api/cleanup/templates', {
         method: 'DELETE',
         headers: {
+          'Authorization': `Bearer ${session.access_token}`,
           'Content-Type': 'application/json',
         },
       });
