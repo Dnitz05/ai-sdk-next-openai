@@ -2,36 +2,46 @@
 
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
-import { createClient } from '@supabase/supabase-js';
+import { createBrowserSupabaseClient } from '@/lib/supabase/browserClient';
 
 export default function CleanupPage() {
   const [isLoading, setIsLoading] = useState(false);
   const [result, setResult] = useState<any>(null);
   const [isAuthenticated, setIsAuthenticated] = useState(false);
-  const [supabase, setSupabase] = useState<any>(null);
+  const [authLoading, setAuthLoading] = useState(true);
+  const [user, setUser] = useState<any>(null);
   const router = useRouter();
 
-  // Inicialitzar Supabase client
+  // Verificar autenticació
   useEffect(() => {
-    const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
-    const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+    const checkAuth = async () => {
+      try {
+        const supabase = createBrowserSupabaseClient();
+        const { data: { session }, error: sessionError } = await supabase.auth.getSession();
+        const { data: { user }, error: userError } = await supabase.auth.getUser();
+        
+        console.log('Session:', session?.user?.id);
+        console.log('User:', user?.id);
+        console.log('Session error:', sessionError);
+        console.log('User error:', userError);
+        
+        setIsAuthenticated(!!(session && user));
+        setUser(user);
+      } catch (err) {
+        console.error('Error verificant autenticació:', err);
+        setIsAuthenticated(false);
+        setUser(null);
+      } finally {
+        setAuthLoading(false);
+      }
+    };
     
-    if (supabaseUrl && supabaseAnonKey) {
-      const client = createClient(supabaseUrl, supabaseAnonKey);
-      setSupabase(client);
-      
-      // Verificar autenticació
-      client.auth.getSession().then(({ data: { session } }) => {
-        setIsAuthenticated(!!session);
-      });
-    }
+    checkAuth();
   }, []);
 
   // Funció per obtenir el token d'accés
   const getAccessToken = async () => {
-    if (!supabase) {
-      throw new Error('Supabase client no inicialitzat');
-    }
+    const supabase = createBrowserSupabaseClient();
     
     const { data: { session }, error } = await supabase.auth.getSession();
     if (error || !session) {
@@ -121,6 +131,18 @@ export default function CleanupPage() {
     }
   };
 
+  // Mostrar indicador de càrrega mentre verifica autenticació
+  if (authLoading) {
+    return (
+      <div className="min-h-screen bg-gray-50 py-8 flex items-center justify-center">
+        <div className="bg-white rounded-lg shadow-md p-6 max-w-md text-center">
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto mb-4"></div>
+          <p className="text-gray-600">Verificant autenticació...</p>
+        </div>
+      </div>
+    );
+  }
+
   // Mostrar missatge si no està autenticat
   if (!isAuthenticated) {
     return (
@@ -130,6 +152,13 @@ export default function CleanupPage() {
           <p className="text-gray-700 mb-4">
             Has d'estar autenticat per accedir a aquesta pàgina d'administració.
           </p>
+          {user && (
+            <div className="bg-blue-50 border border-blue-200 rounded p-3 mb-4">
+              <p className="text-sm text-blue-700">
+                <strong>Debug:</strong> User ID detectat: {user.id}
+              </p>
+            </div>
+          )}
           <button
             onClick={() => router.push('/plantilles')}
             className="w-full bg-blue-600 hover:bg-blue-700 text-white font-semibold py-2 px-4 rounded-lg transition-colors"

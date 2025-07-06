@@ -71,6 +71,45 @@ export default function TemplatesPage() {
     }
   };
 
+  // Funció per testejar eliminació amb server client
+  const handleTestDeleteServer = async (templateId: string) => {
+    try {
+      const { createBrowserSupabaseClient } = await import('@/lib/supabase/browserClient');
+      const supabase = createBrowserSupabaseClient();
+      const { data: { session }, error: sessionError } = await supabase.auth.getSession();
+      
+      if (sessionError || !session) {
+        throw new Error('No autenticat');
+      }
+
+      const response = await fetch(`/api/debug/test-delete-server/${templateId}`, {
+        method: 'DELETE',
+        headers: {
+          'Authorization': `Bearer ${session.access_token}`,
+          'Content-Type': 'application/json',
+        },
+      });
+
+      const result = await response.json();
+      setDebugInfo(result);
+      console.log('Test delete server result:', result);
+      
+      if (result.success && !result.stillExists) {
+        // Si l'eliminació ha funcionat, actualitzar la llista
+        setTemplates(templates.filter(t => t.id !== templateId));
+        alert(`✅ Test eliminació exitós! Plantilla "${result.templateName}" eliminada.`);
+      } else if (result.success && result.stillExists) {
+        alert(`⚠️ Test completat però la plantilla encara existeix.`);
+      } else {
+        alert(`❌ Test fallit: ${result.error}`);
+      }
+    } catch (err) {
+      console.error('Error test delete server:', err);
+      setDebugInfo({ error: err instanceof Error ? err.message : 'Error desconegut' });
+      alert(`❌ Error en test: ${err instanceof Error ? err.message : 'Error desconegut'}`);
+    }
+  };
+
   // Funció per eliminar plantilla
   const handleDeleteTemplate = async (templateId: string) => {
     setDeletingTemplateId(templateId);
@@ -292,10 +331,17 @@ export default function TemplatesPage() {
                       </Link>
                       <button
                         onClick={() => handleDebugDelete(template.id)}
-                        className="px-3 py-1 text-sm bg-yellow-100 text-yellow-700 rounded hover:bg-yellow-200 flex items-center mr-2"
+                        className="px-3 py-1 text-sm bg-yellow-100 text-yellow-700 rounded hover:bg-yellow-200 flex items-center mr-1"
                         title="Debug eliminació"
                       >
                         🔍
+                      </button>
+                      <button
+                        onClick={() => handleTestDeleteServer(template.id)}
+                        className="px-3 py-1 text-sm bg-purple-100 text-purple-700 rounded hover:bg-purple-200 flex items-center mr-1"
+                        title="Test eliminació amb server client"
+                      >
+                        🧪
                       </button>
                       <button
                         onClick={() => setShowDeleteModal(template.id)}

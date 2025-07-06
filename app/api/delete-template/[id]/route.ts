@@ -1,6 +1,7 @@
 // app/api/delete-template/[id]/route.ts
 import { NextResponse } from 'next/server';
 import { createUserSupabaseClient } from '@/lib/supabase/userClient';
+import supabaseServerClient from '@/lib/supabase/server';
 
 export async function DELETE(request: Request) {
   // Extraiem l'id de la URL manualment segons la nova API de Next.js 15
@@ -108,10 +109,13 @@ export async function DELETE(request: Request) {
     }
 
     // 6. Finalment, eliminar el registre de la base de dades
-    const { error: deleteError } = await supabase
+    // IMPORTANT: Usar el client del servidor per bypassing RLS (problema de política DELETE)
+    console.log(`[DELETE Template] Eliminant de BD amb server client (bypassing RLS)...`);
+    const { error: deleteError } = await supabaseServerClient
       .from('plantilla_configs')
       .delete()
-      .eq('id', id);
+      .eq('id', id)
+      .eq('user_id', template.user_id); // Seguretat extra: verificar que és del mateix usuari
 
     if (deleteError) {
       console.error("Error eliminant plantilla de la BD:", deleteError);
@@ -120,6 +124,8 @@ export async function DELETE(request: Request) {
         details: deleteError.message
       }, { status: 500 });
     }
+    
+    console.log(`[DELETE Template] ✅ Registre eliminat de la BD correctament`);
 
     console.log(`[DELETE Template] ✅ Plantilla "${template.config_name}" eliminada completament`);
 
