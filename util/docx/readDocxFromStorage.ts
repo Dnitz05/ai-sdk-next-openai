@@ -21,82 +21,169 @@ const supabaseAdmin = createClient(
 
 console.log(`[readDocxFromStorage] ✅ Client Supabase creat correctament`);
 
-export async function getDocxTextContent(storagePath: string): Promise<string> {
+/**
+ * Valida que un path de storage és vàlid i no conté caràcters problemàtics
+ */
+function validateStoragePath(storagePath: string): { isValid: boolean; error?: string; normalizedPath?: string } {
+  if (!storagePath || storagePath.trim() === '') {
+    return { isValid: false, error: 'Path buit o null' };
+  }
+
+  let normalizedPath = storagePath.trim();
+  
+  // Eliminar barra inicial si existeix
+  if (normalizedPath.startsWith('/')) {
+    normalizedPath = normalizedPath.substring(1);
+  }
+
+  // Verificar que no contingui dobles barres
+  if (normalizedPath.includes('//')) {
+    return { isValid: false, error: 'Path conté dobles barres' };
+  }
+
+  // Verificar que tingui extensió .docx
+  if (!normalizedPath.toLowerCase().endsWith('.docx')) {
+    return { isValid: false, error: 'Path ha de tenir extensió .docx' };
+  }
+
+  // Verificar que no contingui caràcters problemàtics
+  const problematicChars = ['<', '>', ':', '"', '|', '?', '*'];
+  for (const char of problematicChars) {
+    if (normalizedPath.includes(char)) {
+      return { isValid: false, error: `Path conté caràcter problemàtic: ${char}` };
+    }
+  }
+
+  return { isValid: true, normalizedPath };
+}
+
+/**
+ * Valida que un buffer és un DOCX vàlid
+ */
+function validateDocxBuffer(buffer: Buffer): { isValid: boolean; error?: string } {
   try {
-    console.log(`[readDocxFromStorage] Intentant descarregar el document des de la ruta: "${storagePath}"`);
+    // Verificar mida mínima
+    if (buffer.length < 100) {
+      return { isValid: false, error: `Buffer massa petit: ${buffer.length} bytes` };
+    }
+
+    // Verificar signatura ZIP (DOCX és un format ZIP)
+    const uint8Array = new Uint8Array(buffer);
+    if (uint8Array[0] !== 0x50 || uint8Array[1] !== 0x4B) {
+      return { isValid: false, error: 'No és un fitxer ZIP vàlid (signatura incorrecta)' };
+    }
+
+    return { isValid: true };
+
+  } catch (error: any) {
+    return { isValid: false, error: `Error validant buffer: ${error.message}` };
+  }
+}
+
+/**
+ * Diagnòstic avançat per verificar l'existència d'un fitxer
+ */
+async function diagnosticFileExistence(storagePath: string): Promise<void> {
+  try {
+    console.log(`[readDocxFromStorage] 🔍 DIAGNÒSTIC: Verificant existència del fitxer...`);
     
-    // DIAGNÒSTIC AVANÇAT: Verificar si el fitxer existeix primer
-    console.log(`[readDocxFromStorage] Verificant si el fitxer existeix...`);
+    const directoryPath = storagePath.substring(0, storagePath.lastIndexOf('/'));
+    const fileName = storagePath.substring(storagePath.lastIndexOf('/') + 1);
+    
+    console.log(`[readDocxFromStorage] Directori: "${directoryPath}"`);
+    console.log(`[readDocxFromStorage] Nom del fitxer: "${fileName}"`);
+    
     const { data: listData, error: listError } = await supabaseAdmin.storage
       .from('template-docx')
-      .list(storagePath.substring(0, storagePath.lastIndexOf('/')), {
-        limit: 100,
-        search: storagePath.substring(storagePath.lastIndexOf('/') + 1)
-      });
+      .list(directoryPath, { limit: 100 });
     
     if (listError) {
-      console.error(`[readDocxFromStorage] Error llistant fitxers:`, listError);
+      console.error(`[readDocxFromStorage] Error llistant directori:`, listError);
     } else {
-      console.log(`[readDocxFromStorage] Fitxers trobats al directori:`, listData?.map(f => f.name));
-      const fileName = storagePath.substring(storagePath.lastIndexOf('/') + 1);
+      console.log(`[readDocxFromStorage] Fitxers al directori "${directoryPath}":`, listData?.map(f => f.name));
       const fileExists = listData?.some(f => f.name === fileName);
       console.log(`[readDocxFromStorage] Fitxer "${fileName}" existeix: ${fileExists}`);
+      
+      if (!fileExists) {
+        console.error(`[readDocxFromStorage] ❌ FITXER NO TROBAT: "${fileName}" no existeix al directori "${directoryPath}"`);
+        console.log(`[readDocxFromStorage] Fitxers disponibles:`, listData?.map(f => f.name));
+      }
     }
     
-    // Intentar descarregar el fitxer
-    const { data, error } = await supabaseAdmin.storage.from('template-docx').download(storagePath);
+  } catch (diagError: any) {
+    console.error(`[readDocxFromStorage] Error en diagnòstic:`, diagError);
+  }
+}
+
+export async function getDocxTextContent(storagePath: string): Promise<string> {
+  console.log(`[getDocxTextContent] Iniciant lectura de text des de: "${storagePath}"`);
+  
+  try {
+    // STEP 1: Validar path
+    const pathValidation = validateStoragePath(storagePath);
+    if (!pathValidation.isValid) {
+      throw new Error(`Path invàlid: ${pathValidation.error}`);
+    }
+    
+    const normalizedPath = pathValidation.normalizedPath!;
+    console.log(`[getDocxTextContent] Path normalitzat: "${normalizedPath}"`);
+    
+    // STEP 2: Diagnòstic d'existència
+    await diagnosticFileExistence(normalizedPath);
+    
+    // STEP 3: Descarregar fitxer
+    console.log(`[getDocxTextContent] Descarregant fitxer...`);
+    const { data, error } = await supabaseAdmin.storage
+      .from('template-docx')
+      .download(normalizedPath);
 
     if (error) {
-      let errorMessage = 'Error desconegut de Supabase Storage.';
-      if (error.message) errorMessage = error.message;
+      console.error(`[getDocxTextContent] Error de Supabase Storage:`, {
+        name: error.name,
+        message: error.message,
+        stack: error.stack,
+        status: (error as any).status,
+        statusCode: (error as any).statusCode,
+        details: (error as any).details
+      });
       
-      console.error(`[readDocxFromStorage] Error de Supabase Storage en descarregar "${storagePath}":`);
-      console.error(`  Nom de l'error: ${error.name}`);
-      console.error(`  Missatge: ${error.message}`);
-      console.error(`  Stack: ${error.stack}`);
-      // Supabase StorageError pot tenir propietats addicionals
-      if ((error as any).status) console.error(`  Status: ${(error as any).status}`);
-      if ((error as any).statusCode) console.error(`  StatusCode: ${(error as any).statusCode}`);
-      if ((error as any).details) console.error(`  Details: ${(error as any).details}`);
-      if ((error as any).error_description) console.error(`  Error Description: ${(error as any).error_description}`);
-      if ((error as any).hint) console.error(`  Hint: ${(error as any).hint}`);
-      console.error(`  Error complet (JSON): ${JSON.stringify(error, null, 2)}`);
-      
-      // DIAGNÒSTIC AVANÇAT: Verificar permisos del bucket
-      console.log(`[readDocxFromStorage] Verificant permisos del bucket 'template-docx'...`);
-      const { data: buckets, error: bucketsError } = await supabaseAdmin.storage.listBuckets();
-      if (bucketsError) {
-        console.error(`[readDocxFromStorage] Error obtenint buckets:`, bucketsError);
-      } else {
-        console.log(`[readDocxFromStorage] Buckets disponibles:`, buckets?.map(b => b.name));
-        const templateDocxBucket = buckets?.find(b => b.name === 'template-docx');
-        if (templateDocxBucket) {
-          console.log(`[readDocxFromStorage] Bucket 'template-docx' trobat:`, {
-            id: templateDocxBucket.id,
-            name: templateDocxBucket.name,
-            public: templateDocxBucket.public,
-            file_size_limit: templateDocxBucket.file_size_limit,
-            allowed_mime_types: templateDocxBucket.allowed_mime_types
-          });
-        } else {
-          console.error(`[readDocxFromStorage] Bucket 'template-docx' NO trobat!`);
-        }
-      }
-
-      throw new Error(`Error descarregant el document "${storagePath}": ${errorMessage}`);
+      throw new Error(`Error descarregant fitxer "${normalizedPath}": ${error.message}`);
     }
 
     if (!data) {
-      throw new Error(`No s'han rebut dades del document des de Supabase storage per a la ruta: ${storagePath}`);
+      throw new Error(`No s'han rebut dades del fitxer "${normalizedPath}"`);
     }
 
-    const buffer = await data.arrayBuffer();
-    const { value } = await mammoth.extractRawText({ arrayBuffer: buffer });
+    // STEP 4: Validar buffer
+    const buffer = Buffer.from(await data.arrayBuffer());
+    console.log(`[getDocxTextContent] Buffer descarregat: ${buffer.length} bytes`);
     
-    return value;
-  } catch (err) {
-    console.error(`[readDocxFromStorage] Error processant el document ${storagePath}:`, err);
-    throw err;
+    const bufferValidation = validateDocxBuffer(buffer);
+    if (!bufferValidation.isValid) {
+      throw new Error(`Buffer invàlid: ${bufferValidation.error}`);
+    }
+    
+    console.log(`[getDocxTextContent] ✅ Buffer validat correctament`);
+
+    // STEP 5: Extreure text amb mammoth
+    try {
+      const { value: text } = await mammoth.extractRawText({ buffer });
+      console.log(`[getDocxTextContent] ✅ Text extret: ${text.length} caràcters`);
+      
+      if (!text || text.trim().length === 0) {
+        throw new Error('El document no conté text o està buit');
+      }
+      
+      return text;
+      
+    } catch (mammothError: any) {
+      console.error(`[getDocxTextContent] Error amb mammoth:`, mammothError);
+      throw new Error(`Error processant document DOCX amb mammoth: ${mammothError.message}`);
+    }
+
+  } catch (error: any) {
+    console.error(`[getDocxTextContent] ❌ Error crític:`, error);
+    throw new Error(`Error llegint document DOCX: ${error.message}`);
   }
 }
 
@@ -106,23 +193,58 @@ export async function getDocxTextContent(storagePath: string): Promise<string> {
  * @returns Buffer del document
  */
 export async function readDocxFromStorage(storagePath: string): Promise<Buffer> {
+  console.log(`[readDocxFromStorage] Iniciant lectura de buffer des de: "${storagePath}"`);
+  
   try {
-    console.log(`[readDocxFromStorage] Descarregant buffer del document des de: "${storagePath}"`);
-    const { data, error } = await supabaseAdmin.storage.from('template-docx').download(storagePath);
+    // STEP 1: Validar path
+    const pathValidation = validateStoragePath(storagePath);
+    if (!pathValidation.isValid) {
+      throw new Error(`Path invàlid: ${pathValidation.error}`);
+    }
+    
+    const normalizedPath = pathValidation.normalizedPath!;
+    console.log(`[readDocxFromStorage] Path normalitzat: "${normalizedPath}"`);
+    
+    // STEP 2: Diagnòstic d'existència
+    await diagnosticFileExistence(normalizedPath);
+    
+    // STEP 3: Descarregar fitxer
+    console.log(`[readDocxFromStorage] Descarregant buffer...`);
+    const { data, error } = await supabaseAdmin.storage
+      .from('template-docx')
+      .download(normalizedPath);
 
     if (error) {
-      console.error(`[readDocxFromStorage] Error de Supabase Storage:`, error);
-      throw new Error(`Error descarregant el document "${storagePath}": ${error.message}`);
+      console.error(`[readDocxFromStorage] Error de Supabase Storage:`, {
+        name: error.name,
+        message: error.message,
+        stack: error.stack,
+        status: (error as any).status,
+        statusCode: (error as any).statusCode,
+        details: (error as any).details
+      });
+      
+      throw new Error(`Error descarregant fitxer "${normalizedPath}": ${error.message}`);
     }
 
     if (!data) {
-      throw new Error(`No s'han rebut dades del document des de Supabase storage per a la ruta: ${storagePath}`);
+      throw new Error(`No s'han rebut dades del fitxer "${normalizedPath}"`);
     }
 
-    const arrayBuffer = await data.arrayBuffer();
-    return Buffer.from(arrayBuffer);
-  } catch (err) {
-    console.error(`[readDocxFromStorage] Error obtenint buffer del document ${storagePath}:`, err);
-    throw err;
+    // STEP 4: Validar buffer
+    const buffer = Buffer.from(await data.arrayBuffer());
+    console.log(`[readDocxFromStorage] Buffer descarregat: ${buffer.length} bytes`);
+    
+    const bufferValidation = validateDocxBuffer(buffer);
+    if (!bufferValidation.isValid) {
+      throw new Error(`Buffer invàlid: ${bufferValidation.error}`);
+    }
+    
+    console.log(`[readDocxFromStorage] ✅ Buffer validat i retornat correctament`);
+    return buffer;
+
+  } catch (error: any) {
+    console.error(`[readDocxFromStorage] ❌ Error crític obtenint buffer:`, error);
+    throw new Error(`Error llegint buffer del document DOCX: ${error.message}`);
   }
 }

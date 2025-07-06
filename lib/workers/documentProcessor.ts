@@ -93,28 +93,52 @@ class DocumentProcessor {
           throw new Error(`Error obtenint configuració de plantilla ${config.template_id}: ${templateError?.message}`);
         }
 
-        // Assignar context_document_path
+        console.log(`[Worker] Configuració de plantilla recuperada:`, {
+          base_docx_storage_path: templateData.base_docx_storage_path,
+          placeholder_docx_storage_path: templateData.placeholder_docx_storage_path,
+          indexed_docx_storage_path: templateData.indexed_docx_storage_path
+        });
+
+        // Assignar context_document_path amb validació
         if (!config.context_document_path) {
-          if (templateData.base_docx_storage_path) {
-            config.context_document_path = templateData.base_docx_storage_path;
+          if (templateData.base_docx_storage_path && templateData.base_docx_storage_path.trim() !== '') {
+            config.context_document_path = templateData.base_docx_storage_path.trim();
             console.log(`[Worker] ✅ Context document assignat: ${config.context_document_path}`);
           } else {
-            throw new Error(`[Worker] No s'ha pogut determinar context_document_path per al job ${jobId}. La plantilla ${config.template_id} no té base_docx_storage_path.`);
+            throw new Error(`[Worker] No s'ha pogut determinar context_document_path per al job ${jobId}. La plantilla ${config.template_id} no té base_docx_storage_path vàlid.`);
           }
         }
 
-        // Assignar template_document_path amb fallbacks
+        // Assignar template_document_path amb fallbacks millorats
         if (!config.template_document_path) {
-          if (templateData.placeholder_docx_storage_path) {
-            config.template_document_path = templateData.placeholder_docx_storage_path;
-            console.log(`[Worker] ✅ Template document assignat (placeholder): ${config.template_document_path}`);
-          } else if (templateData.indexed_docx_storage_path) {
-            config.template_document_path = templateData.indexed_docx_storage_path;
-            console.log(`[Worker] ✅ Template document assignat (indexed): ${config.template_document_path}`);
-          } else {
-            config.template_document_path = config.context_document_path;
-            console.log(`[Worker] ⚠️ Template document assignat (base com a fallback): ${config.template_document_path}`);
+          let templatePath = null;
+          
+          // Prioritat 1: placeholder_docx_storage_path
+          if (templateData.placeholder_docx_storage_path && templateData.placeholder_docx_storage_path.trim() !== '') {
+            templatePath = templateData.placeholder_docx_storage_path.trim();
+            console.log(`[Worker] ✅ Template document assignat (placeholder): ${templatePath}`);
           }
+          // Prioritat 2: indexed_docx_storage_path
+          else if (templateData.indexed_docx_storage_path && templateData.indexed_docx_storage_path.trim() !== '') {
+            templatePath = templateData.indexed_docx_storage_path.trim();
+            console.log(`[Worker] ✅ Template document assignat (indexed): ${templatePath}`);
+          }
+          // Prioritat 3: base_docx_storage_path com a últim recurs
+          else if (config.context_document_path) {
+            templatePath = config.context_document_path;
+            console.log(`[Worker] ⚠️ Template document assignat (base com a fallback): ${templatePath}`);
+          }
+          
+          if (!templatePath) {
+            throw new Error(`[Worker] No s'ha pogut determinar template_document_path per al job ${jobId}. Cap path de document vàlid trobat.`);
+          }
+          
+          config.template_document_path = templatePath;
+        }
+
+        // Validar que els paths assignats són diferents (recomanat)
+        if (config.context_document_path === config.template_document_path) {
+          console.warn(`[Worker] ⚠️ ADVERTÈNCIA: context_document_path i template_document_path són idèntics. Això pot causar problemes de processament.`);
         }
 
         // Actualitzar la configuració del job a la base de dades per futures execucions
