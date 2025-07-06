@@ -8,24 +8,49 @@ export async function DELETE(request: NextRequest) {
     // 1. Llegeix el token de l'Authorization header
     const authHeader = request.headers.get('authorization') || request.headers.get('Authorization');
     if (!authHeader || !authHeader.startsWith('Bearer ')) {
-      return NextResponse.json({ error: 'No autenticat. Falten credencials.' }, { status: 401 });
+      return NextResponse.json({ 
+        success: false,
+        error: 'No autenticat. Falten credencials.' 
+      }, { status: 401 });
     }
     const accessToken = authHeader.replace('Bearer ', '').trim();
 
     // 2. Crea el client Supabase autenticat amb el token de l'usuari
-    const supabase = createUserSupabaseClient(accessToken);
+    let supabase;
+    try {
+      supabase = createUserSupabaseClient(accessToken);
+    } catch (err) {
+      console.error('Error creant client Supabase:', err);
+      return NextResponse.json({ 
+        success: false,
+        error: 'Error creant client Supabase',
+        details: err instanceof Error ? err.message : 'Error desconegut'
+      }, { status: 500 });
+    }
     
-    // 1. Obtenir totes les plantilles
-    const { data: templates, error: fetchError } = await supabase
-      .from('plantilla_configs')
-      .select('*');
-    
-    if (fetchError) {
-      console.error('Error obtenint plantilles:', fetchError);
+    // 3. Obtenir totes les plantilles
+    let templates;
+    try {
+      const { data: templatesData, error: fetchError } = await supabase
+        .from('plantilla_configs')
+        .select('*');
+      
+      if (fetchError) {
+        console.error('Error obtenint plantilles:', fetchError);
+        return NextResponse.json({ 
+          success: false, 
+          error: 'Error obtenint plantilles',
+          details: fetchError.message || 'Error desconegut'
+        }, { status: 500 });
+      }
+      
+      templates = templatesData;
+    } catch (err) {
+      console.error('Excepció obtenint plantilles:', err);
       return NextResponse.json({ 
         success: false, 
-        error: 'Error obtenint plantilles',
-        details: fetchError 
+        error: 'Excepció obtenint plantilles',
+        details: err instanceof Error ? err.message : 'Error desconegut'
       }, { status: 500 });
     }
     
@@ -43,10 +68,21 @@ export async function DELETE(request: NextRequest) {
     const storageErrors: any[] = [];
     
     // Obtenir l'usuari actual per construir el path correcte
-    const { data: { user }, error: userError } = await supabase.auth.getUser();
-    if (userError || !user) {
-      console.warn('No s\'ha pogut obtenir l\'usuari per eliminar fitxers del Storage');
-    } else {
+    let user;
+    try {
+      const { data: { user: authUser }, error: userError } = await supabase.auth.getUser();
+      if (userError) {
+        console.warn('Error obtenint usuari per eliminar fitxers del Storage:', userError);
+        user = null;
+      } else {
+        user = authUser;
+      }
+    } catch (err) {
+      console.warn('Excepció obtenint usuari per eliminar fitxers del Storage:', err);
+      user = null;
+    }
+    
+    if (user) {
       const userPrefix = `user-${user.id}/`;
       
       for (const template of templates) {
@@ -103,18 +139,28 @@ export async function DELETE(request: NextRequest) {
       }
     }
     
-    // 3. Eliminar registres de la base de dades
-    const { error: deleteError } = await supabase
-      .from('plantilla_configs')
-      .delete()
-      .neq('id', 'impossible-id'); // Elimina tots els registres
-    
-    if (deleteError) {
-      console.error('Error eliminant plantilles de la BD:', deleteError);
+    // 4. Eliminar registres de la base de dades
+    try {
+      const { error: deleteError } = await supabase
+        .from('plantilla_configs')
+        .delete()
+        .neq('id', 'impossible-id'); // Elimina tots els registres
+      
+      if (deleteError) {
+        console.error('Error eliminant plantilles de la BD:', deleteError);
+        return NextResponse.json({ 
+          success: false, 
+          error: 'Error eliminant plantilles de la base de dades',
+          details: deleteError.message || 'Error desconegut',
+          storageErrors 
+        }, { status: 500 });
+      }
+    } catch (err) {
+      console.error('Excepció eliminant plantilles de la BD:', err);
       return NextResponse.json({ 
         success: false, 
-        error: 'Error eliminant plantilles de la base de dades',
-        details: deleteError,
+        error: 'Excepció eliminant plantilles de la base de dades',
+        details: err instanceof Error ? err.message : 'Error desconegut',
         storageErrors 
       }, { status: 500 });
     }
