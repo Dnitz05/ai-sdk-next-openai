@@ -79,7 +79,7 @@ export async function DELETE(request: Request) {
       console.log(`[DELETE Template] Eliminant ${filesToDelete.length} arxius del Storage...`);
       
       const { error: storageError } = await supabase.storage
-        .from('templates')
+        .from('template-docx')
         .remove(filesToDelete);
 
       if (storageError) {

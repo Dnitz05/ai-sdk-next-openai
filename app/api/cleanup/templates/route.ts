@@ -39,47 +39,67 @@ export async function DELETE(request: NextRequest) {
       });
     }
     
-    // 2. Eliminar fitxers de Storage per cada plantilla
+    // 2. Eliminar carpetes completes de Storage per cada plantilla
     const storageErrors: any[] = [];
-    for (const template of templates) {
-      try {
-        // Eliminar DOCX original si existeix
-        if (template.base_docx_storage_path) {
-          const { error: docxError } = await supabase.storage
-            .from('templates')
-            .remove([template.base_docx_storage_path]);
-          if (docxError) {
-            console.warn(`⚠️ Error eliminant DOCX ${template.base_docx_storage_path}:`, docxError);
-            storageErrors.push({ file: template.base_docx_storage_path, error: docxError });
+    
+    // Obtenir l'usuari actual per construir el path correcte
+    const { data: { user }, error: userError } = await supabase.auth.getUser();
+    if (userError || !user) {
+      console.warn('No s\'ha pogut obtenir l\'usuari per eliminar fitxers del Storage');
+    } else {
+      const userPrefix = `user-${user.id}/`;
+      
+      for (const template of templates) {
+        try {
+          // Construir el prefix de la carpeta de la plantilla
+          const templatePrefix = `${userPrefix}template-${template.id}/`;
+          
+          // Llistar tots els fitxers de la carpeta de la plantilla
+          const { data: files, error: listError } = await supabase.storage
+            .from('template-docx')
+            .list(templatePrefix, { limit: 1000 });
+          
+          if (listError) {
+            console.warn(`⚠️ Error llistant fitxers per plantilla ${template.id}:`, listError);
+            storageErrors.push({ template: template.id, error: listError });
+            continue;
           }
-        }
-        
-        // Eliminar Excel si existeix
-        if (template.excel_storage_path) {
-          const { error: excelError } = await supabase.storage
-            .from('templates')
-            .remove([template.excel_storage_path]);
-          if (excelError) {
-            console.warn(`⚠️ Error eliminant Excel ${template.excel_storage_path}:`, excelError);
-            storageErrors.push({ file: template.excel_storage_path, error: excelError });
+          
+          if (files && files.length > 0) {
+            // Obtenir tots els fitxers recursivament
+            const allFiles: string[] = [];
+            
+            // Llistar fitxers en subcarpetes
+            for (const subfolder of ['original', 'indexed', 'placeholder']) {
+              const { data: subFiles } = await supabase.storage
+                .from('template-docx')
+                .list(`${templatePrefix}${subfolder}`, { limit: 1000 });
+              
+              if (subFiles) {
+                subFiles.forEach(file => {
+                  allFiles.push(`${templatePrefix}${subfolder}/${file.name}`);
+                });
+              }
+            }
+            
+            // Eliminar tots els fitxers
+            if (allFiles.length > 0) {
+              const { error: deleteError } = await supabase.storage
+                .from('template-docx')
+                .remove(allFiles);
+              
+              if (deleteError) {
+                console.warn(`⚠️ Error eliminant fitxers per plantilla ${template.id}:`, deleteError);
+                storageErrors.push({ template: template.id, error: deleteError });
+              } else {
+                console.log(`🗑️ ${allFiles.length} fitxers eliminats per plantilla ${template.id}`);
+              }
+            }
           }
+        } catch (err) {
+          console.error(`Error eliminant fitxers per plantilla ${template.id}:`, err);
+          storageErrors.push({ template: template.id, error: err });
         }
-        
-        // Eliminar DOCX de placeholders si existeix
-        if (template.placeholder_docx_storage_path) {
-          const { error: placeholderError } = await supabase.storage
-            .from('templates')
-            .remove([template.placeholder_docx_storage_path]);
-          if (placeholderError) {
-            console.warn(`⚠️ Error eliminant placeholder DOCX ${template.placeholder_docx_storage_path}:`, placeholderError);
-            storageErrors.push({ file: template.placeholder_docx_storage_path, error: placeholderError });
-          }
-        }
-        
-        console.log(`🗑️ Fitxers eliminats per plantilla ${template.id}`);
-      } catch (err) {
-        console.error(`Error eliminant fitxers per plantilla ${template.id}:`, err);
-        storageErrors.push({ template: template.id, error: err });
       }
     }
     
