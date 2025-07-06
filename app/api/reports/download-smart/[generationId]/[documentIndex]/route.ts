@@ -18,10 +18,10 @@ import { SMART_GENERATION_CONSTANTS } from '@/lib/smart/types';
 
 export async function GET(
   request: NextRequest,
-  { params }: { params: { generationId: string; documentIndex: string } }
+  { params }: { params: Promise<{ generationId: string; documentIndex: string }> }
 ) {
+  const { generationId, documentIndex } = await params;
   try {
-    const { generationId, documentIndex } = params;
     
     console.log(`📥 [SmartDownload] Petició de descàrrega:`, {
       generationId,
@@ -227,10 +227,10 @@ function cleanFileName(text: string): string {
  */
 export async function OPTIONS(
   request: NextRequest,
-  { params }: { params: { generationId: string; documentIndex?: string } }
+  { params }: { params: Promise<{ generationId: string; documentIndex?: string }> }
 ) {
   try {
-    const { generationId } = params;
+    const { generationId } = await params;
     
     if (!generationId) {
       return NextResponse.json(
