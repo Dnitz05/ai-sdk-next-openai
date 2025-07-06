@@ -312,15 +312,23 @@ const InformesPage: React.FC = () => {
                 Gestiona els teus projectes de generació automàtica d'informes amb IA
               </p>
             </div>
-            <Link
-              href="/informes/nou"
-              className="bg-blue-600 text-white px-6 py-3 rounded-lg font-medium hover:bg-blue-700 transition-colors inline-flex items-center"
-            >
-              <svg className="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
-              </svg>
-              Nou Projecte
-            </Link>
+            <div className="flex gap-2">
+              <Link
+                href="/admin/cleanup"
+                className="bg-red-600 text-white px-4 py-2 rounded-lg font-medium hover:bg-red-700 transition-colors inline-flex items-center text-sm"
+              >
+                🧹 Administració
+              </Link>
+              <Link
+                href="/informes/nou"
+                className="bg-blue-600 text-white px-6 py-3 rounded-lg font-medium hover:bg-blue-700 transition-colors inline-flex items-center"
+              >
+                <svg className="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+                </svg>
+                Nou Projecte
+              </Link>
+            </div>
           </div>
         </div>
 

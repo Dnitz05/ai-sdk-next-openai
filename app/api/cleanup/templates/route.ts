@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createUserSupabaseClient } from '@/lib/supabase/userClient';
+import supabaseServerClient from '@/lib/supabase/server';
 
 export async function DELETE(request: NextRequest) {
   try {
@@ -140,11 +141,26 @@ export async function DELETE(request: NextRequest) {
     }
     
     // 4. Eliminar registres de la base de dades
+    // IMPORTANT: Usar el client del servidor per bypassing RLS (problema de política DELETE)
     try {
-      const { error: deleteError } = await supabase
+      console.log('🗑️ Eliminant registres de la BD amb server client (bypassing RLS)...');
+      
+      // Obtenir user_id per seguretat extra
+      const { data: { user: authUser } } = await supabase.auth.getUser();
+      const userId = authUser?.id;
+      
+      if (!userId) {
+        return NextResponse.json({ 
+          success: false, 
+          error: 'No s\'ha pogut obtenir l\'usuari autenticat',
+          storageErrors 
+        }, { status: 401 });
+      }
+      
+      const { error: deleteError } = await supabaseServerClient
         .from('plantilla_configs')
         .delete()
-        .neq('id', 'impossible-id'); // Elimina tots els registres
+        .eq('user_id', userId); // Seguretat: només eliminar plantilles de l'usuari autenticat
       
       if (deleteError) {
         console.error('Error eliminant plantilles de la BD:', deleteError);
@@ -155,6 +171,8 @@ export async function DELETE(request: NextRequest) {
           storageErrors 
         }, { status: 500 });
       }
+      
+      console.log('✅ Registres eliminats de la BD correctament');
     } catch (err) {
       console.error('Excepció eliminant plantilles de la BD:', err);
       return NextResponse.json({ 
