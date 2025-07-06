@@ -56,41 +56,55 @@ export async function DELETE(request: Request) {
 
     console.log(`[DELETE Template] Eliminant plantilla "${template.config_name}" (ID: ${id})`);
 
-    // 4. Recopilar tots els paths d'arxius a eliminar
-    const filesToDelete: string[] = [];
+    // 4. Eliminar carpeta completa de Storage
+    let deletedFilesCount = 0;
     
-    if (template.base_docx_storage_path) {
-      filesToDelete.push(template.base_docx_storage_path);
-      console.log(`[DELETE Template] Arxiu a eliminar: ${template.base_docx_storage_path}`);
-    }
-    
-    if (template.placeholder_docx_storage_path) {
-      filesToDelete.push(template.placeholder_docx_storage_path);
-      console.log(`[DELETE Template] Arxiu a eliminar: ${template.placeholder_docx_storage_path}`);
-    }
-    
-    if (template.excel_storage_path) {
-      filesToDelete.push(template.excel_storage_path);
-      console.log(`[DELETE Template] Arxiu a eliminar: ${template.excel_storage_path}`);
-    }
-
-    // 5. Eliminar arxius del Storage si n'hi ha
-    if (filesToDelete.length > 0) {
-      console.log(`[DELETE Template] Eliminant ${filesToDelete.length} arxius del Storage...`);
-      
-      const { error: storageError } = await supabase.storage
-        .from('template-docx')
-        .remove(filesToDelete);
-
-      if (storageError) {
-        console.error("Error eliminant arxius del Storage:", storageError);
-        // No retornem error aquí per permetre continuar amb l'eliminació de la BD
-        console.warn(`[DELETE Template] Continuant malgrat error del Storage: ${storageError.message}`);
-      } else {
-        console.log(`[DELETE Template] ✅ Arxius eliminats del Storage correctament`);
-      }
+    // Obtenir l'usuari actual per construir el path correcte
+    const { data: { user }, error: userError } = await supabase.auth.getUser();
+    if (userError || !user) {
+      console.warn('[DELETE Template] No s\'ha pogut obtenir l\'usuari per eliminar fitxers del Storage');
     } else {
-      console.log(`[DELETE Template] No hi ha arxius per eliminar del Storage`);
+      try {
+        const userPrefix = `user-${user.id}/`;
+        const templatePrefix = `${userPrefix}template-${template.id}/`;
+        
+        console.log(`[DELETE Template] Eliminant carpeta completa: ${templatePrefix}`);
+        
+        // Obtenir tots els fitxers recursivament
+        const allFiles: string[] = [];
+        
+        // Llistar fitxers en subcarpetes
+        for (const subfolder of ['original', 'indexed', 'placeholder']) {
+          const { data: subFiles } = await supabase.storage
+            .from('template-docx')
+            .list(`${templatePrefix}${subfolder}`, { limit: 1000 });
+          
+          if (subFiles) {
+            subFiles.forEach(file => {
+              allFiles.push(`${templatePrefix}${subfolder}/${file.name}`);
+            });
+          }
+        }
+        
+        // Eliminar tots els fitxers
+        if (allFiles.length > 0) {
+          const { error: deleteError } = await supabase.storage
+            .from('template-docx')
+            .remove(allFiles);
+          
+          if (deleteError) {
+            console.error("Error eliminant fitxers del Storage:", deleteError);
+            console.warn(`[DELETE Template] Continuant malgrat error del Storage: ${deleteError.message}`);
+          } else {
+            deletedFilesCount = allFiles.length;
+            console.log(`[DELETE Template] ✅ ${deletedFilesCount} fitxers eliminats del Storage correctament`);
+          }
+        } else {
+          console.log(`[DELETE Template] No hi ha fitxers per eliminar del Storage`);
+        }
+      } catch (err) {
+        console.error(`[DELETE Template] Error eliminant fitxers del Storage:`, err);
+      }
     }
 
     // 6. Finalment, eliminar el registre de la base de dades
@@ -111,7 +125,7 @@ export async function DELETE(request: Request) {
 
     return NextResponse.json({ 
       success: true,
-      deletedFiles: filesToDelete.length,
+      deletedFiles: deletedFilesCount,
       templateName: template.config_name
     }, { status: 200 });
 
