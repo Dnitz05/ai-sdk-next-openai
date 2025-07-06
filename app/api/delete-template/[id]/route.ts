@@ -30,11 +30,11 @@ export async function DELETE(request: Request) {
 
     // 3. Primer, obtenir la plantilla amb tots els paths dels arxius
     const { data: template, error: fetchError } = await supabase
-      .from('templates')
+      .from('plantilla_configs')
       .select(`
         id,
         config_name,
-        original_docx_path,
+        base_docx_storage_path,
         placeholder_docx_storage_path,
         excel_storage_path,
         user_id
@@ -59,9 +59,9 @@ export async function DELETE(request: Request) {
     // 4. Recopilar tots els paths d'arxius a eliminar
     const filesToDelete: string[] = [];
     
-    if (template.original_docx_path) {
-      filesToDelete.push(template.original_docx_path);
-      console.log(`[DELETE Template] Arxiu a eliminar: ${template.original_docx_path}`);
+    if (template.base_docx_storage_path) {
+      filesToDelete.push(template.base_docx_storage_path);
+      console.log(`[DELETE Template] Arxiu a eliminar: ${template.base_docx_storage_path}`);
     }
     
     if (template.placeholder_docx_storage_path) {
@@ -95,7 +95,7 @@ export async function DELETE(request: Request) {
 
     // 6. Finalment, eliminar el registre de la base de dades
     const { error: deleteError } = await supabase
-      .from('templates')
+      .from('plantilla_configs')
       .delete()
       .eq('id', id);
 

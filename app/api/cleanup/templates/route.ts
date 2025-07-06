@@ -17,7 +17,7 @@ export async function DELETE(request: NextRequest) {
     
     // 1. Obtenir totes les plantilles
     const { data: templates, error: fetchError } = await supabase
-      .from('templates')
+      .from('plantilla_configs')
       .select('*');
     
     if (fetchError) {
@@ -44,13 +44,13 @@ export async function DELETE(request: NextRequest) {
     for (const template of templates) {
       try {
         // Eliminar DOCX original si existeix
-        if (template.original_docx_path) {
+        if (template.base_docx_storage_path) {
           const { error: docxError } = await supabase.storage
             .from('templates')
-            .remove([template.original_docx_path]);
+            .remove([template.base_docx_storage_path]);
           if (docxError) {
-            console.warn(`⚠️ Error eliminant DOCX ${template.original_docx_path}:`, docxError);
-            storageErrors.push({ file: template.original_docx_path, error: docxError });
+            console.warn(`⚠️ Error eliminant DOCX ${template.base_docx_storage_path}:`, docxError);
+            storageErrors.push({ file: template.base_docx_storage_path, error: docxError });
           }
         }
         
@@ -85,7 +85,7 @@ export async function DELETE(request: NextRequest) {
     
     // 3. Eliminar registres de la base de dades
     const { error: deleteError } = await supabase
-      .from('templates')
+      .from('plantilla_configs')
       .delete()
       .neq('id', 'impossible-id'); // Elimina tots els registres
     
