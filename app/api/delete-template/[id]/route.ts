@@ -74,8 +74,8 @@ export async function DELETE(request: Request) {
         // Obtenir tots els fitxers recursivament
         const allFiles: string[] = [];
         
-        // Llistar fitxers en subcarpetes
-        for (const subfolder of ['original', 'indexed', 'placeholder']) {
+        // Llistar fitxers en TOTES les subcarpetes (incloent excel)
+        for (const subfolder of ['original', 'indexed', 'placeholder', 'excel']) {
           const { data: subFiles } = await supabase.storage
             .from('template-docx')
             .list(`${templatePrefix}${subfolder}`, { limit: 1000 });
@@ -84,7 +84,22 @@ export async function DELETE(request: Request) {
             subFiles.forEach(file => {
               allFiles.push(`${templatePrefix}${subfolder}/${file.name}`);
             });
+            console.log(`[DELETE Template] Trobats ${subFiles.length} fitxers a ${subfolder}/`);
           }
+        }
+        
+        // També eliminar fitxers a l'arrel de la carpeta template
+        const { data: rootFiles } = await supabase.storage
+          .from('template-docx')
+          .list(templatePrefix, { limit: 1000 });
+        
+        if (rootFiles) {
+          rootFiles.forEach(file => {
+            if (file.name && !['original', 'indexed', 'placeholder', 'excel'].includes(file.name)) {
+              allFiles.push(`${templatePrefix}${file.name}`);
+            }
+          });
+          console.log(`[DELETE Template] Trobats ${rootFiles.length} fitxers a l'arrel`);
         }
         
         // Eliminar tots els fitxers
