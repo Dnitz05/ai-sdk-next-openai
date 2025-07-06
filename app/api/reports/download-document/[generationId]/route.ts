@@ -7,14 +7,20 @@ import { createUserSupabaseClient } from '@/lib/supabase/userClient';
  * GET /api/reports/download-document/[generationId]
  * Descarrega el document final generat per una generació específica
  */
-export async function GET(
-  request: NextRequest,
-  { params }: { params: { generationId: string } }
-) {
-  console.log("[API download-document] Rebuda petició GET per generationId:", params.generationId);
+export async function GET(request: NextRequest) {
+  // Extraiem el generationId de la URL manualment segons la nova API de Next.js 15
+  let generationId: string | undefined;
+  try {
+    const url = new URL(request.url);
+    const pathParts = url.pathname.split("/");
+    generationId = pathParts[pathParts.length - 1];
+  } catch {
+    generationId = undefined;
+  }
+
+  console.log("[API download-document] Rebuda petició GET per generationId:", generationId);
   
   try {
-    const { generationId } = params;
     
     if (!generationId) {
       return NextResponse.json({ error: 'generationId és obligatori.' }, { status: 400 });
