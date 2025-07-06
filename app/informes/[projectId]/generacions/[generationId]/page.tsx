@@ -301,18 +301,66 @@ const GenerationDetailPage: React.FC = () => {
 
   const handleDownloadDocument = async () => {
     try {
+      setUpdating(true);
+
       const { data: { session }, error: sessionError } = await supabase.auth.getSession();
       if (sessionError || !session) {
         router.push('/');
         return;
       }
 
-      // TODO: Implementar endpoint per generar i descarregar el document final
-      alert('Funcionalitat de descàrrega en desenvolupament');
+      console.log('Iniciant descàrrega del document per generationId:', generationId);
+
+      const response = await fetch(`/api/reports/download-document/${generationId}`, {
+        method: 'GET',
+        headers: {
+          'Authorization': `Bearer ${session.access_token}`,
+        },
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.error || 'Error descarregant el document');
+      }
+
+      // Obtenir el nom del fitxer des de la capçalera Content-Disposition
+      const contentDisposition = response.headers.get('Content-Disposition');
+      let fileName = `informe-${generationId}.docx`;
+      
+      if (contentDisposition) {
+        const fileNameMatch = contentDisposition.match(/filename="(.+)"/);
+        if (fileNameMatch) {
+          fileName = fileNameMatch[1];
+        }
+      }
+
+      // Convertir la resposta a blob
+      const blob = await response.blob();
+      
+      // Crear URL temporal per al blob
+      const url = window.URL.createObjectURL(blob);
+      
+      // Crear element d'enllaç temporal per forçar la descàrrega
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = fileName;
+      a.style.display = 'none';
+      
+      // Afegir a DOM, clicar i eliminar
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      
+      // Alliberar la URL temporal
+      window.URL.revokeObjectURL(url);
+      
+      console.log('Document descarregat correctament:', fileName);
 
     } catch (err) {
       console.error('Error descarregant document:', err);
-      setError('Error descarregant document');
+      setError(err instanceof Error ? err.message : 'Error descarregant document');
+    } finally {
+      setUpdating(false);
     }
   };
 

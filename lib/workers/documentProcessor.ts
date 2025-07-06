@@ -326,9 +326,40 @@ class DocumentProcessor {
           rowData
         );
 
-        // TODO: Desar el document final a Supabase Storage
-        // Per ara, només registrem que s'ha generat correctament
         console.log(`[Worker] ✅ Document final generat correctament. Mida: ${finalDocumentBuffer.length} bytes`);
+
+        // 🔥 FASE 2.1: Desar el document final a Supabase Storage
+        const finalDocumentPath = `user-${jobData.user_id}/generation-${generation.id}/final-document.docx`;
+        
+        console.log(`[Worker] 💾 Desant document final a Storage: ${finalDocumentPath}`);
+        
+        const { error: uploadError } = await this.supabase.storage
+          .from('documents')
+          .upload(finalDocumentPath, finalDocumentBuffer, {
+            contentType: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+            upsert: true
+          });
+
+        if (uploadError) {
+          console.error(`[Worker] ❌ Error desant document final:`, uploadError);
+          throw new Error(`Error desant document final: ${uploadError.message}`);
+        }
+
+        console.log(`[Worker] ✅ Document final desat correctament a Storage`);
+
+        // 🔥 FASE 2.2: Actualitzar el job amb el path del document final
+        const { error: updateError } = await this.supabase
+          .from('generation_jobs')
+          .update({ final_document_path: finalDocumentPath })
+          .eq('id', jobId);
+
+        if (updateError) {
+          console.error(`[Worker] ❌ Error actualitzant job amb final_document_path:`, updateError);
+          // No fallem el job per aquest error, però el registrem
+          console.warn(`[Worker] ⚠️ Continuant tot i l'error d'actualització del path`);
+        } else {
+          console.log(`[Worker] ✅ Job actualitzat amb final_document_path: ${finalDocumentPath}`);
+        }
 
       } catch (substitutionError: any) {
         console.error(`[Worker] Error en substitucions finals per al job ${jobId}:`, substitutionError.message);
