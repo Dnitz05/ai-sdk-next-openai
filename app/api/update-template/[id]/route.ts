@@ -227,7 +227,7 @@ export async function PUT(request: NextRequest) {
         console.log(`[API UPDATE-TEMPLATE] 🔄 Implementant generació amb indexació automàtica...`);
         
         // 2.1. Verificar si existeix versió indexada
-        const indexedPath = originalPathToUse.replace('/original/', '/indexed/').replace('.docx', '.docx');
+        const indexedPath = originalPathToUse.replace('/original/', '/indexed/').replace(/\/[^\/]+\.docx$/, '/indexed.docx');
         console.log(`[API UPDATE-TEMPLATE] Buscant versió indexada a: ${indexedPath}`);
         
         let indexedBuffer = originalBuffer;
