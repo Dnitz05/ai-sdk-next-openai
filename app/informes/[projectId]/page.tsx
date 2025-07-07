@@ -440,6 +440,22 @@ const ProjectDetailPage: React.FC = () => {
   const pendingCount = generations.filter(g => g.status === 'pending').length;
   const generatingCount = generatingIds.size;
 
+  // Debug logging per al botó intel·ligent
+  console.log('🔍 Debug botó intel·ligent:', {
+    project_excel_data: project?.excel_data,
+    is_array: Array.isArray(project?.excel_data),
+    length: project?.excel_data?.length,
+    generatingCount,
+    asyncJobsActive,
+    shouldBeEnabled: !!(
+      project?.excel_data && 
+      Array.isArray(project.excel_data) && 
+      project.excel_data.length > 0 && 
+      generatingCount === 0 && 
+      !asyncJobsActive
+    )
+  });
+
   return (
     <div className="min-h-screen bg-gray-50">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
