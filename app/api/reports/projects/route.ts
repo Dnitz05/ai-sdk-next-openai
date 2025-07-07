@@ -122,15 +122,24 @@ export async function GET(request: NextRequest) {
       const pendingGenerations = generations.filter((g: Generation) => g.status === 'pending').length;
       const errorGenerations = generations.filter((g: Generation) => g.status === 'error').length;
       
+      // 🚀 ARQUITECTURA HÍBRIDA: Càrrega intel·ligent d'excel_data
+      const excelDataSize = project.excel_data?.length || 0;
+      const isLargeExcelData = excelDataSize > 100;
+      
       return {
         id: project.id,
         project_name: project.project_name,
         excel_filename: project.excel_filename,
         total_rows: project.total_rows,
+        template_id: project.template_id, // ✅ AFEGIT: Necessari per al botó intel·ligent
         template_name: project.plantilla_configs?.config_name || 'Plantilla desconeguda',
         template_docx_name: project.plantilla_configs?.base_docx_name || null,
         created_at: project.created_at,
         updated_at: project.updated_at,
+        // 🎯 SOLUCIÓ ESCALABLE: Càrrega condicional d'excel_data
+        excel_data: isLargeExcelData ? null : project.excel_data, // ✅ Només projectes petits
+        excel_data_size: excelDataSize, // ✅ Informació de mida
+        has_large_excel_data: isLargeExcelData, // ✅ Flag per lazy loading futur
         stats: {
           total: totalGenerations,
           completed: completedGenerations,

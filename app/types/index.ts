@@ -139,10 +139,14 @@ export interface GeneratedContent {
 
 /**
  * Interfície per a un projecte amb estadístiques incloses
+ * 🚀 ACTUALITZADA amb Arquitectura Híbrida per càrrega intel·ligent d'excel_data
  */
 export interface ProjectWithStats extends Project {
   template_name: string;
   template_docx_name?: string;
+  // 🎯 ARQUITECTURA HÍBRIDA: Nous camps per càrrega intel·ligent
+  excel_data_size: number; // Mida de l'array excel_data
+  has_large_excel_data: boolean; // Flag per lazy loading
   stats: {
     total: number;
     completed: number;
