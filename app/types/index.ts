@@ -140,7 +140,7 @@ export interface GeneratedContent {
 /**
  * Interfície per a un projecte amb estadístiques incloses
  */
-export interface ProjectWithStats extends Omit<Project, 'excel_data'> {
+export interface ProjectWithStats extends Project {
   template_name: string;
   template_docx_name?: string;
   stats: {

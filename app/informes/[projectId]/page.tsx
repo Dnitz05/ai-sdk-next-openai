@@ -347,6 +347,72 @@ const ProjectDetailPage: React.FC = () => {
     }, 2000); // 2 segons de retard
   };
 
+  const handleGenerateSmartBatch = async () => {
+    try {
+      setError(null);
+      
+      const { data: { session }, error: sessionError } = await supabase.auth.getSession();
+      if (sessionError || !session) {
+        router.push('/');
+        return;
+      }
+
+      if (!project?.excel_data || !Array.isArray(project.excel_data)) {
+        setError('No hi ha dades Excel disponibles per al projecte');
+        return;
+      }
+
+      console.log(`🧠 Iniciant generació intel·ligent per ${project.excel_data.length} documents...`);
+      
+      const startTime = Date.now();
+      
+      const response = await fetch('/api/reports/generate-smart', {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${session.access_token}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          templateId: project.template_id,
+          excelData: project.excel_data,
+          userId: session.user.id
+        })
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.error || 'Error en generació intel·ligent');
+      }
+      
+      const result = await response.json();
+      const endTime = Date.now();
+      const totalTime = endTime - startTime;
+      
+      console.log(`🎉 Generació intel·ligent completada!`);
+      console.log(`📊 Documents generats: ${result.documentsGenerated}`);
+      console.log(`⏱️ Temps total: ${totalTime}ms (${(totalTime/1000).toFixed(1)}s)`);
+      console.log(`🚀 Velocitat: ${(result.documentsGenerated / (totalTime/1000)).toFixed(2)} docs/segon`);
+      
+      if (result.metrics) {
+        console.log(`🤖 Temps IA: ${result.metrics.aiCallTimeMs}ms`);
+        console.log(`📄 Temps DOCX: ${result.metrics.docxGenerationTimeMs}ms`);
+        console.log(`☁️ Temps Storage: ${result.metrics.storageUploadTimeMs}ms`);
+      }
+
+      // Mostrar missatge d'èxit a la interfície
+      setError(`✅ Generació intel·ligent completada! ${result.documentsGenerated} documents en ${(totalTime/1000).toFixed(1)}s`);
+      
+      // Refrescar dades del projecte
+      setTimeout(() => {
+        loadProjectData();
+      }, 1000);
+
+    } catch (err) {
+      console.error('Error en generació intel·ligent:', err);
+      setError(err instanceof Error ? err.message : 'Error en generació intel·ligent');
+    }
+  };
+
   if (loading) {
     return (
       <div className="min-h-screen bg-gray-50 flex items-center justify-center">
@@ -463,6 +529,17 @@ const ProjectDetailPage: React.FC = () => {
               <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2"></div>
             )}
             Generació Individual ({pendingCount} pendents)
+          </button>
+
+          <button
+            onClick={handleGenerateSmartBatch}
+            disabled={!project?.excel_data || generatingCount > 0 || asyncJobsActive}
+            className="bg-purple-600 text-white px-6 py-3 rounded-lg font-medium hover:bg-purple-700 disabled:bg-gray-300 disabled:cursor-not-allowed transition-colors flex items-center"
+          >
+            <svg className="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z" />
+            </svg>
+            🧠 Generació Intel·ligent Batch ({project?.total_rows || 0} docs)
           </button>
           
           <button
