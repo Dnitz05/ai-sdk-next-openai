@@ -533,7 +533,7 @@ const ProjectDetailPage: React.FC = () => {
 
           <button
             onClick={handleGenerateSmartBatch}
-            disabled={!project?.excel_data || generatingCount > 0 || asyncJobsActive}
+            disabled={!project?.excel_data || !Array.isArray(project.excel_data) || project.excel_data.length === 0 || generatingCount > 0 || asyncJobsActive}
             className="bg-purple-600 text-white px-6 py-3 rounded-lg font-medium hover:bg-purple-700 disabled:bg-gray-300 disabled:cursor-not-allowed transition-colors flex items-center"
           >
             <svg className="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
