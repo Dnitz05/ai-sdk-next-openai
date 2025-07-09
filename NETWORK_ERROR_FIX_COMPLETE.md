@@ -1,281 +1,127 @@
-# 🔧 SOLUCIÓ COMPLETA PER L'ERROR "Could not find file in options"
+# 🌐 SOLUCIÓ COMPLETA ERROR DE XARXA
 
-## 📋 RESUM EXECUTIU
+## 📋 RESUM DEL PROBLEMA
 
-S'ha implementat una solució integral per resoldre l'error `"Could not find file in options"` que afectava el sistema de generació de documents. El problema tenia múltiples causes que s'han abordat sistemàticament.
+L'error `GET https://ai-sdk-next-openai-94c61ocle-dnitzs-projects.vercel.app/api/reports/jobs-status?projectId=5a50ed72-4ff4-4d6d-b495-bd90edf76256 net::ERR_INTERNET_DISCONNECTED` té dues causes principals:
 
-## 🎯 PROBLEMES IDENTIFICATS
+### 🔴 **Causa 1: ID de Projecte Inexistent**
+- L'ID `5a50ed72-4ff4-4d6d-b495-bd90edf76256` no existeix a la base de dades
+- Això causa que l'API retorni errors i el frontend no pugui carregar les dades
 
-### 1. **Inconsistència en Paths de Documents**
-- **Problema:** Els paths es construïen incorrectament afegint subdirectoris inexistents
-- **Exemple problemàtic:** `user-xxx/template-xxx/original/original.docx` quan només existia `original.docx`
-- **Causa:** Lògica de migració defectuosa al `documentProcessor.ts`
+### 🔴 **Causa 2: Plantilles Incompletes**
+- Les plantilles existents no tenen `template_content` ni `docx_storage_path`
+- Això impedeix que la "Generació Intel·ligent" funcioni correctament
 
-### 2. **Falta de Validació de Buffer**
-- **Problema:** No es validava que els fitxers DOCX fossin ZIP vàlids abans de processar
-- **Causa:** PizZip fallava amb buffers corruptes sense gestió d'errors adequada
+## ✅ **SOLUCIONS IMPLEMENTADES**
 
-### 3. **Gestió d'Errors Insuficient**
-- **Problema:** Errors críptics sense informació de diagnòstic
-- **Causa:** Falta de logging detallat i fallbacks robustos
+### 1. **Endpoints de Diagnòstic Creats**
 
-## 🛠️ SOLUCIONS IMPLEMENTADES
+#### `/api/debug/investigate-id-mismatch`
+- Comprova si un ID existeix com a projecte o plantilla
+- **Resultat**: L'ID problemàtic no existeix en cap taula
 
-### **A. Millora del DocumentProcessor (`lib/workers/documentProcessor.ts`)**
+#### `/api/debug/list-all-data`
+- Llista tots els projectes i plantilles disponibles
+- **Resultat**: 5 projectes vàlids trobats, 0 plantilles (error de columna)
 
-#### **Lògica de Migració Millorada:**
-```typescript
-// ABANS (problemàtic)
-if (!config.context_document_path) {
-  config.context_document_path = templateData.base_docx_storage_path;
-}
+#### `/api/debug/check-project-data`
+- Analitza un projecte específic i la seva plantilla
+- **Resultat**: Projecte vàlid però plantilla incompleta
 
-// DESPRÉS (robust)
-if (!config.context_document_path) {
-  if (templateData.base_docx_storage_path && templateData.base_docx_storage_path.trim() !== '') {
-    config.context_document_path = templateData.base_docx_storage_path.trim();
-    console.log(`[Worker] ✅ Context document assignat: ${config.context_document_path}`);
-  } else {
-    throw new Error(`No s'ha pogut determinar context_document_path vàlid.`);
-  }
-}
-```
+### 2. **Projectes Vàlids Identificats**
 
-#### **Validació de Paths:**
-- Verificació que els paths no són buits o null
-- Normalització de paths (eliminació de barres inicials)
-- Logging detallat de la configuració recuperada
-
-### **B. Validació Robusta de Fitxers (`util/docx/readDocxFromStorage.ts`)**
-
-#### **Validació de Path:**
-```typescript
-function validateStoragePath(storagePath: string): { isValid: boolean; error?: string; normalizedPath?: string } {
-  if (!storagePath || storagePath.trim() === '') {
-    return { isValid: false, error: 'Path buit o null' };
-  }
-
-  let normalizedPath = storagePath.trim();
-  
-  // Eliminar barra inicial si existeix
-  if (normalizedPath.startsWith('/')) {
-    normalizedPath = normalizedPath.substring(1);
-  }
-
-  // Verificacions addicionals...
-  return { isValid: true, normalizedPath };
-}
-```
-
-#### **Validació de Buffer DOCX:**
-```typescript
-function validateDocxBuffer(buffer: Buffer): { isValid: boolean; error?: string } {
-  // Verificar mida mínima
-  if (buffer.length < 100) {
-    return { isValid: false, error: `Buffer massa petit: ${buffer.length} bytes` };
-  }
-
-  // Verificar signatura ZIP (DOCX és un format ZIP)
-  const uint8Array = new Uint8Array(buffer);
-  if (uint8Array[0] !== 0x50 || uint8Array[1] !== 0x4B) {
-    return { isValid: false, error: 'No és un fitxer ZIP vàlid' };
-  }
-
-  return { isValid: true };
-}
-```
-
-#### **Diagnòstic Avançat:**
-```typescript
-async function diagnosticFileExistence(storagePath: string): Promise<void> {
-  const directoryPath = storagePath.substring(0, storagePath.lastIndexOf('/'));
-  const fileName = storagePath.substring(storagePath.lastIndexOf('/') + 1);
-  
-  const { data: listData, error: listError } = await supabaseAdmin.storage
-    .from('template-docx')
-    .list(directoryPath, { limit: 100 });
-  
-  if (!listError && listData) {
-    const fileExists = listData.some(f => f.name === fileName);
-    console.log(`[readDocxFromStorage] Fitxer "${fileName}" existeix: ${fileExists}`);
-    
-    if (!fileExists) {
-      console.error(`[readDocxFromStorage] ❌ FITXER NO TROBAT`);
-      console.log(`[readDocxFromStorage] Fitxers disponibles:`, listData.map(f => f.name));
-    }
-  }
-}
-```
-
-### **C. Sistema de Fallback Robust (`util/docx/applyFinalSubstitutions.ts`)**
-
-#### **Validació Prèvia:**
-```typescript
-const validation = validateDocxBuffer(templateBuffer);
-if (!validation.isValid) {
-  console.error(`[applyFinalSubstitutions] ❌ Buffer invàlid: ${validation.error}`);
-  throw new Error(`Document DOCX corrupte o invàlid: ${validation.error}`);
-}
-```
-
-#### **Sistema de Fallback:**
-```typescript
-try {
-  // Intentar amb Docxtemplater (mètode principal)
-  const zip = new PizZip(templateBuffer);
-  const doc = new Docxtemplater(zip, { /* config */ });
-  // ... processar
-  return finalBuffer;
-  
-} catch (docxtemplaterError: any) {
-  console.warn(`[applyFinalSubstitutions] ⚠️ Docxtemplater ha fallat: ${docxtemplaterError.message}`);
-  console.log(`[applyFinalSubstitutions] Intentant fallback amb substitució de text...`);
-  
-  // FALLBACK: Utilitzar mammoth per substitució de text
-  return await applyTextSubstitutionsFallback(templateBuffer, generatedContent, excelData);
-}
-```
-
-### **D. Endpoints de Diagnòstic**
-
-#### **1. Diagnòstic de Paths (`/api/debug/docx-path-diagnostic`)**
-- Analitza configuració de plantilles
-- Verifica existència de fitxers a Storage
-- Valida integritat de buffers
-- Genera recomanacions automàtiques
-
-#### **2. Test del Worker (`/api/debug/test-worker-fix`)**
-- Crea jobs de test amb nova arquitectura
-- Executa worker amb millores
-- Verifica resultats i genera diagnòstics
-
-## 🔍 EINES DE DIAGNÒSTIC
-
-### **Ús del Diagnòstic de Paths:**
-```bash
-GET /api/debug/docx-path-diagnostic?templateId=xxx&projectId=yyy
-```
-
-**Resposta exemple:**
 ```json
 {
-  "templateInfo": {
-    "base_docx_storage_path": "user-xxx/template-xxx/original.docx",
-    "placeholder_docx_storage_path": "user-xxx/template-xxx/placeholder.docx"
-  },
-  "storageAnalysis": {
-    "base_docx": {
-      "exists": true,
-      "size": 15234,
-      "isValidZip": true,
-      "status": "OK"
+  "projectes_valids": [
+    {
+      "id": "ac7813ad-0c3b-41ea-bfae-a9b2cc945f68",
+      "nom": "yuyuuu",
+      "template_id": "365429f4-25b3-421f-a04e-b646d1e3939d",
+      "excel_filename": "omenor_prova2.xlsx",
+      "total_rows": 3
+    },
+    {
+      "id": "06877c26-10fd-4641-a0e4-74c085dc6511",
+      "nom": "aaqqq",
+      "template_id": "16bb2495-d0d3-4b25-b7f5-bdea0c79dcc7"
     }
-  },
-  "recommendations": [
-    "✅ base_docx: Fitxer vàlid a user-xxx/template-xxx/original.docx"
   ]
 }
 ```
 
-### **Ús del Test del Worker:**
+### 3. **Problemes de Plantilles Detectats**
+
+Per al projecte `ac7813ad-0c3b-41ea-bfae-a9b2cc945f68`:
+- ✅ Plantilla existeix: `365429f4-25b3-421f-a04e-b646d1e3939d`
+- ❌ `template_content`: null
+- ❌ `docx_storage_path`: null
+- ✅ `placeholder_docx_storage_path`: disponible
+- ✅ Dades Excel: 3 files disponibles
+
+## 🔧 **ACCIONS NECESSÀRIES**
+
+### **Acció 1: Corregir URL del Frontend**
+L'usuari ha d'utilitzar un projecte vàlid:
+```
+https://ai-sdk-next-openai-94c61ocle-dnitzs-projects.vercel.app/informes/ac7813ad-0c3b-41ea-bfae-a9b2cc945f68
+```
+
+### **Acció 2: Completar Plantilles**
+Les plantilles necessiten:
+1. **template_content**: Contingut JSON amb placeholders
+2. **docx_storage_path**: Ruta al fitxer DOCX original
+
+### **Acció 3: Verificar Funcionament**
+Amb un projecte vàlid i plantilla completa:
+- ✅ Generació Individual funcionarà
+- ✅ Generació Asíncrona funcionarà
+- ✅ Generació Intel·ligent funcionarà
+
+## 🧪 **TESTS DE VERIFICACIÓ**
+
+### Test 1: Comprovar Projecte Vàlid
 ```bash
-POST /api/debug/test-worker-fix
-Content-Type: application/json
-
-{
-  "projectId": "uuid-del-projecte"
-}
-```
-
-## 📊 MILLORES IMPLEMENTADES
-
-### **1. Robustesa**
-- ✅ Validació completa de paths i buffers
-- ✅ Sistema de fallback per errors de processament
-- ✅ Gestió d'errors amb informació detallada
-
-### **2. Diagnòstic**
-- ✅ Logging detallat en tots els punts crítics
-- ✅ Endpoints de diagnòstic especialitzats
-- ✅ Verificació automàtica d'integritat de fitxers
-
-### **3. Compatibilitat**
-- ✅ Migració automàtica de configuracions antigues
-- ✅ Fallback per documents amb formats problemàtics
-- ✅ Suport per múltiples tipus de plantilles
-
-### **4. Prevenció**
-- ✅ Validació prèvia abans de processar
-- ✅ Normalització automàtica de paths
-- ✅ Detecció precoç de problemes
-
-## 🚀 RESULTATS ESPERATS
-
-### **Abans de les Correccions:**
-```
-❌ Error: "Could not find file in options"
-❌ Paths incorrectes: /original/original.docx
-❌ Buffers corruptes sense detecció
-❌ Errors críptics sense context
-```
-
-### **Després de les Correccions:**
-```
-✅ Paths validats i normalitzats automàticament
-✅ Detecció precoç de fitxers corruptes
-✅ Fallback automàtic per errors de processament
-✅ Diagnòstic detallat per troubleshooting
-✅ Migració automàtica de configuracions antigues
-```
-
-## 🔧 INSTRUCCIONS D'ÚS
-
-### **1. Per Diagnosticar un Problema:**
-```bash
-# Verificar configuració de plantilla
-curl -X GET "/api/debug/docx-path-diagnostic?templateId=YOUR_TEMPLATE_ID"
-
-# Verificar projecte específic
-curl -X GET "/api/debug/docx-path-diagnostic?projectId=YOUR_PROJECT_ID"
-```
-
-### **2. Per Testar les Correccions:**
-```bash
-# Executar test del worker
-curl -X POST "/api/debug/test-worker-fix" \
+curl -X POST "http://localhost:3000/api/debug/check-project-data" \
   -H "Content-Type: application/json" \
-  -d '{"projectId": "YOUR_PROJECT_ID"}'
+  -d '{"projectId": "ac7813ad-0c3b-41ea-bfae-a9b2cc945f68"}'
 ```
 
-### **3. Per Monitoritzar en Producció:**
-- Revisar logs del worker per missatges `[Worker]`
-- Verificar que els paths es normalitzen correctament
-- Confirmar que la validació de buffers funciona
+### Test 2: Llistar Tots els Projectes
+```bash
+curl -X GET "http://localhost:3000/api/debug/list-all-data"
+```
 
-## 📝 NOTES TÈCNIQUES
+### Test 3: Investigar ID Problemàtic
+```bash
+curl -X POST "http://localhost:3000/api/debug/investigate-id-mismatch" \
+  -H "Content-Type: application/json" \
+  -d '{"suspiciousId": "5a50ed72-4ff4-4d6d-b495-bd90edf76256"}'
+```
 
-### **Compatibilitat amb Configuracions Existents:**
-- Les plantilles existents continuaran funcionant
-- La migració es fa automàticament al primer ús
-- No cal modificar dades existents
+## 📊 **RESULTATS ESPERATS**
 
-### **Rendiment:**
-- La validació afegeix ~50ms per document
-- El diagnòstic només s'executa quan hi ha problemes
-- Els fallbacks només s'activen en cas d'error
+### **Abans de la Correcció**
+- ❌ Error de xarxa amb ID inexistent
+- ❌ Botó "Generació Intel·ligent" desactivat
+- ❌ Funcionalitats limitades
 
-### **Manteniment:**
-- Revisar logs regularment per detectar patrons
-- Utilitzar endpoints de diagnòstic per troubleshooting
-- Actualitzar documentació si es detecten nous casos
+### **Després de la Correcció**
+- ✅ Projecte carrega correctament
+- ✅ Totes les funcionalitats disponibles
+- ✅ Generació de documents funcional
 
-## ✅ VERIFICACIÓ DE LA SOLUCIÓ
+## 🎯 **CONCLUSIÓ**
 
-Per verificar que la solució funciona correctament:
+El problema de xarxa està **completament diagnosticat** i les solucions són clares:
 
-1. **Executar diagnòstic** en plantilles problemàtiques
-2. **Testar worker** amb projectes que abans fallaven
-3. **Revisar logs** per confirmar validacions
-4. **Verificar fallbacks** amb documents corruptes
+1. **Utilitzar un projecte vàlid** (IDs llistats més amunt)
+2. **Completar les plantilles** amb template_content i docx_storage_path
+3. **Verificar funcionament** amb els endpoints de diagnòstic
 
-La solució és **completa, robusta i compatible** amb el sistema existent.
+Els endpoints de diagnòstic creats permeten identificar ràpidament aquests problemes en el futur.
+
+---
+
+**Data**: 7 de juliol de 2025  
+**Estat**: Diagnòstic complet, solucions identificades  
+**Següent pas**: Implementar correccions i verificar funcionament
