@@ -8,7 +8,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { SmartDocumentProcessor } from '@/lib/smart/SmartDocumentProcessor';
 import { BatchProcessingConfig, isValidExcelData } from '@/lib/smart/types';
-import supabaseServerClient from '@/lib/supabase/server';
+import { createServerClient } from '@supabase/ssr';
 import { createClient } from '@supabase/supabase-js';
 
 export const runtime = 'nodejs';
@@ -36,14 +36,36 @@ export async function POST(request: NextRequest) {
       );
     }
 
+    // Crear client SSR per llegir cookies de la sessió
+    const supabase = createServerClient(
+      process.env.NEXT_PUBLIC_SUPABASE_URL!,
+      process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+      {
+        cookies: {
+          getAll: () => {
+            return request.cookies.getAll().map(cookie => ({
+              name: cookie.name,
+              value: cookie.value,
+            }))
+          },
+          setAll: () => {
+            // No necessitem setAll en aquest context
+          }
+        }
+      }
+    );
+
     // Obtenir userId de la sessió
-    const { data: { user }, error: authError } = await supabaseServerClient.auth.getUser();
+    const { data: { user }, error: authError } = await supabase.auth.getUser();
     if (authError || !user) {
+      console.error(`❌ [SmartAPI-Enhanced] Error d'autenticació:`, authError);
       return NextResponse.json(
         { success: false, error: 'Usuari no autenticat' },
         { status: 401 }
       );
     }
+
+    console.log(`👤 [SmartAPI-Enhanced] Usuari autenticat: ${user.id}`);
 
     // Service client per bypassar RLS
     const serviceClient = createClient(
@@ -274,7 +296,26 @@ export async function GET(request: NextRequest) {
       );
     }
 
-    const { data: { user }, error: authError } = await supabaseServerClient.auth.getUser();
+    // Crear client SSR per llegir cookies de la sessió
+    const supabase = createServerClient(
+      process.env.NEXT_PUBLIC_SUPABASE_URL!,
+      process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+      {
+        cookies: {
+          getAll: () => {
+            return request.cookies.getAll().map(cookie => ({
+              name: cookie.name,
+              value: cookie.value,
+            }))
+          },
+          setAll: () => {
+            // No necessitem setAll en aquest context
+          }
+        }
+      }
+    );
+
+    const { data: { user }, error: authError } = await supabase.auth.getUser();
     if (authError || !user) {
       return NextResponse.json(
         { success: false, error: 'Usuari no autenticat' },
