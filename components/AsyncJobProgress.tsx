@@ -115,6 +115,20 @@ export default function AsyncJobProgress({ projectId, onAllJobsCompleted }: Asyn
       
       const errorMessage = err instanceof Error ? err.message : 'Error desconegut';
       
+      // Si és un error 404 (projecte no trobat), no fer retry
+      if (errorMessage.includes('404') || errorMessage.includes('no existeix')) {
+        console.log(`[AsyncJobProgress] 🚫 Projecte no trobat, aturant retries`);
+        setError(`Projecte amb ID "${projectId}" no trobat. Comprova que l'URL sigui correcta.`);
+        
+        // Aturar l'interval immediatament
+        if (intervalRef.current) {
+          clearInterval(intervalRef.current);
+          intervalRef.current = null;
+        }
+        isFinishedRef.current = true;
+        return;
+      }
+      
       // Si és un error de xarxa i encara tenim retries disponibles
       if (retryCount < maxRetries && (
         errorMessage.includes('fetch') || 

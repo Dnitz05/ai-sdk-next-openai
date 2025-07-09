@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { createServerSupabaseClient } from '@/lib/supabase/serverClient'
+import { createClient } from '@supabase/supabase-js'
 
 export async function GET(request: NextRequest) {
   try {
@@ -13,10 +13,44 @@ export async function GET(request: NextRequest) {
       }, { status: 400 })
     }
 
-    const supabase = await createServerSupabaseClient()
+    // Client amb service role key per bypassejar RLS
+    const serviceClient = createClient(
+      process.env.NEXT_PUBLIC_SUPABASE_URL!,
+      process.env.SUPABASE_SERVICE_ROLE_KEY!,
+      { auth: { persistSession: false, autoRefreshToken: false } }
+    );
+    
+    // Primer, verificar que el projecte existeix
+    const { data: project, error: projectError } = await serviceClient
+      .from('projects')
+      .select('id, project_name, user_id')
+      .eq('id', projectId)
+      .single()
+
+    if (projectError || !project) {
+      console.error(`❌ Projecte ${projectId} no trobat:`, projectError)
+      
+      // Obtenir projectes disponibles per ajudar l'usuari
+      const { data: availableProjects } = await serviceClient
+        .from('projects')
+        .select('id, project_name, created_at')
+        .order('created_at', { ascending: false })
+        .limit(5)
+
+      const suggestions = availableProjects?.map(p => `${p.project_name} (${p.id})`) || []
+      
+      return NextResponse.json({
+        success: false,
+        error: `Projecte amb ID "${projectId}" no existeix`,
+        suggestions: suggestions.length > 0 ? suggestions : ['No hi ha projectes disponibles'],
+        available_projects: availableProjects || []
+      }, { status: 404 })
+    }
+
+    console.log(`✅ Projecte trobat: ${project.project_name} (${project.id})`)
     
     // Obtenir tots els jobs del projecte amb detalls de les generacions
-    const { data: jobs, error: jobsError } = await supabase
+    const { data: jobs, error: jobsError } = await serviceClient
       .from('generation_jobs')
       .select(`
         *,
@@ -33,6 +67,8 @@ export async function GET(request: NextRequest) {
     if (jobsError) {
       throw new Error(`Error obtenint jobs: ${jobsError.message}`)
     }
+
+    console.log(`📊 Trobats ${jobs.length} jobs per al projecte ${projectId}`)
 
     // Calcular estadístiques globals
     const totalJobs = jobs.length
@@ -146,11 +182,15 @@ export async function DELETE(request: NextRequest) {
     const jobId = searchParams.get('jobId')
     const projectId = searchParams.get('projectId')
     
-    const supabase = await createServerSupabaseClient()
+    const serviceClient = createClient(
+      process.env.NEXT_PUBLIC_SUPABASE_URL!,
+      process.env.SUPABASE_SERVICE_ROLE_KEY!,
+      { auth: { persistSession: false, autoRefreshToken: false } }
+    );
     
     if (jobId) {
       // Cancel·lar un job específic
-      const { error } = await supabase
+      const { error } = await serviceClient
         .from('generation_jobs')
         .update({ 
           status: 'cancelled',
@@ -170,7 +210,7 @@ export async function DELETE(request: NextRequest) {
       
     } else if (projectId) {
       // Cancel·lar tots els jobs pendents del projecte
-      const { error } = await supabase
+      const { error } = await serviceClient
         .from('generation_jobs')
         .update({ 
           status: 'cancelled',

@@ -201,14 +201,25 @@ const ProjectDetailPage: React.FC = () => {
       });
 
       if (!projectResponse.ok) {
-        throw new Error('Error carregant projectes');
+        const errorText = await projectResponse.text();
+        throw new Error(`Error carregant projectes: ${projectResponse.status} ${errorText}`);
       }
 
       const projectData = await projectResponse.json();
+      
+      if (!projectData.projects || !Array.isArray(projectData.projects)) {
+        throw new Error('Format de resposta invàlid dels projectes');
+      }
+
       const currentProject = projectData.projects.find((p: ProjectWithStats) => p.id === projectId);
       
       if (!currentProject) {
-        setError('Projecte no trobat');
+        // Mostrar projectes disponibles per ajudar l'usuari
+        const availableProjects = projectData.projects.slice(0, 3).map((p: ProjectWithStats) => 
+          `${p.project_name} (${p.id})`
+        ).join(', ');
+        
+        setError(`Projecte amb ID "${projectId}" no trobat. Projectes disponibles: ${availableProjects}`);
         return;
       }
 
