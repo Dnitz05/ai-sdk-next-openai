@@ -9,6 +9,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { SmartDocumentProcessor } from '@/lib/smart/SmartDocumentProcessor';
 import { BatchProcessingConfig, isValidExcelData } from '@/lib/smart/types';
 import { createServerClient } from '@supabase/ssr';
+import supabaseServerClient from '@/lib/supabase/server';
 
 export const runtime = 'nodejs';
 export const maxDuration = 300;
@@ -124,18 +125,49 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Obtenir informació de la plantilla (RLS filtra automàticament per user_id)
-    const { data: template, error: templateError } = await supabase
+    // Validar que l'usuari té accés a la plantilla via projecte
+    // Primer, comprovar que el projecte existeix i pertany a l'usuari (amb client de cookies)
+    if (projectId) {
+      const { data: projectValidation, error: projectValidationError } = await supabase
+        .from('projects')
+        .select('template_id')
+        .eq('id', projectId)
+        .eq('template_id', finalTemplateId)
+        .single();
+
+      if (projectValidationError || !projectValidation) {
+        console.error(`❌ [SmartAPI-Enhanced] Accés no autoritzat al projecte/plantilla:`, projectValidationError);
+        return NextResponse.json(
+          { success: false, error: 'Accés no autoritzat al projecte o plantilla' },
+          { status: 403 }
+        );
+      }
+    }
+
+    // Un cop validat l'accés, obtenir la plantilla amb el client de servidor
+    // Això permet accedir a plantilles que podrien tenir permisos més complexos
+    console.log(`🔍 [SmartAPI-Enhanced] Obtenint plantilla ${finalTemplateId} amb permisos de servidor`);
+    const { data: template, error: templateError } = await supabaseServerClient
       .from('plantilla_configs')
-      .select('template_content, docx_storage_path')
+      .select('template_content, docx_storage_path, user_id')
       .eq('id', finalTemplateId)
       .single();
 
     if (templateError || !template) {
-      console.error(`❌ [SmartAPI-Enhanced] Plantilla no trobada: ${finalTemplateId}`);
+      console.error(`❌ [SmartAPI-Enhanced] Plantilla no trobada: ${finalTemplateId}`, templateError);
       return NextResponse.json(
         { success: false, error: 'Plantilla no trobada' },
         { status: 404 }
+      );
+    }
+
+    // Validació addicional de seguretat: verificar que la plantilla pertany a l'usuari
+    // o és accessible via el projecte validat anteriorment
+    if (template.user_id !== user.id && !projectId) {
+      console.error(`❌ [SmartAPI-Enhanced] Accés no autoritzat a plantilla per usuari ${user.id}`);
+      return NextResponse.json(
+        { success: false, error: 'Accés no autoritzat a aquesta plantilla' },
+        { status: 403 }
       );
     }
 

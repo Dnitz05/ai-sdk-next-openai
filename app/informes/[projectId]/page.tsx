@@ -787,30 +787,8 @@ const ProjectDetailPage: React.FC = () => {
           </div>
         )}
 
-        {/* Accions principals */}
+        {/* Accions principals - Només Generació Intel·ligent */}
         <div className="mb-6 flex flex-wrap gap-4">
-          <button
-            onClick={handleGenerateAllAsync}
-            disabled={pendingCount === 0 || generatingCount > 0 || asyncJobsActive}
-            className="bg-blue-600 text-white px-6 py-3 rounded-lg font-medium hover:bg-blue-700 disabled:bg-gray-300 disabled:cursor-not-allowed transition-colors flex items-center"
-          >
-            <svg className="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
-            </svg>
-            Generació Asíncrona ({pendingCount} pendents)
-          </button>
-          
-          <button
-            onClick={handleGenerateAll}
-            disabled={pendingCount === 0 || generatingCount > 0 || asyncJobsActive}
-            className="bg-green-600 text-white px-6 py-3 rounded-lg font-medium hover:bg-green-700 disabled:bg-gray-300 disabled:cursor-not-allowed transition-colors flex items-center"
-          >
-            {generatingCount > 0 && (
-              <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2"></div>
-            )}
-            Generació Individual ({pendingCount} pendents)
-          </button>
-
           <button
             onClick={handleGenerateSmartBatch}
             disabled={!project?.excel_data || !Array.isArray(project.excel_data) || project.excel_data.length === 0 || generatingCount > 0 || asyncJobsActive}
