@@ -145,21 +145,44 @@ export async function POST(request: NextRequest) {
     }
 
     // Un cop validat l'accés, obtenir la plantilla amb el client de servidor
-    // Això permet accedir a plantilles que podrien tenir permisos més complexos
+    // Utilitzant les columnes correctes segons l'esquema real
     console.log(`🔍 [SmartAPI-Enhanced] Obtenint plantilla ${finalTemplateId} amb permisos de servidor`);
-    const { data: template, error: templateError } = await supabaseServerClient
+    const { data: templateRaw, error: templateError } = await supabaseServerClient
       .from('plantilla_configs')
-      .select('template_content, docx_storage_path, user_id')
+      .select('*')
       .eq('id', finalTemplateId)
       .single();
 
-    if (templateError || !template) {
+    if (templateError || !templateRaw) {
       console.error(`❌ [SmartAPI-Enhanced] Plantilla no trobada: ${finalTemplateId}`, templateError);
       return NextResponse.json(
         { success: false, error: 'Plantilla no trobada' },
         { status: 404 }
       );
     }
+
+    // Mappejar columnes reals a les esperadas pel sistema
+    const template = {
+      id: templateRaw.id,
+      user_id: templateRaw.user_id,
+      config_name: templateRaw.config_name,
+      // Utilitzar final_html com a contingut de la plantilla (és el que conté la configuració)
+      template_content: templateRaw.final_html || templateRaw.ai_instructions || null,
+      // Prioritzar els diferents paths de document disponibles
+      docx_storage_path: templateRaw.docx_storage_path || 
+                        templateRaw.base_docx_storage_path || 
+                        templateRaw.placeholder_docx_storage_path ||
+                        templateRaw.indexed_docx_storage_path ||
+                        null
+    };
+
+    console.log(`📋 [SmartAPI-Enhanced] Plantilla mappejada:`, {
+      id: template.id,
+      name: template.config_name,
+      hasContent: !!template.template_content,
+      hasDocxPath: !!template.docx_storage_path,
+      userId: template.user_id
+    });
 
     // Validació addicional de seguretat: verificar que la plantilla pertany a l'usuari
     // o és accessible via el projecte validat anteriorment
@@ -173,9 +196,27 @@ export async function POST(request: NextRequest) {
 
     // Validar que la plantilla té el contingut necessari
     if (!template.template_content || !template.docx_storage_path) {
-      console.error(`❌ [SmartAPI-Enhanced] Plantilla incompleta`);
+      console.error(`❌ [SmartAPI-Enhanced] Plantilla incompleta:`, {
+        hasContent: !!template.template_content,
+        hasDocxPath: !!template.docx_storage_path,
+        availableColumns: Object.keys(templateRaw)
+      });
       return NextResponse.json(
-        { success: false, error: 'Plantilla incompleta - falta contingut o document' },
+        { 
+          success: false, 
+          error: 'Plantilla incompleta - falta contingut o document',
+          details: {
+            hasContent: !!template.template_content,
+            hasDocxPath: !!template.docx_storage_path,
+            availableContent: templateRaw.final_html ? 'final_html' : templateRaw.ai_instructions ? 'ai_instructions' : 'none',
+            availableDocxPaths: [
+              templateRaw.docx_storage_path && 'docx_storage_path',
+              templateRaw.base_docx_storage_path && 'base_docx_storage_path',
+              templateRaw.placeholder_docx_storage_path && 'placeholder_docx_storage_path',
+              templateRaw.indexed_docx_storage_path && 'indexed_docx_storage_path'
+            ].filter(Boolean)
+          }
+        },
         { status: 400 }
       );
     }
