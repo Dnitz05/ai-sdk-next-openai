@@ -22,7 +22,7 @@ import supabaseServerClient from '@/lib/supabase/server';
 // ============================================================================
 
 export const runtime = 'nodejs';
-export const maxDuration = 600; // 10 minuts per processaments massius
+export const maxDuration = 300; // 5 minuts màxim per Vercel Pro
 
 interface EnhancedBatchRequest {
   projectId?: string;
