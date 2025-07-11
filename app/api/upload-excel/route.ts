@@ -1,61 +1,43 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { createClient } from '@supabase/supabase-js';
-import { createUserSupabaseClient } from '@/lib/supabase/userClient';
-import { createServerSupabaseClient } from '@/lib/supabase/serverClient';
+import { createServerClient } from '@supabase/ssr';
 
 export async function POST(request: NextRequest) {
-  console.log("[API upload-excel] Rebuda petició POST");
+  console.log("[API upload-excel] Iniciant pujada d'Excel amb SSR...");
   
   try {
-    // 1. Autenticació de l'usuari: primer via header Authorization (Bearer), després cookies
-    let userId: string | null = null;
-    let userError: any = null;
-    const authHeader = request.headers.get('authorization') ?? request.headers.get('Authorization');
-    console.log('[API upload-excel] HEADER Authorization:', authHeader ? 'present' : 'missing');
-    
-    if (authHeader?.startsWith('Bearer ')) {
-      const accessToken = authHeader.slice(7).trim();
-      console.log('[API upload-excel] accessToken present:', accessToken ? 'yes' : 'no');
-      try {
-        const userClient = createUserSupabaseClient(accessToken);
-        const { data: userDataAuth, error: authError } = await userClient.auth.getUser();
-        if (!authError && userDataAuth.user) {
-          userId = userDataAuth.user.id;
-          console.log("[API upload-excel] Usuari autenticat via Bearer token:", userId);
-        } else {
-          userError = authError;
-          console.log("[API upload-excel] Bearer token invalid, trying fallback...");
+    // 1. Crear client SSR per autenticació automàtica amb RLS
+    const supabase = createServerClient(
+      process.env.NEXT_PUBLIC_SUPABASE_URL!,
+      process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+      {
+        cookies: {
+          getAll: () => {
+            return request.cookies.getAll().map(cookie => ({
+              name: cookie.name,
+              value: cookie.value,
+            }))
+          },
+          setAll: () => {
+            // No necessitem setAll en aquest context
+          }
         }
-      } catch (e) {
-        userError = e;
-        console.log("[API upload-excel] Bearer token error, trying fallback...");
       }
+    );
+
+    // 2. Verificar autenticació SSR
+    const { data: { user }, error: authError } = await supabase.auth.getUser();
+    if (authError || !user) {
+      console.error("[API upload-excel] Error d'autenticació SSR:", authError);
+      return NextResponse.json({ 
+        error: 'Usuari no autenticat',
+        details: authError?.message 
+      }, { status: 401 });
     }
     
-    if (!userId) {
-      console.log("[API upload-excel] Trying authentication via cookies...");
-      try {
-        const supabaseServer = await createServerSupabaseClient();
-        const { data: userDataAuth2, error: serverError } = await supabaseServer.auth.getUser();
-        if (!serverError && userDataAuth2.user) {
-          userId = userDataAuth2.user.id;
-          console.log("[API upload-excel] Usuari autenticat via cookies:", userId);
-        } else {
-          userError = serverError;
-        }
-      } catch (e) {
-        userError = e;
-      }
-    }
+    const userId = user.id;
+    console.log("[API upload-excel] Usuari autenticat via SSR:", userId);
     
-    if (!userId) {
-      console.error("[API upload-excel] Error obtenint informació de l'usuari:", userError);
-      return NextResponse.json({ error: 'Usuari no autenticat.' }, { status: 401 });
-    }
-    
-    console.log("[API upload-excel] Usuari autenticat:", userId);
-    
-    // 2. Processar FormData
+    // 3. Processar FormData
     const formData = await request.formData();
     const file = formData.get('file') as File;
     const templateId = formData.get('templateId') as string;
@@ -72,7 +54,7 @@ export async function POST(request: NextRequest) {
       }, { status: 400 });
     }
     
-    // 3. Validar que sigui un fitxer Excel
+    // 4. Validar que sigui un fitxer Excel
     const validTypes = [
       'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', // .xlsx
       'application/vnd.ms-excel' // .xls
@@ -86,24 +68,31 @@ export async function POST(request: NextRequest) {
     
     console.log(`[API upload-excel] Processant fitxer: ${file.name} (${file.size} bytes)`);
     
-    // 4. Convertir a buffer
+    // 5. Verificar que la plantilla pertany a l'usuari abans de continuar
+    const { data: templateCheck, error: templateError } = await supabase
+      .from('plantilla_configs')
+      .select('id, user_id')
+      .eq('id', templateId)
+      .single();
+    
+    if (templateError || !templateCheck) {
+      console.error("[API upload-excel] Plantilla no trobada o no pertany a l'usuari:", templateError);
+      return NextResponse.json({ 
+        error: 'Plantilla no trobada o no autoritzada' 
+      }, { status: 404 });
+    }
+    
+    // 6. Convertir a buffer
     const arrayBuffer = await file.arrayBuffer();
     const buffer = Buffer.from(arrayBuffer);
     
-    // 5. Definir ruta d'emmagatzematge
+    // 7. Definir ruta d'emmagatzematge
     const storagePath = `user-${userId}/template-${templateId}/excel/data.xlsx`;
     
-    // 6. Client amb service role per pujar a Storage
-    const serviceClient = createClient(
-      process.env.NEXT_PUBLIC_SUPABASE_URL!,
-      process.env.SUPABASE_SERVICE_ROLE_KEY!,
-      { auth: { persistSession: false, autoRefreshToken: false } }
-    );
-    
-    // 7. Pujar fitxer Excel a Supabase Storage
+    // 8. Pujar fitxer Excel a Supabase Storage amb RLS
     console.log(`[API upload-excel] Pujant Excel a: ${storagePath}`);
     
-    const { data: uploadData, error: uploadError } = await serviceClient.storage
+    const { data: uploadData, error: uploadError } = await supabase.storage
       .from('template-docx')
       .upload(storagePath, buffer, {
         contentType: file.type,
@@ -119,21 +108,20 @@ export async function POST(request: NextRequest) {
     
     console.log(`[API upload-excel] Excel pujat correctament: ${uploadData.path}`);
     
-    // 8. Actualitzar la BD amb la ruta de l'Excel
-    const { error: dbError } = await serviceClient
+    // 9. Actualitzar la BD amb la ruta de l'Excel (RLS automàtic)
+    const { error: dbError } = await supabase
       .from('plantilla_configs')
       .update({ 
         excel_storage_path: uploadData.path,
         excel_file_name: file.name,
         updated_at: new Date().toISOString()
       })
-      .eq('id', templateId)
-      .eq('user_id', userId);
+      .eq('id', templateId); // RLS assegura que només s'actualitza si pertany a l'usuari
     
     if (dbError) {
       console.error('[API upload-excel] Error actualitzant BD:', dbError);
       // Intentar eliminar el fitxer pujat ja que la BD no s'ha actualitzat
-      await serviceClient.storage
+      await supabase.storage
         .from('template-docx')
         .remove([uploadData.path]);
       

@@ -5,6 +5,23 @@ import type { NextRequest } from 'next/server'
 
 export async function middleware(req: NextRequest) {
   try {
+    // 🔒 PROTECCIÓ DE SEGURETAT: Bloquejar endpoints de debug en producció
+    if (req.nextUrl.pathname.startsWith('/api/debug')) {
+      if (process.env.NODE_ENV !== 'development') {
+        console.warn(`🚫 Blocked access to debug endpoint in production: ${req.nextUrl.pathname}`)
+        return new NextResponse('Not Found', { status: 404 })
+      }
+      
+      // En desenvolupament, permet l'accés però registra l'ús
+      console.log(`🔧 Debug endpoint accessed: ${req.nextUrl.pathname}`)
+    }
+
+    // Protecció dels endpoints administratius
+    if (req.nextUrl.pathname.startsWith('/admin')) {
+      // En el futur, aquí podríem afegir autenticació d'admin
+      console.log(`⚠️  Admin endpoint accessed: ${req.nextUrl.pathname}`)
+    }
+
     const res = NextResponse.next()
     
     // Validar variables d'entorn abans de crear el client

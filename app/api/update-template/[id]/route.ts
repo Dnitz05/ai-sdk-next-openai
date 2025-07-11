@@ -1,6 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { createUserSupabaseClient } from '@/lib/supabase/userClient'; // Per verificar l'usuari
-import { createClient } from '@supabase/supabase-js'; // Per al client de servei
+import { createServerClient } from '@supabase/ssr';
 import { generatePlaceholderDocx } from '@util/generatePlaceholderDocx';
 import { indexDocxWithSdts, isDocxIndexed } from '@/util/docx/indexDocxWithSdts';
 import { generatePlaceholderDocxWithIds } from '@/util/docx/generatePlaceholderDocxWithIds';
@@ -20,29 +19,39 @@ interface UpdateTemplatePayload {
 }
 
 export async function PUT(request: NextRequest) {
-  // 1. Verificar autenticació
-  const authHeader = request.headers.get('authorization') || request.headers.get('Authorization');
-  if (!authHeader || !authHeader.startsWith('Bearer ')) {
-    return NextResponse.json({ error: 'No autenticat. Falten credencials.' }, { status: 401 });
-  }
-  const accessToken = authHeader.replace('Bearer ', '').trim();
+  console.log("[API UPDATE-TEMPLATE] Iniciant actualització de plantilla amb SSR...");
   
-  const userSupabaseClient = createUserSupabaseClient(accessToken); // Client per verificar l'usuari
-  const { data: userData, error: userError } = await userSupabaseClient.auth.getUser();
-
-  if (userError || !userData?.user) {
-    console.error("[API UPDATE-TEMPLATE] Error verificant usuari:", userError);
-    return NextResponse.json({ error: 'Usuari no autenticat o token invàlid.', details: userError?.message }, { status: 401 });
-  }
-  const userId = userData.user.id;
-  console.log("[API UPDATE-TEMPLATE] Usuari autenticat:", userId);
-  
-  // 2. Crear client amb service role key
-  const serviceClient = createClient(
+  // 1. Crear client SSR per autenticació automàtica amb RLS
+  const supabase = createServerClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.SUPABASE_SERVICE_ROLE_KEY!,
-    { auth: { persistSession: false, autoRefreshToken: false } }
+    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+    {
+      cookies: {
+        getAll: () => {
+          return request.cookies.getAll().map(cookie => ({
+            name: cookie.name,
+            value: cookie.value,
+          }))
+        },
+        setAll: () => {
+          // No necessitem setAll en aquest context
+        }
+      }
+    }
   );
+
+  // 2. Verificar autenticació SSR
+  const { data: { user }, error: authError } = await supabase.auth.getUser();
+  if (authError || !user) {
+    console.error("[API UPDATE-TEMPLATE] Error d'autenticació SSR:", authError);
+    return NextResponse.json({ 
+      error: 'Usuari no autenticat',
+      details: authError?.message 
+    }, { status: 401 });
+  }
+  
+  const userId = user.id;
+  console.log("[API UPDATE-TEMPLATE] Usuari autenticat via SSR:", userId);
 
   // Extreu l'id de la URL (paràmetre dinàmic) de la pathname
   // Ex: /api/update-template/1234-5678-abcd-efgh
@@ -111,8 +120,8 @@ export async function PUT(request: NextRequest) {
   
   console.log('[API UPDATE-TEMPLATE] Dades a actualitzar (updateData):', JSON.stringify(updateData, null, 2));
 
-  // 3. Actualitzar plantilla
-  const { data: updatedTemplate, error: dbError } = await serviceClient
+  // 3. Actualitzar plantilla amb RLS automàtic
+  const { data: updatedTemplate, error: dbError } = await supabase
     .from('plantilla_configs')
     .update(updateData)
     .eq('id', id)
@@ -160,7 +169,7 @@ export async function PUT(request: NextRequest) {
       
       try {
         // Verificar si existeix el fitxer o el directori
-        const { data: fileListData } = await serviceClient.storage
+        const { data: fileListData } = await supabase.storage
           .from('template-docx')
           .list(`user-${userId}/template-${id}/original`);
           
@@ -177,7 +186,7 @@ export async function PUT(request: NextRequest) {
             console.log(`[API UPDATE-TEMPLATE] ✅ Recuperat document: ${recoveredPath}`);
             
             // Actualitzar la plantilla amb la ruta recuperada
-            await serviceClient
+            await supabase
               .from('plantilla_configs')
               .update({ base_docx_storage_path: recoveredPath })
               .eq('id', id)
@@ -201,7 +210,7 @@ export async function PUT(request: NextRequest) {
         console.log(`[API UPDATE-TEMPLATE] Intent de generar placeholder per a: ${originalPathToUse}`);
         
         // 1. Descarregar el docx original
-        const { data: fileData, error: downloadError } = await serviceClient.storage
+        const { data: fileData, error: downloadError } = await supabase.storage
           .from('template-docx')
           .download(originalPathToUse);
           
@@ -234,14 +243,14 @@ export async function PUT(request: NextRequest) {
         let usingIndexedVersion = false;
         
         try {
-          const { data: indexedData, error: indexedError } = await serviceClient.storage
+          const { data: indexedData, error: indexedError } = await supabase.storage
             .from('template-docx')
             .download(indexedPath);
             
           if (!indexedError && indexedData && indexedData.size > 0) {
             console.log(`[API UPDATE-TEMPLATE] ✅ Versió indexada trobada: ${indexedData.size} bytes`);
             const indexedArrayBuffer = await indexedData.arrayBuffer();
-            indexedBuffer = Buffer.from(new Uint8Array(indexedArrayBuffer));
+            indexedBuffer = Buffer.from(indexedArrayBuffer);
             usingIndexedVersion = true;
             
             // Verificar que realment està indexada
@@ -278,7 +287,7 @@ export async function PUT(request: NextRequest) {
               
               // Guardar la versió indexada per futures utilitzacions
               try {
-                const { error: saveIndexedError } = await serviceClient.storage
+                const { error: saveIndexedError } = await supabase.storage
                   .from('template-docx')
                   .upload(indexedPath, indexedBuffer, {
                     contentType: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
@@ -309,7 +318,7 @@ export async function PUT(request: NextRequest) {
             console.log(`[API UPDATE-TEMPLATE] 📤 Utilitzant generació legacy...`);
             const legacyPlaceholderPath = originalPathToUse.replace('/original/original.docx', '/placeholder/placeholder.docx');
             
-            const { data: legacyUploadData, error: legacyUploadError } = await serviceClient.storage
+            const { data: legacyUploadData, error: legacyUploadError } = await supabase.storage
               .from('template-docx')
               .upload(legacyPlaceholderPath, placeholderBuffer, {
                 contentType: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
@@ -317,7 +326,7 @@ export async function PUT(request: NextRequest) {
               });
               
             if (!legacyUploadError && legacyUploadData) {
-              await serviceClient
+              await supabase
                 .from('plantilla_configs')
                 .update({ placeholder_docx_storage_path: legacyUploadData.path })
                 .eq('id', id)
@@ -419,7 +428,7 @@ export async function PUT(request: NextRequest) {
         const placeholderDir = placeholderPath.substring(0, placeholderPath.lastIndexOf('/'));
         try {
           console.log(`[API UPDATE-TEMPLATE] Assegurant directori: ${placeholderDir}`);
-          await serviceClient.storage
+          await supabase.storage
             .from('template-docx')
             .upload(`${placeholderDir}/.keep`, new Uint8Array(0), { upsert: true });
           console.log(`[API UPDATE-TEMPLATE] Directori assegurat`);
@@ -435,7 +444,7 @@ export async function PUT(request: NextRequest) {
         
         // 6. Pujar el placeholder
         console.log(`[API UPDATE-TEMPLATE] Pujant placeholder de ${placeholderBuffer.length} bytes`);
-        const { data: uploadData, error: uploadError } = await serviceClient.storage
+        const { data: uploadData, error: uploadError } = await supabase.storage
           .from('template-docx')
           .upload(placeholderPath, placeholderBuffer, {
             contentType: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
@@ -446,7 +455,7 @@ export async function PUT(request: NextRequest) {
           console.error('[API UPDATE-TEMPLATE] Error pujant placeholder:', uploadError);
           throw uploadError;
         }
-      await serviceClient
+            await supabase
         .from('plantilla_configs')
         .update({ placeholder_docx_storage_path: uploadData.path })
         .eq('id', id)

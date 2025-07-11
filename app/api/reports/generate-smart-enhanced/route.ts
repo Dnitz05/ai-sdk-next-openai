@@ -9,7 +9,6 @@ import { NextRequest, NextResponse } from 'next/server';
 import { SmartDocumentProcessor } from '@/lib/smart/SmartDocumentProcessor';
 import { BatchProcessingConfig, isValidExcelData } from '@/lib/smart/types';
 import { createServerClient } from '@supabase/ssr';
-import { createClient } from '@supabase/supabase-js';
 
 export const runtime = 'nodejs';
 export const maxDuration = 300;
@@ -67,12 +66,6 @@ export async function POST(request: NextRequest) {
 
     console.log(`👤 [SmartAPI-Enhanced] Usuari autenticat: ${user.id}`);
 
-    // Service client per bypassar RLS
-    const serviceClient = createClient(
-      process.env.NEXT_PUBLIC_SUPABASE_URL!,
-      process.env.SUPABASE_SERVICE_ROLE_KEY!
-    );
-
     // Si tenim projectId, obtenir templateId i excel_data
     let finalTemplateId = templateId;
     let excelData = body.excelData;
@@ -80,12 +73,11 @@ export async function POST(request: NextRequest) {
     if (projectId) {
       console.log(`📋 [SmartAPI-Enhanced] Carregant dades del projecte: ${projectId}`);
       
-      // Obtenir informació del projecte
-      const { data: project, error: projectError } = await serviceClient
+      // Obtenir informació del projecte (RLS filtra automàticament per user_id)
+      const { data: project, error: projectError } = await supabase
         .from('projects')
         .select('template_id, excel_data, total_rows')
         .eq('id', projectId)
-        .eq('user_id', user.id)
         .single();
 
       if (projectError || !project) {
@@ -102,7 +94,8 @@ export async function POST(request: NextRequest) {
       if (!project.excel_data && generationIds && generationIds.length > 0) {
         console.log(`🔍 [SmartAPI-Enhanced] Carregant dades específiques per ${generationIds.length} generacions`);
         
-        const { data: generations, error: genError } = await serviceClient
+        // RLS filtra automàticament per user_id via project_id
+        const { data: generations, error: genError } = await supabase
           .from('generations')
           .select('row_data, excel_row_index')
           .in('id', generationIds)
@@ -131,8 +124,8 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Obtenir informació de la plantilla
-    const { data: template, error: templateError } = await serviceClient
+    // Obtenir informació de la plantilla (RLS filtra automàticament per user_id)
+    const { data: template, error: templateError } = await supabase
       .from('plantilla_configs')
       .select('template_content, docx_storage_path')
       .eq('id', finalTemplateId)
@@ -187,9 +180,9 @@ export async function POST(request: NextRequest) {
       
       result = await processor.processBatch(singleConfig);
       
-      // Actualitzar la generació específica
+      // Actualitzar la generació específica (RLS filtra automàticament per user_id)
       if (result.success && result.documents.length > 0) {
-        await serviceClient
+        await supabase
           .from('generations')
           .update({
             status: 'generated',
@@ -323,13 +316,8 @@ export async function GET(request: NextRequest) {
       );
     }
 
-    const serviceClient = createClient(
-      process.env.NEXT_PUBLIC_SUPABASE_URL!,
-      process.env.SUPABASE_SERVICE_ROLE_KEY!
-    );
-
-    // Obtenir informació del projecte
-    const { data: project, error: projectError } = await serviceClient
+    // Obtenir informació del projecte (RLS filtra automàticament per user_id)
+    const { data: project, error: projectError } = await supabase
       .from('projects')
       .select(`
         id,
@@ -345,7 +333,6 @@ export async function GET(request: NextRequest) {
         )
       `)
       .eq('id', projectId)
-      .eq('user_id', user.id)
       .single();
 
     if (projectError || !project) {
@@ -355,8 +342,8 @@ export async function GET(request: NextRequest) {
       );
     }
 
-    // Comprovar si les dades Excel estan disponibles
-    const { data: excelCheck } = await serviceClient
+    // Comprovar si les dades Excel estan disponibles (RLS filtra automàticament)
+    const { data: excelCheck } = await supabase
       .from('projects')
       .select('excel_data')
       .eq('id', projectId)

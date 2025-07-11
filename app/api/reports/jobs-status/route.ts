@@ -1,8 +1,43 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { createClient } from '@supabase/supabase-js'
+import { createServerClient } from '@supabase/ssr';
 
 export async function GET(request: NextRequest) {
+  console.log("[API reports/jobs-status] Rebuda petició GET per estat de jobs amb SSR...");
+
   try {
+    // 1. Crear client SSR per autenticació automàtica amb RLS
+    const supabase = createServerClient(
+      process.env.NEXT_PUBLIC_SUPABASE_URL!,
+      process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+      {
+        cookies: {
+          getAll: () => {
+            return request.cookies.getAll().map(cookie => ({
+              name: cookie.name,
+              value: cookie.value,
+            }))
+          },
+          setAll: () => {
+            // No necessitem setAll en aquest context
+          }
+        }
+      }
+    );
+
+    // 2. Verificar autenticació SSR
+    const { data: { user }, error: authError } = await supabase.auth.getUser();
+    if (authError || !user) {
+      console.error("[API reports/jobs-status] Error d'autenticació SSR:", authError);
+      return NextResponse.json({ 
+        error: 'Usuari no autenticat',
+        details: authError?.message 
+      }, { status: 401 });
+    }
+    
+    const userId = user.id;
+    console.log("[API reports/jobs-status] Usuari autenticat via SSR:", userId);
+
+    // 3. Obtenir paràmetres
     const { searchParams } = new URL(request.url)
     const projectId = searchParams.get('projectId')
     
@@ -13,25 +48,20 @@ export async function GET(request: NextRequest) {
       }, { status: 400 })
     }
 
-    // Client amb service role key per bypassejar RLS
-    const serviceClient = createClient(
-      process.env.NEXT_PUBLIC_SUPABASE_URL!,
-      process.env.SUPABASE_SERVICE_ROLE_KEY!,
-      { auth: { persistSession: false, autoRefreshToken: false } }
-    );
-    
-    // Primer, verificar que el projecte existeix
-    const { data: project, error: projectError } = await serviceClient
+    console.log(`[API reports/jobs-status] Consultant jobs per projecte: ${projectId}`);
+
+    // 4. Verificar que el projecte existeix i pertany a l'usuari (RLS automàtic)
+    const { data: project, error: projectError } = await supabase
       .from('projects')
       .select('id, project_name, user_id')
       .eq('id', projectId)
       .single()
 
     if (projectError || !project) {
-      console.error(`❌ Projecte ${projectId} no trobat:`, projectError)
+      console.error(`❌ [API reports/jobs-status] Projecte ${projectId} no trobat o no autoritzat:`, projectError)
       
-      // Obtenir projectes disponibles per ajudar l'usuari
-      const { data: availableProjects } = await serviceClient
+      // Obtenir projectes disponibles de l'usuari (RLS automàtic)
+      const { data: availableProjects } = await supabase
         .from('projects')
         .select('id, project_name, created_at')
         .order('created_at', { ascending: false })
@@ -41,16 +71,17 @@ export async function GET(request: NextRequest) {
       
       return NextResponse.json({
         success: false,
-        error: `Projecte amb ID "${projectId}" no existeix`,
+        error: `Projecte amb ID "${projectId}" no existeix o no està autoritzat`,
         suggestions: suggestions.length > 0 ? suggestions : ['No hi ha projectes disponibles'],
         available_projects: availableProjects || []
       }, { status: 404 })
     }
 
-    console.log(`✅ Projecte trobat: ${project.project_name} (${project.id})`)
+    console.log(`✅ [API reports/jobs-status] Projecte trobat: ${project.project_name} (${project.id})`)
     
-    // Obtenir tots els jobs del projecte amb detalls de les generacions
-    const { data: jobs, error: jobsError } = await serviceClient
+    // 5. Obtenir tots els jobs del projecte amb RLS automàtic
+    // RLS assegurarà que només s'obtenen jobs de projectes de l'usuari
+    const { data: jobs, error: jobsError } = await supabase
       .from('generation_jobs')
       .select(`
         *,
@@ -65,12 +96,17 @@ export async function GET(request: NextRequest) {
       .order('created_at', { ascending: true })
 
     if (jobsError) {
-      throw new Error(`Error obtenint jobs: ${jobsError.message}`)
+      console.error('[API reports/jobs-status] Error obtenint jobs:', jobsError);
+      return NextResponse.json({
+        success: false,
+        error: `Error obtenint jobs: ${jobsError.message}`,
+        details: jobsError
+      }, { status: 500 });
     }
 
-    console.log(`📊 Trobats ${jobs.length} jobs per al projecte ${projectId}`)
+    console.log(`📊 [API reports/jobs-status] Trobats ${jobs.length} jobs per al projecte ${projectId}`)
 
-    // Calcular estadístiques globals
+    // 6. Calcular estadístiques globals
     const totalJobs = jobs.length
     const completedJobs = jobs.filter(job => job.status === 'completed').length
     const failedJobs = jobs.filter(job => job.status === 'failed').length
@@ -81,7 +117,7 @@ export async function GET(request: NextRequest) {
     const totalProgress = jobs.reduce((sum, job) => sum + (job.progress || 0), 0)
     const averageProgress = totalJobs > 0 ? totalProgress / totalJobs : 0
 
-    // Preparar resposta amb detalls de cada job
+    // 7. Preparar resposta amb detalls de cada job
     const jobsDetails = jobs.map(job => ({
       id: job.id,
       generation_id: job.generation_id,
@@ -118,7 +154,138 @@ export async function GET(request: NextRequest) {
     })
     
   } catch (error) {
-    console.error('❌ Error obtenint estat dels jobs:', error)
+    console.error('❌ [API reports/jobs-status] Error obtenint estat dels jobs:', error)
+    return NextResponse.json({
+      success: false,
+      error: error instanceof Error ? error.message : 'Error desconegut'
+    }, { status: 500 })
+  }
+}
+
+// Endpoint per cancel·lar jobs amb SSR i RLS
+export async function DELETE(request: NextRequest) {
+  console.log("[API reports/jobs-status] Rebuda petició DELETE per cancel·lar jobs amb SSR...");
+
+  try {
+    // 1. Crear client SSR per autenticació automàtica amb RLS
+    const supabase = createServerClient(
+      process.env.NEXT_PUBLIC_SUPABASE_URL!,
+      process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+      {
+        cookies: {
+          getAll: () => {
+            return request.cookies.getAll().map(cookie => ({
+              name: cookie.name,
+              value: cookie.value,
+            }))
+          },
+          setAll: () => {
+            // No necessitem setAll en aquest context
+          }
+        }
+      }
+    );
+
+    // 2. Verificar autenticació SSR
+    const { data: { user }, error: authError } = await supabase.auth.getUser();
+    if (authError || !user) {
+      console.error("[API reports/jobs-status] Error d'autenticació SSR:", authError);
+      return NextResponse.json({ 
+        error: 'Usuari no autenticat',
+        details: authError?.message 
+      }, { status: 401 });
+    }
+    
+    const userId = user.id;
+    console.log("[API reports/jobs-status] Usuari autenticat via SSR per cancel·lació:", userId);
+
+    // 3. Obtenir paràmetres
+    const { searchParams } = new URL(request.url)
+    const jobId = searchParams.get('jobId')
+    const projectId = searchParams.get('projectId')
+    
+    if (jobId) {
+      // Cancel·lar un job específic (RLS automàtic)
+      console.log(`[API reports/jobs-status] Cancel·lant job específic: ${jobId}`);
+      
+      const { error } = await supabase
+        .from('generation_jobs')
+        .update({ 
+          status: 'cancelled',
+          completed_at: new Date().toISOString()
+        })
+        .eq('id', jobId)
+        .in('status', ['pending', 'processing'])
+      
+      if (error) {
+        console.error('[API reports/jobs-status] Error cancel·lant job específic:', error);
+        return NextResponse.json({
+          success: false,
+          error: `Error cancel·lant job: ${error.message}`,
+          details: error
+        }, { status: 500 });
+      }
+      
+      console.log(`✅ [API reports/jobs-status] Job ${jobId} cancel·lat correctament`);
+      
+      return NextResponse.json({
+        success: true,
+        message: 'Job cancel·lat correctament'
+      })
+      
+    } else if (projectId) {
+      // Cancel·lar tots els jobs pendents del projecte
+      console.log(`[API reports/jobs-status] Cancel·lant tots els jobs del projecte: ${projectId}`);
+      
+      // Primer verificar que el projecte pertany a l'usuari
+      const { data: project, error: projectError } = await supabase
+        .from('projects')
+        .select('id')
+        .eq('id', projectId)
+        .single()
+
+      if (projectError || !project) {
+        console.error('[API reports/jobs-status] Projecte no trobat o no autoritzat:', projectError);
+        return NextResponse.json({
+          success: false,
+          error: 'Projecte no trobat o no autoritzat'
+        }, { status: 404 });
+      }
+      
+      const { error } = await supabase
+        .from('generation_jobs')
+        .update({ 
+          status: 'cancelled',
+          completed_at: new Date().toISOString()
+        })
+        .eq('job_config->>project_id', projectId)
+        .in('status', ['pending', 'processing'])
+      
+      if (error) {
+        console.error('[API reports/jobs-status] Error cancel·lant jobs del projecte:', error);
+        return NextResponse.json({
+          success: false,
+          error: `Error cancel·lant jobs del projecte: ${error.message}`,
+          details: error
+        }, { status: 500 });
+      }
+      
+      console.log(`✅ [API reports/jobs-status] Tots els jobs del projecte ${projectId} cancel·lats`);
+      
+      return NextResponse.json({
+        success: true,
+        message: 'Tots els jobs del projecte cancel·lats'
+      })
+      
+    } else {
+      return NextResponse.json({
+        success: false,
+        error: 'jobId o projectId és obligatori per cancel·lar'
+      }, { status: 400 })
+    }
+    
+  } catch (error) {
+    console.error('❌ [API reports/jobs-status] Error cancel·lant jobs:', error)
     return NextResponse.json({
       success: false,
       error: error instanceof Error ? error.message : 'Error desconegut'
@@ -172,74 +339,5 @@ function getOverallStatus(completed: number, failed: number, processing: number,
     return 'partial'
   } else {
     return 'unknown'
-  }
-}
-
-// Endpoint per cancel·lar jobs
-export async function DELETE(request: NextRequest) {
-  try {
-    const { searchParams } = new URL(request.url)
-    const jobId = searchParams.get('jobId')
-    const projectId = searchParams.get('projectId')
-    
-    const serviceClient = createClient(
-      process.env.NEXT_PUBLIC_SUPABASE_URL!,
-      process.env.SUPABASE_SERVICE_ROLE_KEY!,
-      { auth: { persistSession: false, autoRefreshToken: false } }
-    );
-    
-    if (jobId) {
-      // Cancel·lar un job específic
-      const { error } = await serviceClient
-        .from('generation_jobs')
-        .update({ 
-          status: 'cancelled',
-          completed_at: new Date().toISOString()
-        })
-        .eq('id', jobId)
-        .in('status', ['pending', 'processing'])
-      
-      if (error) {
-        throw new Error(`Error cancel·lant job: ${error.message}`)
-      }
-      
-      return NextResponse.json({
-        success: true,
-        message: 'Job cancel·lat correctament'
-      })
-      
-    } else if (projectId) {
-      // Cancel·lar tots els jobs pendents del projecte
-      const { error } = await serviceClient
-        .from('generation_jobs')
-        .update({ 
-          status: 'cancelled',
-          completed_at: new Date().toISOString()
-        })
-        .eq('job_config->>project_id', projectId)
-        .in('status', ['pending', 'processing'])
-      
-      if (error) {
-        throw new Error(`Error cancel·lant jobs del projecte: ${error.message}`)
-      }
-      
-      return NextResponse.json({
-        success: true,
-        message: 'Tots els jobs del projecte cancel·lats'
-      })
-      
-    } else {
-      return NextResponse.json({
-        success: false,
-        error: 'jobId o projectId és obligatori per cancel·lar'
-      }, { status: 400 })
-    }
-    
-  } catch (error) {
-    console.error('❌ Error cancel·lant jobs:', error)
-    return NextResponse.json({
-      success: false,
-      error: error instanceof Error ? error.message : 'Error desconegut'
-    }, { status: 500 })
   }
 }

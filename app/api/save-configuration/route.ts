@@ -1,10 +1,7 @@
 // app/api/save-configuration/route.ts
 import { NextRequest, NextResponse } from 'next/server'
-import { createServerSupabaseClient } from '@/lib/supabase/serverClient' // Assumint que existeix per obtenir l'usuari
-import { createClient } from '@supabase/supabase-js'
-import { createUserSupabaseClient } from '@/lib/supabase/userClient';
+import { createServerClient } from '@supabase/ssr'
 import { generatePlaceholderDocx } from '@util/generatePlaceholderDocx';
-// import { cookies } from 'next/headers' // No es necessita si createServerSupabaseClient gestiona cookies
 
 // Interfície unificada per a les instruccions d'IA
 interface IAInstruction {
@@ -34,7 +31,6 @@ export async function POST(request: NextRequest) {
     const configurationData = (await request.json()) as SaveConfigPayload;
     console.log("[API save-configuration] Dades rebudes:", JSON.stringify(configurationData, null, 2).substring(0, 500) + "...");
 
-
     // Validacions bàsiques
     if (!configurationData || typeof configurationData !== 'object') {
       return NextResponse.json({ error: 'Payload invàlid.' }, { status: 400 });
@@ -45,50 +41,37 @@ export async function POST(request: NextRequest) {
     if (typeof configurationData.finalHtml !== 'string' || configurationData.finalHtml.length === 0) {
       return NextResponse.json({ error: 'finalHtml obligatori i ha de ser string.' }, { status: 400 });
     }
-    // ... (resta de validacions existents)
 
-    // Autenticació de l’usuari: primer via header Authorization (Bearer), després cookies
-    let userId: string | null = null;
-    let userError: any = null;
-    const authHeader = request.headers.get('authorization') ?? request.headers.get('Authorization');
-    if (authHeader?.startsWith('Bearer ')) {
-      const accessToken = authHeader.slice(7).trim();
-      try {
-        const userClient = createUserSupabaseClient(accessToken);
-        const { data: userDataAuth, error: authError } = await userClient.auth.getUser();
-        if (!authError && userDataAuth.user) {
-          userId = userDataAuth.user.id;
-        } else {
-          userError = authError;
+    // Crear client SSR per autenticació
+    const supabase = createServerClient(
+      process.env.NEXT_PUBLIC_SUPABASE_URL!,
+      process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+      {
+        cookies: {
+          getAll: () => {
+            return request.cookies.getAll().map(cookie => ({
+              name: cookie.name,
+              value: cookie.value,
+            }))
+          },
+          setAll: () => {
+            // No necessitem setAll en aquest context
+          }
         }
-      } catch (e) {
-        userError = e;
       }
-    }
-    if (!userId) {
-      const supabaseServer = await createServerSupabaseClient();
-      const { data: userDataAuth2, error: serverError } = await supabaseServer.auth.getUser();
-      if (!serverError && userDataAuth2.user) {
-        userId = userDataAuth2.user.id;
-      } else {
-        userError = serverError;
-      }
-    }
-    if (!userId) {
-      console.error("[API save-configuration] Error obtenint informació de l'usuari:", userError);
+    );
+
+    // Obtenir userId de la sessió
+    const { data: { user }, error: authError } = await supabase.auth.getUser();
+    if (authError || !user) {
+      console.error("[API save-configuration] Error obtenint informació de l'usuari:", authError);
       return NextResponse.json({ error: 'Usuari no autenticat.' }, { status: 401 });
     }
     
-    console.log("[API save-configuration] Usuari autenticat via JWT/cookie:", userId);
+    const userId = user.id;
+    console.log("[API save-configuration] Usuari autenticat:", userId);
     
-    // Client amb service role key per bypassejar RLS (només després de verificar l'usuari)
-    const serviceClient = createClient(
-      process.env.NEXT_PUBLIC_SUPABASE_URL!,
-      process.env.SUPABASE_SERVICE_ROLE_KEY!,
-      { auth: { persistSession: false, autoRefreshToken: false } }
-    );
-    
-    console.log("[API save-configuration] Client de servei creat, preparant dades...");
+    console.log("[API save-configuration] Client creat, preparant dades...");
 
     // Processament de ai_instructions (lògica existent)
     let processedAiInstructions: IAInstruction[];
@@ -107,13 +90,12 @@ export async function POST(request: NextRequest) {
       processedAiInstructions = [];
     }
 
-    // ✅ SOLUCIÓ BUG: Consultar camps Excel existents abans de l'UPSERT
+    // ✅ SOLUCIÓ BUG: Consultar camps Excel existents abans de l'UPSERT (RLS filtra automàticament)
     console.log("[API save-configuration] Consultant camps Excel existents...");
-    const { data: existingTemplate, error: queryError } = await serviceClient
+    const { data: existingTemplate, error: queryError } = await supabase
       .from('plantilla_configs')
       .select('excel_storage_path, excel_file_name, excel_headers')
       .eq('id', configurationData.id)
-      .eq('user_id', userId)
       .single();
 
     if (queryError && queryError.code !== 'PGRST116') { // PGRST116 = no trobat (OK per plantilles noves)
@@ -153,8 +135,8 @@ export async function POST(request: NextRequest) {
 
     console.log("[API save-configuration] Iniciant operació UPSERT amb payload:", JSON.stringify(configToInsert, null, 2));
     
-    // Implementem UPSERT per manejar tant insercions com actualitzacions
-    const { data: upsertedData, error: dbError } = await serviceClient
+    // Implementem UPSERT per manejar tant insercions com actualitzacions (RLS filtra automàticament)
+    const { data: upsertedData, error: dbError } = await supabase
       .from('plantilla_configs')
       .upsert([configToInsert], { 
         onConflict: 'id',
@@ -206,7 +188,7 @@ export async function POST(request: NextRequest) {
       
       // 1. Primer, intentar obtenir la ruta de la BD (que hauria d'estar actualitzada per upload-original-docx)
       console.log("[API save-configuration] Obtenint ruta del document original de la BD...");
-      const { data: templateData, error: templateError } = await serviceClient
+      const { data: templateData, error: templateError } = await supabase
         .from('plantilla_configs')
         .select('base_docx_storage_path')
         .eq('id', configurationData.id)
@@ -221,14 +203,14 @@ export async function POST(request: NextRequest) {
         const probablePath = `user-${userId}/template-${configurationData.id}/original/original.docx`;
         
         try {
-          const { data: fileExists } = await serviceClient.storage
+          const { data: fileExists } = await supabase.storage
             .from('template-docx')
             .download(probablePath);
             
           if (fileExists) {
             originalPathToUse = probablePath;
-            // Actualitzar la BD immediatament
-            await serviceClient
+            // Actualitzar la BD immediatament (RLS filtra automàticament)
+            await supabase
               .from('plantilla_configs')
               .update({ base_docx_storage_path: probablePath })
               .eq('id', configurationData.id);
@@ -248,7 +230,7 @@ export async function POST(request: NextRequest) {
           console.log(`[API save-configuration] Intent de generar placeholder inicial per a: ${originalPathToUse}`);
           
           // 1. Descarregar el DOCX original
-          const { data: fileData, error: downloadError } = await serviceClient.storage
+          const { data: fileData, error: downloadError } = await supabase.storage
             .from('template-docx')
             .download(originalPathToUse);
             
@@ -286,7 +268,7 @@ export async function POST(request: NextRequest) {
           
           // 5. Pujar el placeholder
           console.log(`[API save-configuration] Pujant placeholder de ${placeholderBuffer.length} bytes`);
-          const { data: uploadData, error: uploadError } = await serviceClient.storage
+          const { data: uploadData, error: uploadError } = await supabase.storage
             .from('template-docx')
             .upload(placeholderPath, placeholderBuffer, {
               contentType: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
@@ -298,16 +280,15 @@ export async function POST(request: NextRequest) {
             throw uploadError;
           }
           
-          // 6. Actualitzar la BD amb la ruta del placeholder
+          // 6. Actualitzar la BD amb la ruta del placeholder (RLS filtra automàticament)
           placeholderDocxPath = uploadData.path;
           placeholderGenerationStatus = 'success';
           console.log(`[API save-configuration] Placeholder generat amb èxit: ${uploadData.path}`);
           
-          await serviceClient
+          await supabase
             .from('plantilla_configs')
             .update({ placeholder_docx_storage_path: uploadData.path })
-            .eq('id', configurationData.id)
-            .eq('user_id', userId);
+            .eq('id', configurationData.id);
             
         } catch (error) {
           console.error('[API save-configuration] Error generant placeholder:', error);

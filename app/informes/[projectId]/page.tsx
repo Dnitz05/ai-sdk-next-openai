@@ -1,11 +1,90 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useReducer } from 'react';
 import { useRouter, useParams } from 'next/navigation';
 import Link from 'next/link';
 import { createBrowserSupabaseClient } from '@/lib/supabase/browserClient';
 import { ProjectWithStats, Generation } from '@/app/types';
 import AsyncJobProgress from '@/components/AsyncJobProgress';
+
+// ============================================================================
+// TIPUS I CONSTANTS PER AL NOU SISTEMA HUMAN-IN-THE-LOOP
+// ============================================================================
+
+type GenerationStep = 'idle' | 'prepare' | 'confirm' | 'generate' | 'review' | 'completed';
+
+interface GenerationState {
+  step: GenerationStep;
+  currentGenerationId: string | null;
+  documentData: any;
+  templateInvestigation: any;
+  availableTemplates: any[];
+  selectedTemplateId: string | null;
+  placeholderMapping: any;
+  generationResult: any;
+  isProcessing: boolean;
+  error: string | null;
+  userMessage: string | null;
+}
+
+interface GenerationAction {
+  type: 'START_GENERATION' | 'SET_STEP' | 'SET_DATA' | 'SET_ERROR' | 'RESET' | 'SET_PROCESSING';
+  payload?: any;
+}
+
+const initialGenerationState: GenerationState = {
+  step: 'idle',
+  currentGenerationId: null,
+  documentData: null,
+  templateInvestigation: null,
+  availableTemplates: [],
+  selectedTemplateId: null,
+  placeholderMapping: null,
+  generationResult: null,
+  isProcessing: false,
+  error: null,
+  userMessage: null,
+};
+
+function generationReducer(state: GenerationState, action: GenerationAction): GenerationState {
+  switch (action.type) {
+    case 'START_GENERATION':
+      return {
+        ...initialGenerationState,
+        step: 'prepare',
+        currentGenerationId: action.payload.generationId,
+        documentData: action.payload.documentData,
+        isProcessing: true,
+      };
+    case 'SET_STEP':
+      return {
+        ...state,
+        step: action.payload.step,
+        isProcessing: false,
+      };
+    case 'SET_DATA':
+      return {
+        ...state,
+        ...action.payload,
+        isProcessing: false,
+      };
+    case 'SET_ERROR':
+      return {
+        ...state,
+        error: action.payload,
+        isProcessing: false,
+      };
+    case 'SET_PROCESSING':
+      return {
+        ...state,
+        isProcessing: action.payload,
+      };
+    case 'RESET':
+      return initialGenerationState;
+    default:
+      return state;
+  }
+}
 
 interface GenerationItemProps {
   generation: Generation & {
@@ -160,6 +239,9 @@ const ProjectDetailPage: React.FC = () => {
   const [generatingIds, setGeneratingIds] = useState<Set<string>>(new Set());
   const [asyncJobsActive, setAsyncJobsActive] = useState(false);
   
+  // Nou sistema Human-in-the-Loop amb useReducer
+  const [generationState, dispatch] = useReducer(generationReducer, initialGenerationState);
+  
   const router = useRouter();
   const params = useParams();
   const projectId = params.projectId as string;
@@ -248,9 +330,13 @@ const ProjectDetailPage: React.FC = () => {
     }
   };
 
-  const handleGenerate = async (generationId: string) => {
+  // ============================================================================
+  // NOVA FUNCIÓ UNIFICADA DE GENERACIÓ - HUMAN-IN-THE-LOOP
+  // ============================================================================
+
+  const handleUnifiedGeneration = async (generationId: string, step: GenerationStep = 'prepare') => {
     try {
-      setGeneratingIds(prev => new Set(prev).add(generationId));
+      dispatch({ type: 'SET_PROCESSING', payload: true });
 
       const { data: { session }, error: sessionError } = await supabase.auth.getSession();
       if (sessionError || !session) {
@@ -258,38 +344,142 @@ const ProjectDetailPage: React.FC = () => {
         return;
       }
 
-      const response = await fetch('/api/reports/generate', {
+      const requestBody: any = {
+        generationId,
+        step
+      };
+
+      // Afegir dades addicionals segons el pas
+      if (step === 'confirm' && generationState.selectedTemplateId) {
+        requestBody.selectedTemplateId = generationState.selectedTemplateId;
+      }
+      if (step === 'confirm' && generationState.placeholderMapping) {
+        requestBody.placeholderMapping = generationState.placeholderMapping;
+      }
+
+      const response = await fetch('/api/reports/generate-individual-enhanced', {
         method: 'POST',
         headers: {
           'Authorization': `Bearer ${session.access_token}`,
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify({
-          generation_id: generationId,
-          use_fast_model: false
-        })
+        body: JSON.stringify(requestBody)
       });
 
       if (!response.ok) {
         const errorData = await response.json();
-        throw new Error(errorData.error || 'Error generant contingut');
+        throw new Error(errorData.error || 'Error en el procés de generació');
       }
 
-      // Activar el monitor de progrés asíncron
-      setAsyncJobsActive(true);
+      const result = await response.json();
+
+      // Actualitzar l'estat segons la resposta
+      switch (result.step) {
+        case 'prepare':
+          dispatch({
+            type: 'SET_DATA',
+            payload: {
+              step: 'confirm',
+              documentData: result.documentData,
+              templateInvestigation: result.templateInvestigation,
+              availableTemplates: result.availableTemplates || [],
+              selectedTemplateId: result.recommendedTemplateId || null,
+              placeholderMapping: result.placeholderMapping,
+              userMessage: result.userMessage,
+            }
+          });
+          break;
+
+        case 'confirm':
+          dispatch({
+            type: 'SET_DATA',
+            payload: {
+              step: 'generate',
+              userMessage: result.userMessage,
+            }
+          });
+          // Continuar automàticament amb la generació
+          await handleUnifiedGeneration(generationId, 'generate');
+          break;
+
+        case 'generate':
+          dispatch({
+            type: 'SET_DATA',
+            payload: {
+              step: 'review',
+              generationResult: result.generationResult,
+              userMessage: result.userMessage,
+            }
+          });
+          break;
+
+        case 'review':
+          dispatch({
+            type: 'SET_DATA',
+            payload: {
+              step: 'completed',
+              userMessage: result.userMessage || 'Generació completada amb èxit!',
+            }
+          });
+          // Refrescar les dades del projecte
+          setTimeout(() => {
+            loadProjectData();
+          }, 1000);
+          break;
+
+        default:
+          throw new Error(`Pas desconegut: ${result.step}`);
+      }
+
       setError(null);
 
     } catch (err) {
-      console.error('Error generant:', err);
-      setError(err instanceof Error ? err.message : 'Error generant contingut');
-    } finally {
-      setGeneratingIds(prev => {
-        const newSet = new Set(prev);
-        newSet.delete(generationId);
-        return newSet;
+      console.error('Error en generació unificada:', err);
+      dispatch({
+        type: 'SET_ERROR',
+        payload: err instanceof Error ? err.message : 'Error desconegut en la generació'
       });
     }
   };
+
+  const startGeneration = (generationId: string) => {
+    dispatch({
+      type: 'START_GENERATION',
+      payload: {
+        generationId,
+        documentData: null,
+      }
+    });
+    handleUnifiedGeneration(generationId, 'prepare');
+  };
+
+  const confirmGeneration = () => {
+    if (generationState.currentGenerationId) {
+      handleUnifiedGeneration(generationState.currentGenerationId, 'confirm');
+    }
+  };
+
+  const resetGeneration = () => {
+    dispatch({ type: 'RESET' });
+  };
+
+  // ============================================================================
+  // FUNCIONS OBSOLETES - ELIMINADES PER LA REFACTORITZACIÓ
+  // ============================================================================
+  
+  // La funció handleGenerate ha estat reemplaçada per startGeneration i handleUnifiedGeneration
+  // que utilitzen el nou endpoint /api/reports/generate-individual-enhanced amb el sistema Human-in-the-Loop
+  
+  // ABANS (problemàtic):
+  // - Cridava a /api/reports/generate (endpoint obsolet)
+  // - No validava plantilles abans de generar
+  // - Provocava l'error "Plantilla no trobada"
+  
+  // ARA (robust):
+  // - Utilitza /api/reports/generate-individual-enhanced
+  // - Implementa el flux Human-in-the-Loop de 4 passos
+  // - Valida plantilles abans de generar
+  // - Ofereix selecció de plantilles a l'usuari
 
   const handleViewContent = (generationId: string) => {
     router.push(`/informes/${projectId}/generacions/${generationId}`);
@@ -304,7 +494,7 @@ const ProjectDetailPage: React.FC = () => {
     }
 
     for (const generation of pendingGenerations) {
-      await handleGenerate(generation.id);
+      await startGeneration(generation.id);
       // Esperar un moment entre generacions per no sobrecarregar
       await new Promise(resolve => setTimeout(resolve, 1000));
     }
@@ -665,6 +855,227 @@ const ProjectDetailPage: React.FC = () => {
           </div>
         )}
 
+        {/* Modal del sistema Human-in-the-Loop */}
+        {generationState.step !== 'idle' && (
+          <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+            <div className="bg-white rounded-lg p-6 max-w-2xl w-full mx-4 max-h-[90vh] overflow-y-auto">
+              {/* Header del modal */}
+              <div className="flex justify-between items-center mb-4">
+                <h3 className="text-lg font-medium text-gray-900">
+                  Generació Intel·ligent - Informe #{(() => {
+                    const generation = generations.find(g => g.id === generationState.currentGenerationId);
+                    return generation ? generation.excel_row_index + 1 : '...';
+                  })()}
+                </h3>
+                <button
+                  onClick={resetGeneration}
+                  className="text-gray-400 hover:text-gray-600"
+                >
+                  <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                  </svg>
+                </button>
+              </div>
+
+              {/* Indicador de pas */}
+              <div className="mb-6">
+                <div className="flex items-center">
+                  <div className={`flex-1 h-1 rounded ${generationState.step === 'prepare' || generationState.step === 'confirm' || generationState.step === 'generate' || generationState.step === 'review' || generationState.step === 'completed' ? 'bg-blue-600' : 'bg-gray-200'}`}></div>
+                  <div className={`flex-1 h-1 rounded ml-1 ${generationState.step === 'confirm' || generationState.step === 'generate' || generationState.step === 'review' || generationState.step === 'completed' ? 'bg-blue-600' : 'bg-gray-200'}`}></div>
+                  <div className={`flex-1 h-1 rounded ml-1 ${generationState.step === 'generate' || generationState.step === 'review' || generationState.step === 'completed' ? 'bg-blue-600' : 'bg-gray-200'}`}></div>
+                  <div className={`flex-1 h-1 rounded ml-1 ${generationState.step === 'review' || generationState.step === 'completed' ? 'bg-blue-600' : 'bg-gray-200'}`}></div>
+                  <div className={`flex-1 h-1 rounded ml-1 ${generationState.step === 'completed' ? 'bg-green-600' : 'bg-gray-200'}`}></div>
+                </div>
+                <div className="flex justify-between text-xs text-gray-500 mt-1">
+                  <span>Preparar</span>
+                  <span>Confirmar</span>
+                  <span>Generar</span>
+                  <span>Revisar</span>
+                  <span>Completat</span>
+                </div>
+              </div>
+
+              {/* Contingut segons el pas */}
+              {generationState.step === 'confirm' && (
+                <div>
+                  <h4 className="text-md font-medium text-gray-900 mb-3">Confirma la Plantilla i Dades</h4>
+                  
+                  {generationState.userMessage && (
+                    <div className="mb-4 p-3 bg-blue-50 border border-blue-200 rounded-lg">
+                      <p className="text-blue-800 text-sm">{generationState.userMessage}</p>
+                    </div>
+                  )}
+
+                  {/* Informació de la investigació de plantilles */}
+                  {generationState.templateInvestigation && (
+                    <div className="mb-4">
+                      <h5 className="text-sm font-medium text-gray-700 mb-2">Estat de la Plantilla:</h5>
+                      <div className="bg-gray-50 p-3 rounded-lg text-sm">
+                        <p><span className="font-medium">Plantilla actual:</span> {generationState.templateInvestigation.currentTemplateName || 'No disponible'}</p>
+                        <p><span className="font-medium">Estat:</span> {generationState.templateInvestigation.isValid ? '✅ Vàlida' : '❌ Problemes detectats'}</p>
+                        {generationState.templateInvestigation.issues && generationState.templateInvestigation.issues.length > 0 && (
+                          <div className="mt-2">
+                            <span className="font-medium">Problemes:</span>
+                            <ul className="list-disc list-inside ml-2">
+                              {generationState.templateInvestigation.issues.map((issue: string, idx: number) => (
+                                <li key={idx} className="text-red-600">{issue}</li>
+                              ))}
+                            </ul>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Plantilles disponibles */}
+                  {generationState.availableTemplates && generationState.availableTemplates.length > 0 && (
+                    <div className="mb-4">
+                      <h5 className="text-sm font-medium text-gray-700 mb-2">Plantilles Disponibles:</h5>
+                      <div className="space-y-2">
+                        {generationState.availableTemplates.map((template: any, idx: number) => (
+                          <label key={idx} className="flex items-center p-2 border rounded-lg cursor-pointer hover:bg-gray-50">
+                            <input
+                              type="radio"
+                              name="template"
+                              value={template.id}
+                              checked={generationState.selectedTemplateId === template.id}
+                              onChange={(e) => dispatch({
+                                type: 'SET_DATA',
+                                payload: { selectedTemplateId: e.target.value }
+                              })}
+                              className="mr-3"
+                            />
+                            <div>
+                              <p className="text-sm font-medium">{template.name}</p>
+                              <p className="text-xs text-gray-600">{template.docx_name}</p>
+                              {template.isRecommended && (
+                                <span className="inline-block px-2 py-1 text-xs bg-green-100 text-green-800 rounded-full mt-1">
+                                  Recomanada
+                                </span>
+                              )}
+                            </div>
+                          </label>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Dades del document */}
+                  {generationState.documentData && (
+                    <div className="mb-4">
+                      <h5 className="text-sm font-medium text-gray-700 mb-2">Dades del Document:</h5>
+                      <div className="bg-gray-50 p-3 rounded-lg text-sm max-h-32 overflow-y-auto">
+                        {Object.entries(generationState.documentData).slice(0, 5).map(([key, value]) => (
+                          <p key={key}><span className="font-medium">{key}:</span> {String(value).substring(0, 50)}{String(value).length > 50 && '...'}</p>
+                        ))}
+                        {Object.keys(generationState.documentData).length > 5 && (
+                          <p className="text-gray-500">+{Object.keys(generationState.documentData).length - 5} camps més</p>
+                        )}
+                      </div>
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {generationState.step === 'review' && (
+                <div>
+                  <h4 className="text-md font-medium text-gray-900 mb-3">Generació Completada</h4>
+                  
+                  {generationState.userMessage && (
+                    <div className="mb-4 p-3 bg-green-50 border border-green-200 rounded-lg">
+                      <p className="text-green-800 text-sm">{generationState.userMessage}</p>
+                    </div>
+                  )}
+
+                  {generationState.generationResult && (
+                    <div className="mb-4">
+                      <h5 className="text-sm font-medium text-gray-700 mb-2">Resultat:</h5>
+                      <div className="bg-gray-50 p-3 rounded-lg text-sm">
+                        <p><span className="font-medium">Document generat:</span> ✅</p>
+                        <p><span className="font-medium">Temps de generació:</span> {generationState.generationResult.processingTime || 'No disponible'}</p>
+                        <p><span className="font-medium">Estat:</span> {generationState.generationResult.status || 'Completat'}</p>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {generationState.step === 'completed' && (
+                <div>
+                  <div className="text-center">
+                    <div className="w-16 h-16 bg-green-100 rounded-full flex items-center justify-center mx-auto mb-4">
+                      <svg className="w-8 h-8 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                      </svg>
+                    </div>
+                    <h4 className="text-lg font-medium text-gray-900 mb-2">Generació Completada!</h4>
+                    <p className="text-gray-600 mb-4">{generationState.userMessage || 'El document s\'ha generat correctament.'}</p>
+                  </div>
+                </div>
+              )}
+
+              {/* Error */}
+              {generationState.error && (
+                <div className="mb-4 p-3 bg-red-50 border border-red-200 rounded-lg">
+                  <p className="text-red-800 text-sm">{generationState.error}</p>
+                </div>
+              )}
+
+              {/* Botons d'acció */}
+              <div className="flex gap-3 justify-end">
+                <button
+                  onClick={resetGeneration}
+                  className="px-4 py-2 text-sm font-medium text-gray-700 bg-gray-100 rounded-md hover:bg-gray-200 transition-colors"
+                >
+                  {generationState.step === 'completed' ? 'Tancar' : 'Cancel·lar'}
+                </button>
+                
+                {generationState.step === 'confirm' && (
+                  <button
+                    onClick={confirmGeneration}
+                    disabled={generationState.isProcessing || !generationState.selectedTemplateId}
+                    className="px-4 py-2 text-sm font-medium text-white bg-blue-600 rounded-md hover:bg-blue-700 disabled:bg-gray-300 disabled:cursor-not-allowed transition-colors flex items-center"
+                  >
+                    {generationState.isProcessing ? (
+                      <>
+                        <svg className="animate-spin -ml-1 mr-2 h-4 w-4 text-white" fill="none" viewBox="0 0 24 24">
+                          <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                          <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                        </svg>
+                        Processant...
+                      </>
+                    ) : (
+                      'Continuar amb la Generació'
+                    )}
+                  </button>
+                )}
+
+                {(generationState.step === 'review' || generationState.step === 'completed') && (
+                  <button
+                    onClick={() => {
+                      if (generationState.currentGenerationId) {
+                        resetGeneration();
+                        router.push(`/informes/${projectId}/generacions/${generationState.currentGenerationId}`);
+                      }
+                    }}
+                    className="px-4 py-2 text-sm font-medium text-white bg-green-600 rounded-md hover:bg-green-700 transition-colors"
+                  >
+                    Veure Document Generat
+                  </button>
+                )}
+              </div>
+
+              {/* Indicador de processament */}
+              {generationState.isProcessing && (
+                <div className="mt-4 flex items-center justify-center">
+                  <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-blue-600 mr-2"></div>
+                  <span className="text-sm text-gray-600">Processant...</span>
+                </div>
+              )}
+            </div>
+          </div>
+        )}
+
         {/* Llista de generacions */}
         <div>
           <h2 className="text-xl font-semibold text-gray-900 mb-4">
@@ -681,9 +1092,9 @@ const ProjectDetailPage: React.FC = () => {
                 <GenerationItem
                   key={generation.id}
                   generation={generation as any}
-                  onGenerate={handleGenerate}
+                  onGenerate={startGeneration}
                   onViewContent={handleViewContent}
-                  isGenerating={generatingIds.has(generation.id)}
+                  isGenerating={generatingIds.has(generation.id) || generationState.isProcessing}
                 />
               ))}
             </div>

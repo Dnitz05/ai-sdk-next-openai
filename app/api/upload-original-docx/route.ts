@@ -1,67 +1,44 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { createClient } from '@supabase/supabase-js';
-import { createUserSupabaseClient } from '@/lib/supabase/userClient';
-import { createServerSupabaseClient } from '@/lib/supabase/serverClient';
+import { createServerClient } from '@supabase/ssr';
 import { indexDocxWithSdts, isDocxIndexed } from '@/util/docx/indexDocxWithSdts';
 
 export async function POST(request: NextRequest) {
-  console.log("API /api/upload-original-docx rebuda petició POST");
-
-  // Autenticació de l'usuari: primer via header Authorization (Bearer), després cookies
-  let userId: string | null = null;
-  let userError: any = null;
-  const authHeader = request.headers.get('authorization') ?? request.headers.get('Authorization');
-  console.log('[API upload-original-docx] HEADER Authorization:', authHeader ? 'present' : 'missing');
-  
-  if (authHeader?.startsWith('Bearer ')) {
-    const accessToken = authHeader.slice(7).trim();
-    console.log('[API upload-original-docx] accessToken present:', accessToken ? 'yes' : 'no');
-    try {
-      const userClient = createUserSupabaseClient(accessToken);
-      const { data: userDataAuth, error: authError } = await userClient.auth.getUser();
-      if (!authError && userDataAuth.user) {
-        userId = userDataAuth.user.id;
-        console.log("[API upload-original-docx] Usuari autenticat via Bearer token:", userId);
-      } else {
-        userError = authError;
-        console.log("[API upload-original-docx] Bearer token invalid, trying fallback...");
-      }
-    } catch (e) {
-      userError = e;
-      console.log("[API upload-original-docx] Bearer token error, trying fallback...");
-    }
-  }
-  
-  if (!userId) {
-    console.log("[API upload-original-docx] Trying authentication via cookies...");
-    try {
-      const supabaseServer = await createServerSupabaseClient();
-      const { data: userDataAuth2, error: serverError } = await supabaseServer.auth.getUser();
-      if (!serverError && userDataAuth2.user) {
-        userId = userDataAuth2.user.id;
-        console.log("[API upload-original-docx] Usuari autenticat via cookies:", userId);
-      } else {
-        userError = serverError;
-      }
-    } catch (e) {
-      userError = e;
-    }
-  }
-  
-  if (!userId) {
-    console.error("[API upload-original-docx] Error obtenint informació de l'usuari:", userError);
-    return NextResponse.json({ error: 'Usuari no autenticat.' }, { status: 401 });
-  }
-  
-  console.log("[API upload-original-docx] Usuari autenticat amb èxit:", userId);
-
-  const supabaseAdmin = createClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.SUPABASE_SERVICE_ROLE_KEY!
-  );
+  console.log("[API upload-original-docx] Iniciant pujada de DOCX original amb SSR...");
 
   try {
+    // 1. Crear client SSR per autenticació automàtica amb RLS
+    const supabase = createServerClient(
+      process.env.NEXT_PUBLIC_SUPABASE_URL!,
+      process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+      {
+        cookies: {
+          getAll: () => {
+            return request.cookies.getAll().map(cookie => ({
+              name: cookie.name,
+              value: cookie.value,
+            }))
+          },
+          setAll: () => {
+            // No necessitem setAll en aquest context
+          }
+        }
+      }
+    );
 
+    // 2. Verificar autenticació SSR
+    const { data: { user }, error: authError } = await supabase.auth.getUser();
+    if (authError || !user) {
+      console.error("[API upload-original-docx] Error d'autenticació SSR:", authError);
+      return NextResponse.json({ 
+        error: 'Usuari no autenticat',
+        details: authError?.message 
+      }, { status: 401 });
+    }
+    
+    const userId = user.id;
+    console.log("[API upload-original-docx] Usuari autenticat via SSR:", userId);
+
+    // 3. Processar FormData
     const formData = await request.formData();
     const file = formData.get('file') as File | null;
     const templateId = formData.get('templateId') as string | null;
@@ -74,20 +51,21 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Falta el templateId.' }, { status: 400 });
     }
 
-    // Validació bàsica del tipus de fitxer (opcional però recomanada)
+    // 4. Validació bàsica del tipus de fitxer
     if (file.type !== 'application/vnd.openxmlformats-officedocument.wordprocessingml.document') {
-        // Podries ser més flexible amb els tipus MIME per a .docx
         console.warn(`[API upload-original-docx] Tipus de fitxer rebut no esperat: ${file.type}`);
-        // Decideix si vols rebutjar o continuar
+        // Continuem però advertim
     }
 
     const fileBuffer = Buffer.from(await file.arrayBuffer());
-    // Ruta fixa per sobreescriure sempre el mateix fitxer
+    
+    // 5. Ruta fixa per sobreescriure sempre el mateix fitxer
     const storagePath = `user-${userId}/template-${templateId}/original/original.docx`;
 
-    console.log(`[API upload-original-docx] Intentant pujar a Storage (sobreescriptura): ${storagePath}`);
+    console.log(`[API upload-original-docx] Intentant pujar a Storage amb RLS: ${storagePath}`);
 
-    const { data, error: uploadError } = await supabaseAdmin.storage
+    // 6. Pujar amb RLS automàtic
+    const { data, error: uploadError } = await supabase.storage
       .from('template-docx') // Nom del bucket
       .upload(storagePath, fileBuffer, {
         contentType: file.type,
@@ -107,12 +85,12 @@ export async function POST(request: NextRequest) {
     console.log(`[API upload-original-docx] Fitxer pujat correctament a: ${data.path}`);
 
     // ==========================================
-    // ACTUALITZACIÓ IMMEDIATA DE LA BD
+    // ACTUALITZACIÓ IMMEDIATA DE LA BD amb RLS
     // ==========================================
     console.log(`[API upload-original-docx] Actualitzant BD amb ruta del document original...`);
     
     try {
-      const { error: updateError } = await supabaseAdmin
+      const { error: updateError } = await supabase
         .from('plantilla_configs')
         .upsert({
           id: templateId,
@@ -158,10 +136,10 @@ export async function POST(request: NextRequest) {
         // 2. Indexar el document amb SDTs
         const indexingResult = await indexDocxWithSdts(fileBuffer);
         
-        // 3. Pujar la versió indexada com a còpia mestra
+        // 3. Pujar la versió indexada com a còpia mestra amb RLS
         const indexedStoragePath = `user-${userId}/template-${templateId}/indexed/indexed.docx`;
         
-        const { data: indexedData, error: indexedUploadError } = await supabaseAdmin.storage
+        const { data: indexedData, error: indexedUploadError } = await supabase.storage
           .from('template-docx')
           .upload(indexedStoragePath, indexingResult.indexedBuffer, {
             contentType: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
@@ -178,17 +156,16 @@ export async function POST(request: NextRequest) {
           console.log(`[API upload-original-docx] Document indexat pujat a: ${indexedData.path}`);
           console.log(`[API upload-original-docx] ${paragraphMappings.length} paràgrafs indexats amb SDTs`);
           
-          // 4. Guardar els mappings d'IDs a la BD per a ús posterior
+          // 4. Guardar els mappings d'IDs a la BD per a ús posterior amb RLS
           try {
-            const { error: mappingsUpdateError } = await supabaseAdmin
+            const { error: mappingsUpdateError } = await supabase
               .from('plantilla_configs')
               .update({
                 indexed_docx_storage_path: indexedData.path,
                 paragraph_mappings: paragraphMappings,
                 updated_at: new Date().toISOString()
               })
-              .eq('id', templateId)
-              .eq('user_id', userId);
+              .eq('id', templateId); // RLS assegura que només s'actualitza si pertany a l'usuari
 
             if (mappingsUpdateError) {
               console.error('[API upload-original-docx] Error guardant mappings a BD:', mappingsUpdateError);
@@ -204,7 +181,7 @@ export async function POST(request: NextRequest) {
         // Si ja està indexat, podríem intentar extreure els mappings existents aquí
       }
 
-      // 4. Retornar informació completa sobre la pujada i indexació
+      // 5. Retornar informació completa sobre la pujada i indexació
       return NextResponse.json({ 
         success: true, 
         originalDocxPath: data.path,

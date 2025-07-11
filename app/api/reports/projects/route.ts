@@ -1,7 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { createServerSupabaseClient } from '@/lib/supabase/serverClient';
-import { createClient } from '@supabase/supabase-js';
-import { createUserSupabaseClient } from '@/lib/supabase/userClient';
+import { createServerClient } from '@supabase/ssr';
 import { Generation } from '@/app/types';
 import { readExcelFromStorage, getExcelInfoFromTemplate } from '@/util/excel/readExcelFromStorage';
 
@@ -13,41 +11,33 @@ export async function GET(request: NextRequest) {
   console.log("[API reports/projects] Rebuda petició GET");
   
   try {
-    // Autenticació de l'usuari: primer via header Authorization (Bearer), després cookies
-    let userId: string | null = null;
-    let userError: any = null;
-    
-    const authHeader = request.headers.get('authorization') ?? request.headers.get('Authorization');
-    if (authHeader?.startsWith('Bearer ')) {
-      const accessToken = authHeader.slice(7).trim();
-      try {
-        const userClient = createUserSupabaseClient(accessToken);
-        const { data: userDataAuth, error: authError } = await userClient.auth.getUser();
-        if (!authError && userDataAuth.user) {
-          userId = userDataAuth.user.id;
-        } else {
-          userError = authError;
+    // Crear client SSR per autenticació
+    const supabase = createServerClient(
+      process.env.NEXT_PUBLIC_SUPABASE_URL!,
+      process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+      {
+        cookies: {
+          getAll: () => {
+            return request.cookies.getAll().map(cookie => ({
+              name: cookie.name,
+              value: cookie.value,
+            }))
+          },
+          setAll: () => {
+            // No necessitem setAll en aquest context
+          }
         }
-      } catch (e) {
-        userError = e;
       }
-    }
-    
-    if (!userId) {
-      const supabaseServer = await createServerSupabaseClient();
-      const { data: userDataAuth2, error: serverError } = await supabaseServer.auth.getUser();
-      if (!serverError && userDataAuth2.user) {
-        userId = userDataAuth2.user.id;
-      } else {
-        userError = serverError;
-      }
-    }
-    
-    if (!userId) {
-      console.error("[API reports/projects] Error obtenint informació de l'usuari:", userError);
+    );
+
+    // Obtenir userId de la sessió
+    const { data: { user }, error: authError } = await supabase.auth.getUser();
+    if (authError || !user) {
+      console.error("[API reports/projects] Error obtenint informació de l'usuari:", authError);
       return NextResponse.json({ error: 'Usuari no autenticat.' }, { status: 401 });
     }
     
+    const userId = user.id;
     console.log("[API reports/projects] Usuari autenticat:", userId);
     
     // Verificar variables d'entorn críticas
@@ -56,27 +46,14 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: 'Error de configuració del servidor' }, { status: 500 });
     }
     
-    if (!process.env.SUPABASE_SERVICE_ROLE_KEY) {
-      console.error("[API reports/projects] ❌ SUPABASE_SERVICE_ROLE_KEY no està configurada");
-      return NextResponse.json({ error: 'Error de configuració del servidor' }, { status: 500 });
-    }
-    
     console.log("[API reports/projects] ✅ Variables d'entorn correctes");
-    
-    // Client amb service role key per bypassejar RLS (només després de verificar l'usuari)
-    const serviceClient = createClient(
-      process.env.NEXT_PUBLIC_SUPABASE_URL!,
-      process.env.SUPABASE_SERVICE_ROLE_KEY!,
-      { auth: { persistSession: false, autoRefreshToken: false } }
-    );
     
     console.log("[API reports/projects] Intent d'obtenir projectes per usuari:", userId);
     
-    // Primer, intentem una consulta simple per verificar l'accés bàsic
-    const { data: simpleProjects, error: simpleError } = await serviceClient
+    // Primer, intentem una consulta simple per verificar l'accés bàsic (RLS filtra automàticament)
+    const { data: simpleProjects, error: simpleError } = await supabase
       .from('projects')
       .select('id, project_name, template_id, created_at')
-      .eq('user_id', userId)
       .order('created_at', { ascending: false });
       
     if (simpleError) {
@@ -89,8 +66,8 @@ export async function GET(request: NextRequest) {
     
     console.log(`[API reports/projects] ✅ Consulta simple OK: ${simpleProjects?.length || 0} projectes trobats`);
     
-    // Ara intentem la consulta complexa
-    const { data: projects, error: projectsError } = await serviceClient
+    // Ara intentem la consulta complexa (RLS filtra automàticament)
+    const { data: projects, error: projectsError } = await supabase
       .from('projects')
       .select(`
         *,
@@ -103,7 +80,6 @@ export async function GET(request: NextRequest) {
           status
         )
       `)
-      .eq('user_id', userId)
       .order('created_at', { ascending: false });
     
     if (projectsError) {
@@ -180,56 +156,40 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'template_id i project_name són obligatoris.' }, { status: 400 });
     }
     
-    // Autenticació de l'usuari
-    let userId: string | null = null;
-    let userError: any = null;
-    
-    const authHeader = request.headers.get('authorization') ?? request.headers.get('Authorization');
-    if (authHeader?.startsWith('Bearer ')) {
-      const accessToken = authHeader.slice(7).trim();
-      try {
-        const userClient = createUserSupabaseClient(accessToken);
-        const { data: userDataAuth, error: authError } = await userClient.auth.getUser();
-        if (!authError && userDataAuth.user) {
-          userId = userDataAuth.user.id;
-        } else {
-          userError = authError;
+    // Crear client SSR per autenticació
+    const supabase = createServerClient(
+      process.env.NEXT_PUBLIC_SUPABASE_URL!,
+      process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+      {
+        cookies: {
+          getAll: () => {
+            return request.cookies.getAll().map(cookie => ({
+              name: cookie.name,
+              value: cookie.value,
+            }))
+          },
+          setAll: () => {
+            // No necessitem setAll en aquest context
+          }
         }
-      } catch (e) {
-        userError = e;
       }
-    }
-    
-    if (!userId) {
-      const supabaseServer = await createServerSupabaseClient();
-      const { data: userDataAuth2, error: serverError } = await supabaseServer.auth.getUser();
-      if (!serverError && userDataAuth2.user) {
-        userId = userDataAuth2.user.id;
-      } else {
-        userError = serverError;
-      }
-    }
-    
-    if (!userId) {
-      console.error("[API reports/projects] Error obtenint informació de l'usuari:", userError);
+    );
+
+    // Obtenir userId de la sessió
+    const { data: { user }, error: authError } = await supabase.auth.getUser();
+    if (authError || !user) {
+      console.error("[API reports/projects] Error obtenint informació de l'usuari:", authError);
       return NextResponse.json({ error: 'Usuari no autenticat.' }, { status: 401 });
     }
     
+    const userId = user.id;
     console.log(`[API reports/projects] Usuari autenticat: ${userId}, llegint Excel de plantilla: ${template_id}`);
     
-    // Client amb service role key
-    const serviceClient = createClient(
-      process.env.NEXT_PUBLIC_SUPABASE_URL!,
-      process.env.SUPABASE_SERVICE_ROLE_KEY!,
-      { auth: { persistSession: false, autoRefreshToken: false } }
-    );
-    
-    // Verificar que la plantilla existeix i té Excel associat
-    const { data: template, error: templateError } = await serviceClient
+    // Verificar que la plantilla existeix i té Excel associat (RLS filtra automàticament)
+    const { data: template, error: templateError } = await supabase
       .from('plantilla_configs')
       .select('excel_storage_path, excel_file_name')
       .eq('id', template_id)
-      .eq('user_id', userId)
       .single();
     
     if (templateError) {
@@ -265,8 +225,8 @@ export async function POST(request: NextRequest) {
       }, { status: 400 });
     }
     
-    // Crear el projecte amb les dades llegides de l'Excel
-    const { data: newProject, error: projectError } = await serviceClient
+    // Crear el projecte amb les dades llegides de l'Excel (RLS filtra automàticament)
+    const { data: newProject, error: projectError } = await supabase
       .from('projects')
       .insert([{
         user_id: userId,
@@ -287,7 +247,7 @@ export async function POST(request: NextRequest) {
       }, { status: 500 });
     }
     
-    // Crear registres de generació per a cada fila de l'Excel
+    // Crear registres de generació per a cada fila de l'Excel (RLS filtra automàticament via project_id)
     const generationRecords = excelData.rows.map((rowData, index) => ({
       project_id: newProject.id,
       excel_row_index: index,
@@ -295,7 +255,7 @@ export async function POST(request: NextRequest) {
       status: 'pending'
     }));
     
-    const { error: generationsError } = await serviceClient
+    const { error: generationsError } = await supabase
       .from('generations')
       .insert(generationRecords);
     
