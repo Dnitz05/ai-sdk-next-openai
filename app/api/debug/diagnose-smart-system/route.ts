@@ -69,14 +69,20 @@ export async function GET(request: NextRequest) {
   diagnosisResults.push(await checkComponent('Projecte i Plantilla', async () => {
     const { data: project, error: projectError } = await supabaseServerClient
       .from('projects')
-      .select('template_id, excel_data, total_rows, plantilla_configs(*)')
+      .select('template_id, excel_data, total_rows')
       .eq('id', projectId)
       .single();
 
     if (projectError || !project) throw new Error(`Projecte no trobat: ${projectError?.message}`);
     
-    const template = project.plantilla_configs;
-    if (!template) throw new Error('El projecte no té cap plantilla associada.');
+    // Get template separately to avoid array type issues
+    const { data: template, error: templateError } = await supabaseServerClient
+      .from('plantilla_configs')
+      .select('id, config_name, docx_storage_path, base_docx_storage_path, placeholder_docx_storage_path, indexed_docx_storage_path')
+      .eq('id', project.template_id)
+      .single();
+
+    if (templateError || !template) throw new Error('El projecte no té cap plantilla associada.');
 
     const docxPath = template.docx_storage_path || template.base_docx_storage_path || template.placeholder_docx_storage_path || template.indexed_docx_storage_path;
     if (!docxPath) throw new Error('La plantilla no té cap docx_storage_path configurat.');
