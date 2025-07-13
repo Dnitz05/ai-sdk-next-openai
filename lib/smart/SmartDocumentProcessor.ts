@@ -115,10 +115,10 @@ export class SmartDocumentProcessor {
       };
 
     } catch (error) {
-      console.error(`❌ [SmartProcessor] Error en processament:`, error);
+      const errorMessage = error instanceof Error ? error.message : 'Error desconegut';
+      console.error(`❌ [SmartProcessor] Error crític en processament batch: ${errorMessage}`, error);
       
       // Actualitzar registre amb error si existeix generationId
-      const errorMessage = error instanceof Error ? error.message : 'Error desconegut';
       
       return {
         success: false,

@@ -162,7 +162,7 @@ export const SMART_GENERATION_CONSTANTS = {
   
   // Storage
   STORAGE: {
-    BUCKET: 'documents',
+    BUCKET: 'template-docx',
     BASE_PATH: 'smart-generations',
   },
   
