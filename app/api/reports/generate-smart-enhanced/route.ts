@@ -239,40 +239,7 @@ export async function POST(request: NextRequest) {
 
     // Processar segons el mode
     const processor = new SmartDocumentProcessor();
-    let result;
-
-    if (mode === 'individual' && generationIds && generationIds.length === 1) {
-      // Mode individual - TODO: Implementar processSingle al SmartDocumentProcessor
-      console.log(`🎯 [SmartAPI-Enhanced] Mode individual per generació: ${generationIds[0]}`);
-      
-      // Per ara, utilitzem el processBatch amb un sol element
-      const singleConfig = {
-        ...config,
-        excelData: [excelData[0]]
-      };
-      
-      result = await processor.processBatch(singleConfig);
-      
-      // Actualitzar la generació específica (RLS filtra automàticament per user_id)
-      if (result.success && result.documents.length > 0) {
-        await supabase
-          .from('generations')
-          .update({
-            status: 'generated',
-            // Guardar el contingut generat per revisió
-            row_data: {
-              ...excelData[0],
-              smart_content: result.documents[0].placeholderValues,
-              smart_generation_id: result.generationId,
-              generated_at: new Date().toISOString()
-            }
-          })
-          .eq('id', generationIds[0]);
-      }
-    } else {
-      // Mode batch normal
-      result = await processor.processBatch(config);
-    }
+    const result = await processor.processBatch(config);
 
     // Gestionar resultat
     if (!result.success) {
@@ -285,6 +252,39 @@ export async function POST(request: NextRequest) {
         },
         { status: 500 }
       );
+    }
+
+    // Si el mode és individual, actualitzem l'estat de les generacions
+    if (mode === 'individual' && generationIds && generationIds.length > 0) {
+      console.log(`🔄 [SmartAPI-Enhanced] Actualitzant l'estat per a ${generationIds.length} generacions.`);
+      
+      const updatePromises = generationIds.map((genId: string, index: number) => {
+        // Trobar el document generat corresponent per l'índex.
+        // Això assumeix que l'ordre de `result.documents` correspon a l'ordre de `excelData`.
+        const docResult = result.documents.find(d => d.documentIndex === index);
+        const originalData = excelData[index];
+
+        if (!docResult || !originalData) return null;
+
+        return supabase
+          .from('generations')
+          .update({
+            status: 'generated',
+            row_data: {
+              ...originalData,
+              smart_content: docResult.placeholderValues,
+              smart_generation_id: result.generationId,
+              generated_at: new Date().toISOString()
+            },
+            error_message: null // Netejar errors anteriors
+          })
+          .eq('id', genId);
+      }).filter((p: any) => p !== null);
+
+      if (updatePromises.length > 0) {
+        await Promise.all(updatePromises);
+        console.log(`✅ [SmartAPI-Enhanced] Estat actualitzat per a ${updatePromises.length} generacions.`);
+      }
     }
 
     // Obtenir mètriques
