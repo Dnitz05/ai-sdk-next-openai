@@ -6,9 +6,10 @@ import { GeneratedContent } from '@/app/types';
  * GET /api/reports/content?generation_id=[id]
  * Retorna tot el contingut generat per una generació específica
  * Aquest endpoint utilitza SSR amb RLS per màxima seguretat.
+ * NOTA: Adaptat per funcionar només amb el sistema SMART (no més generated_content)
  */
 export async function GET(request: NextRequest) {
-  console.log("[API reports/content] Rebuda petició GET amb SSR...");
+  console.log("[API reports/content] Rebuda petició GET amb SSR (només SMART)...");
   
   try {
     // 1. Crear client SSR per autenticació automàtica amb RLS
@@ -87,29 +88,74 @@ export async function GET(request: NextRequest) {
 
     console.log(`[API reports/content] Generació verificada: ${generationCheck.id}`);
     
-    // 5. Obtenir tot el contingut generat amb RLS automàtic
-    // RLS assegurarà que només s'obtenen continguts de generacions de l'usuari
-    const { data: content, error: contentError } = await supabase
-      .from('generated_content')
-      .select('*')
-      .eq('generation_id', generationId)
-      .order('created_at', { ascending: true });
+    // 5. Obtenir contingut (només per a generacions SMART)
+    let content: GeneratedContent[] = [];
+
+    const isSmartGeneration = generationCheck.row_data && (generationCheck.row_data as any).smart_generation_id;
+
+    if (!isSmartGeneration) {
+      console.warn(`[API reports/content] Aquesta generació (${generationId}) no és de tipus SMART. El sistema tradicional ha estat eliminat.`);
+      // Retornar contingut buit per a generacions antigues no-smart
+      return NextResponse.json({
+        generation: {
+          id: generationCheck.id,
+          excel_row_index: generationCheck.excel_row_index,
+          row_data: generationCheck.row_data,
+          status: generationCheck.status,
+          project_name: (generationCheck as any).projects.project_name,
+          template_name: (generationCheck as any).projects.plantilla_configs.config_name
+        },
+        content: [],
+        ai_instructions: (generationCheck as any).projects.plantilla_configs.ai_instructions || [],
+        message: "Aquesta generació utilitzava el sistema tradicional que ha estat eliminat. Només les generacions SMART són suportades."
+      }, { status: 200 });
+    }
+
+    console.log(`[API reports/content] És una generació SMART. Obtenint dades de 'smart_generations'...`);
     
-    if (contentError) {
-      console.error("[API reports/content] Error obtenint contingut:", contentError);
+    const smartGenerationId = (generationCheck.row_data as any).smart_generation_id;
+    const documentIndex = generationCheck.excel_row_index;
+
+    const { data: smartGeneration, error: smartError } = await supabase
+      .from('smart_generations')
+      .select('generated_documents, created_at, completed_at')
+      .eq('id', smartGenerationId)
+      .single();
+
+    if (smartError || !smartGeneration) {
+      console.error("[API reports/content] Error obtenint dades de smart_generations:", smartError);
       return NextResponse.json({ 
-        error: 'Error obtenint contingut.',
-        details: contentError.message 
+        error: 'Error obtenint dades de la generació intel·ligent.',
+        details: smartError?.message 
       }, { status: 500 });
+    }
+
+    const smartDocument = (smartGeneration.generated_documents as any[])?.find(doc => doc.documentIndex === documentIndex);
+
+    if (smartDocument && smartDocument.placeholderValues) {
+      const placeholderValues = smartDocument.placeholderValues as Record<string, string>;
+      const aiInstructions = (generationCheck as any).projects.plantilla_configs.ai_instructions || [];
+      const aiInstructionsMap = new Map(aiInstructions.map((inst: any) => [inst.placeholder_id, inst.instruction]));
+
+      content = Object.entries(placeholderValues).map(([key, value], i) => ({
+        id: `${generationId}-${i}`, // ID sintètic
+        generation_id: generationId,
+        placeholder_id: key,
+        original_text: null,
+        generated_text: value,
+        final_content: value,
+        status: 'generated',
+        is_refined: false,
+        error_message: null,
+        created_at: smartGeneration.created_at,
+        updated_at: smartGeneration.completed_at || smartGeneration.created_at,
+        ai_instructions: aiInstructionsMap.get(key) || null,
+      }));
+    } else {
+      console.warn(`[API reports/content] No s'ha trobat el document amb index ${documentIndex} a la generació smart ${smartGenerationId}`);
     }
     
     console.log(`[API reports/content] ✅ Retornant ${content.length} elements de contingut per a la generació ${generationId}`);
-
-    // 6. Mapejar contingut per compatibilitat
-    const mappedContent = content.map((c: any) => ({
-      ...c,
-      generated_text: c.final_content, // Mapejar final_content a generated_text per compatibilitat
-    }));
     
     return NextResponse.json({
       generation: {
@@ -120,7 +166,7 @@ export async function GET(request: NextRequest) {
         project_name: (generationCheck as any).projects.project_name,
         template_name: (generationCheck as any).projects.plantilla_configs.config_name
       },
-      content: mappedContent,
+      content: content,
       ai_instructions: (generationCheck as any).projects.plantilla_configs.ai_instructions || []
     }, { status: 200 });
     
@@ -139,10 +185,10 @@ export async function GET(request: NextRequest) {
 /**
  * POST /api/reports/content
  * Guarda contingut generat per la IA per a un placeholder específic
- * Aquest endpoint utilitza SSR amb RLS per màxima seguretat.
+ * NOTA: Adaptat per funcionar amb el sistema SMART (actualitza smart_generations)
  */
 export async function POST(request: NextRequest) {
-  console.log("[API reports/content] Rebuda petició POST amb SSR...");
+  console.log("[API reports/content] Rebuda petició POST amb SSR (només SMART)...");
   
   try {
     // 1. Crear client SSR per autenticació automàtica amb RLS
@@ -186,13 +232,15 @@ export async function POST(request: NextRequest) {
       }, { status: 400 });
     }
 
-    console.log(`[API reports/content] Guardant contingut per placeholder: ${placeholder_id}`);
+    console.log(`[API reports/content] Actualitzant contingut SMART per placeholder: ${placeholder_id}`);
     
-    // 4. Verificar que la generació pertany a l'usuari amb RLS automàtic
+    // 4. Verificar que la generació pertany a l'usuari i és SMART
     const { data: generationCheck, error: checkError } = await supabase
       .from('generations')
       .select(`
         id,
+        excel_row_index,
+        row_data,
         projects!inner(user_id)
       `)
       .eq('id', generation_id)
@@ -206,68 +254,92 @@ export async function POST(request: NextRequest) {
       }, { status: 404 });
     }
 
-    console.log(`[API reports/content] Generació verificada per POST: ${generationCheck.id}`);
+    // 5. Verificar que és una generació SMART
+    const isSmartGeneration = generationCheck.row_data && (generationCheck.row_data as any).smart_generation_id;
+    if (!isSmartGeneration) {
+      return NextResponse.json({ 
+        error: 'Només es poden editar generacions del sistema SMART. El sistema tradicional ha estat eliminat.',
+      }, { status: 400 });
+    }
+
+    const smartGenerationId = (generationCheck.row_data as any).smart_generation_id;
+    const documentIndex = generationCheck.excel_row_index;
+
+    console.log(`[API reports/content] Actualitzant generació SMART ${smartGenerationId}, document ${documentIndex}`);
     
-    // 5. Comprovar si ja existeix contingut per aquest placeholder amb RLS automàtic
-    const { data: existingContent, error: existingError } = await supabase
-      .from('generated_content')
-      .select('id')
-      .eq('generation_id', generation_id)
-      .eq('placeholder_id', placeholder_id)
+    // 6. Obtenir dades actuals de smart_generations
+    const { data: smartGeneration, error: smartError } = await supabase
+      .from('smart_generations')
+      .select('generated_documents')
+      .eq('id', smartGenerationId)
+      .single();
+
+    if (smartError || !smartGeneration) {
+      console.error("[API reports/content] Error obtenint smart_generation:", smartError);
+      return NextResponse.json({ 
+        error: 'Error obtenint dades de la generació intel·ligent.',
+        details: smartError?.message 
+      }, { status: 500 });
+    }
+
+    // 7. Actualitzar les dades del document
+    const generatedDocuments = smartGeneration.generated_documents as any[] || [];
+    const documentToUpdate = generatedDocuments.find(doc => doc.documentIndex === documentIndex);
+
+    if (!documentToUpdate) {
+      return NextResponse.json({ 
+        error: `Document amb index ${documentIndex} no trobat a la generació SMART.`,
+      }, { status: 404 });
+    }
+
+    // Actualitzar el placeholder específic
+    if (!documentToUpdate.placeholderValues) {
+      documentToUpdate.placeholderValues = {};
+    }
+    documentToUpdate.placeholderValues[placeholder_id] = final_content;
+    
+    // Marcar com refinat si s'especifica
+    if (is_refined) {
+      if (!documentToUpdate.refinedPlaceholders) {
+        documentToUpdate.refinedPlaceholders = [];
+      }
+      if (!documentToUpdate.refinedPlaceholders.includes(placeholder_id)) {
+        documentToUpdate.refinedPlaceholders.push(placeholder_id);
+      }
+    }
+
+    // 8. Guardar les dades actualitzades
+    const { data: updatedGeneration, error: updateError } = await supabase
+      .from('smart_generations')
+      .update({
+        generated_documents: generatedDocuments
+      })
+      .eq('id', smartGenerationId)
+      .select()
       .single();
     
-    let result;
-    
-    if (existingContent) {
-      // 6a. Actualitzar contingut existent amb RLS automàtic
-      const { data: updatedContent, error: updateError } = await supabase
-        .from('generated_content')
-        .update({
-          final_content,
-          is_refined
-        })
-        .eq('id', existingContent.id)
-        .select()
-        .single();
-      
-      if (updateError) {
-        console.error("[API reports/content] Error actualitzant contingut:", updateError);
-        return NextResponse.json({ 
-          error: 'Error actualitzant contingut.',
-          details: updateError.message 
-        }, { status: 500 });
-      }
-      
-      result = updatedContent;
-      console.log(`[API reports/content] ✅ Contingut actualitzat per placeholder ${placeholder_id}`);
-      
-    } else {
-      // 6b. Crear nou contingut amb RLS automàtic
-      const { data: newContent, error: insertError } = await supabase
-        .from('generated_content')
-        .insert([{
-          generation_id,
-          placeholder_id,
-          final_content,
-          is_refined
-        }])
-        .select()
-        .single();
-      
-      if (insertError) {
-        console.error("[API reports/content] Error creant contingut:", insertError);
-        return NextResponse.json({ 
-          error: 'Error creant contingut.',
-          details: insertError.message 
-        }, { status: 500 });
-      }
-      
-      result = newContent;
-      console.log(`[API reports/content] ✅ Nou contingut creat per placeholder ${placeholder_id}`);
+    if (updateError) {
+      console.error("[API reports/content] Error actualitzant smart_generation:", updateError);
+      return NextResponse.json({ 
+        error: 'Error actualitzant contingut de la generació intel·ligent.',
+        details: updateError.message 
+      }, { status: 500 });
     }
     
+    console.log(`[API reports/content] ✅ Contingut SMART actualitzat per placeholder ${placeholder_id}`);
+    
+    // 9. Retornar resposta compatible
+    const result = {
+      id: `${generation_id}-${placeholder_id}`,
+      generation_id: generation_id,
+      placeholder_id: placeholder_id,
+      final_content: final_content,
+      is_refined: is_refined,
+      updated_at: new Date().toISOString()
+    };
+    
     return NextResponse.json({
-      message: 'Contingut guardat correctament!',
+      message: 'Contingut SMART guardat correctament!',
       content: result
     }, { status: 200 });
     
@@ -286,10 +358,10 @@ export async function POST(request: NextRequest) {
 /**
  * PUT /api/reports/content
  * Actualitza contingut existent (per exemple, per refinament)
- * Aquest endpoint utilitza SSR amb RLS per màxima seguretat.
+ * NOTA: Adaptat per funcionar amb el sistema SMART
  */
 export async function PUT(request: NextRequest) {
-  console.log("[API reports/content] Rebuda petició PUT amb SSR...");
+  console.log("[API reports/content] Rebuda petició PUT amb SSR (només SMART)...");
   
   try {
     // 1. Crear client SSR per autenticació automàtica amb RLS
@@ -333,61 +405,40 @@ export async function PUT(request: NextRequest) {
       }, { status: 400 });
     }
 
-    console.log(`[API reports/content] Actualitzant contingut: ${content_id}`);
+    // 4. Parsejar content_id sintètic (format: generation_id-placeholder_id o generation_id-index)
+    const [generation_id, placeholderInfo] = content_id.split('-');
     
-    // 4. Verificar que el contingut pertany a l'usuari amb RLS automàtic
-    const { data: contentCheck, error: checkError } = await supabase
-      .from('generated_content')
-      .select(`
-        id,
-        generations!inner(
-          projects!inner(user_id)
-        )
-      `)
-      .eq('id', content_id)
-      .single();
-    
-    if (checkError || !contentCheck) {
-      console.error("[API reports/content] Contingut no trobat o sense permisos:", checkError);
+    if (!generation_id || !placeholderInfo) {
       return NextResponse.json({ 
-        error: 'Contingut no trobat o sense permisos d\'accés.',
-        details: checkError?.message 
-      }, { status: 404 });
+        error: 'content_id té un format invàlid. Esperat: generation_id-placeholder_id' 
+      }, { status: 400 });
     }
 
-    console.log(`[API reports/content] Contingut verificat per PUT: ${contentCheck.id}`);
+    console.log(`[API reports/content] Actualitzant contingut SMART per ID: ${content_id}`);
     
-    // 5. Preparar dades d'actualització
-    const updateData: any = {
-      final_content
+    // 5. Redirigir a POST amb els paràmetres correctes
+    const postBody = {
+      generation_id: generation_id,
+      placeholder_id: placeholderInfo,
+      final_content: final_content,
+      is_refined: is_refined
     };
+
+    console.log(`[API reports/content] Redirigint PUT a POST amb dades:`, postBody);
     
-    if (is_refined !== undefined) {
-      updateData.is_refined = is_refined;
-    }
-    
-    // 6. Actualitzar el contingut amb RLS automàtic
-    const { data: updatedContent, error: updateError } = await supabase
-      .from('generated_content')
-      .update(updateData)
-      .eq('id', content_id)
-      .select()
-      .single();
-    
-    if (updateError) {
-      console.error("[API reports/content] Error actualitzant contingut:", updateError);
-      return NextResponse.json({ 
-        error: 'Error actualitzant contingut.',
-        details: updateError.message 
-      }, { status: 500 });
-    }
-    
-    console.log(`[API reports/content] ✅ Contingut ${content_id} actualitzat correctament`);
-    
-    return NextResponse.json({
-      message: 'Contingut actualitzat correctament!',
-      content: updatedContent
-    }, { status: 200 });
+    // Crear una nova petició per POST
+    const postRequest = new NextRequest(request.url, {
+      method: 'POST',
+      headers: request.headers,
+      body: JSON.stringify(postBody)
+    });
+
+    // Copiar cookies
+    request.cookies.getAll().forEach(cookie => {
+      postRequest.cookies.set(cookie.name, cookie.value);
+    });
+
+    return await POST(postRequest);
     
   } catch (err) {
     console.error("[API reports/content] Error general en PUT:", err);
