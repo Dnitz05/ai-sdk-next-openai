@@ -238,6 +238,8 @@ const ProjectDetailPage: React.FC = () => {
   const [error, setError] = useState<string | null>(null);
   const [generatingIds, setGeneratingIds] = useState<Set<string>>(new Set());
   const [asyncJobsActive, setAsyncJobsActive] = useState(false);
+  const [pollingActive, setPollingActive] = useState(false);
+  const [pollingGenerationIds, setPollingGenerationIds] = useState<string[]>([]);
   
   // Nou sistema Human-in-the-Loop amb useReducer
   const [generationState, dispatch] = useReducer(generationReducer, initialGenerationState);
@@ -357,21 +359,38 @@ const ProjectDetailPage: React.FC = () => {
         requestBody.placeholderMapping = generationState.placeholderMapping;
       }
 
-      const response = await fetch('/api/reports/generate-individual-enhanced', {
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 300000); // 5 min timeout
+
+      const response = await fetch('/api/reports/generate-smart-enhanced', {
         method: 'POST',
         headers: {
           'Authorization': `Bearer ${session.access_token}`,
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify(requestBody)
+        body: JSON.stringify(requestBody),
+        signal: controller.signal
       });
 
+      clearTimeout(timeoutId);
+
       if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(errorData.error || 'Error en el procés de generació');
+        let errorData;
+        try {
+          errorData = await response.json();
+        } catch {
+          errorData = { error: await response.text() };
+        }
+        throw new Error(errorData.error || `Error ${response.status}: ${response.statusText}`);
       }
 
-      const result = await response.json();
+      let result;
+      try {
+        result = await response.json();
+      } catch (jsonError) {
+        const text = await response.text();
+        throw new Error(`Error parsejant resposta: ${(jsonError as Error).message}. Resposta: ${text.substring(0, 100)}...`);
+      }
 
       // Actualitzar l'estat segons la resposta
       switch (result.step) {
@@ -462,6 +481,98 @@ const ProjectDetailPage: React.FC = () => {
   const resetGeneration = () => {
     dispatch({ type: 'RESET' });
   };
+
+  // ============================================================================
+  // SISTEMA DE POLLING ASÍNCRON
+  // ============================================================================
+
+  const startPollingGenerations = (generationIds: string[]) => {
+    setPollingGenerationIds(generationIds);
+    setPollingActive(true);
+    
+    console.log(`🔄 Iniciant polling per ${generationIds.length} generacions:`, generationIds);
+  };
+
+  const stopPolling = () => {
+    setPollingActive(false);
+    setPollingGenerationIds([]);
+    console.log(`⏹️ Polling aturat`);
+  };
+
+  const checkGenerationStatus = async (generationId: string) => {
+    try {
+      const { data: { session }, error: sessionError } = await supabase.auth.getSession();
+      if (sessionError || !session) {
+        return null;
+      }
+
+      const response = await fetch(`/api/reports/generations?generationId=${generationId}`, {
+        headers: {
+          'Authorization': `Bearer ${session.access_token}`,
+          'Content-Type': 'application/json',
+        },
+      });
+
+      if (!response.ok) {
+        return null;
+      }
+
+      const data = await response.json();
+      return data.generation || null;
+    } catch (error) {
+      console.error(`Error consultant estat de generació ${generationId}:`, error);
+      return null;
+    }
+  };
+
+  // Effect per al polling automàtic
+  useEffect(() => {
+    if (!pollingActive || pollingGenerationIds.length === 0) {
+      return;
+    }
+
+    const pollInterval = setInterval(async () => {
+      let allCompleted = true;
+      let hasUpdates = false;
+
+      for (const generationId of pollingGenerationIds) {
+        const status = await checkGenerationStatus(generationId);
+        if (status) {
+          const isCompleted = ['generated', 'completed', 'error'].includes(status.status);
+          if (!isCompleted) {
+            allCompleted = false;
+          }
+
+          // Actualitzar la generació a la llista local si hi ha canvis
+          const currentGeneration = generations.find(g => g.id === generationId);
+          if (currentGeneration && currentGeneration.status !== status.status) {
+            hasUpdates = true;
+            setGenerations(prev => prev.map(g => 
+              g.id === generationId ? { ...g, ...status } : g
+            ));
+          }
+        } else {
+          allCompleted = false;
+        }
+      }
+
+      if (allCompleted) {
+        console.log(`✅ Totes les generacions completades. Aturant polling.`);
+        stopPolling();
+        
+        // Refrescar totes les dades del projecte
+        setTimeout(() => {
+          loadProjectData();
+        }, 1000);
+      } else if (hasUpdates) {
+        console.log(`🔄 Actualitzacions de polling detectades`);
+      }
+    }, 3000); // Polling cada 3 segons
+
+    return () => {
+      clearInterval(pollInterval);
+    };
+  }, [pollingActive, pollingGenerationIds, generations]);
 
   // ============================================================================
   // FUNCIONS OBSOLETES - ELIMINADES PER LA REFACTORITZACIÓ
@@ -627,10 +738,11 @@ const ProjectDetailPage: React.FC = () => {
         return;
       }
 
-      console.log(`🧠 Iniciant generació intel·ligent individual per ${pendingGenerations.length} documents...`);
+      console.log(`🚀 Iniciant ${pendingGenerations.length} tasques asíncrones...`);
       
       const startTime = Date.now();
       
+      // Cridar al nou endpoint asíncron
       const response = await fetch('/api/reports/generate-smart-enhanced', {
         method: 'POST',
         headers: {
@@ -646,34 +758,32 @@ const ProjectDetailPage: React.FC = () => {
 
       if (!response.ok) {
         const errorData = await response.json();
-        throw new Error(errorData.error || 'Error en generació intel·ligent individual');
+        throw new Error(errorData.error || 'Error iniciant generació asíncrona');
       }
       
       const result = await response.json();
       const endTime = Date.now();
-      const totalTime = endTime - startTime;
+      const dispatchTime = endTime - startTime;
       
-      console.log(`🎉 Generació intel·ligent individual completada!`);
-      console.log(`📊 Documents generats: ${result.documentsGenerated}`);
-      console.log(`⏱️ Temps total: ${totalTime}ms (${(totalTime/1000).toFixed(1)}s)`);
+      console.log(`🎉 ${result.tasksStarted} tasques iniciades en ${dispatchTime}ms!`);
+      console.log(`📊 Tasques iniciades: ${result.tasksStarted}`);
+      console.log(`❌ Tasques fallides: ${result.tasksFailed}`);
+      console.log(`⏱️ Temps de dispatch: ${dispatchTime}ms`);
       
-      if (result.metrics) {
-        console.log(`🤖 Temps IA: ${result.metrics.totalAiTime}ms`);
-        console.log(`📄 Temps DOCX: ${result.metrics.totalDocxTime}ms`);
-        console.log(`☁️ Temps Storage: ${result.metrics.totalStorageTime}ms`);
+      if (result.tasksFailed > 0) {
+        setError(`⚠️ ${result.tasksStarted} tasques iniciades, ${result.tasksFailed} han fallat`);
+      } else {
+        setError(`✅ ${result.tasksStarted} tasques iniciades correctament. Processant en segon pla...`);
       }
 
-      // Mostrar missatge d'èxit a la interfície
-      setError(`✅ Generació intel·ligent individual completada! ${result.documentsGenerated} documents en ${(totalTime/1000).toFixed(1)}s`);
-      
-      // Refrescar dades del projecte
-      setTimeout(() => {
-        loadProjectData();
-      }, 1000);
+      // Iniciar polling per comprovar l'estat de les generacions
+      if (result.tasksStarted > 0) {
+        startPollingGenerations(result.generationIds);
+      }
 
     } catch (err) {
-      console.error('Error en generació intel·ligent individual:', err);
-      setError(err instanceof Error ? err.message : 'Error en generació intel·ligent individual');
+      console.error('Error iniciant generació asíncrona:', err);
+      setError(err instanceof Error ? err.message : 'Error iniciant generació asíncrona');
     }
   };
 
@@ -830,6 +940,19 @@ const ProjectDetailPage: React.FC = () => {
               projectId={projectId}
               onAllJobsCompleted={handleAsyncJobsCompleted}
             />
+          </div>
+        )}
+
+        {/* Indicador de polling actiu */}
+        {pollingActive && pollingGenerationIds.length > 0 && (
+          <div className="mb-6 bg-blue-50 border border-blue-200 rounded-lg p-4">
+            <div className="flex items-center">
+              <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-blue-600 mr-3"></div>
+              <div>
+                <p className="text-blue-800 font-medium">Processant {pollingGenerationIds.length} generacions en segon pla</p>
+                <p className="text-blue-600 text-sm">Consultant estat cada 3 segons...</p>
+              </div>
+            </div>
           </div>
         )}
 

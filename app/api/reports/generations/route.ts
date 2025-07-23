@@ -5,8 +5,8 @@ import { createUserSupabaseClient } from '@/lib/supabase/userClient';
 import { Generation, GeneratedContent } from '@/app/types';
 
 /**
- * GET /api/reports/generations?project_id=[id]
- * Retorna l'estat de tots els informes (files Excel) per a un projecte específic
+ * GET /api/reports/generations?project_id=[id]&generationId=[id]
+ * Retorna l'estat de tots els informes o d'una generació específica
  */
 export async function GET(request: NextRequest) {
   console.log("[API reports/generations] Rebuda petició GET");
@@ -14,9 +14,10 @@ export async function GET(request: NextRequest) {
   try {
     const url = new URL(request.url);
     const projectId = url.searchParams.get('project_id');
+    const generationId = url.searchParams.get('generationId'); // Per polling asíncron
     
-    if (!projectId) {
-      return NextResponse.json({ error: 'project_id és obligatori.' }, { status: 400 });
+    if (!projectId && !generationId) {
+      return NextResponse.json({ error: 'project_id o generationId és obligatori.' }, { status: 400 });
     }
     
     // Autenticació de l'usuari: primer via header Authorization (Bearer), després cookies
@@ -63,7 +64,70 @@ export async function GET(request: NextRequest) {
       { auth: { persistSession: false, autoRefreshToken: false } }
     );
     
-    // Primer verificar que el projecte pertany a l'usuari
+    // Si es consulta una generació específica (polling asíncron)
+    if (generationId) {
+      console.log(`[API reports/generations] Consultant generació específica: ${generationId}`);
+      
+      const internalTestHeader = request.headers.get('X-Internal-Test-Auth');
+      
+      const { data: generation, error: generationError } = await serviceClient
+        .from('generations')
+        .select('*, projects(id, user_id, project_name, excel_filename)')
+        .eq('id', generationId)
+        .single();
+
+      // Fora del mode de test, verifiquem la propietat
+      if (process.env.NODE_ENV !== 'development' || internalTestHeader !== process.env.WORKER_SECRET_TOKEN) {
+        if (generation && generation.projects.user_id !== userId) {
+          return NextResponse.json({ error: 'Generació no trobada o sense permisos d\'accés.' }, { status: 404 });
+        }
+      }
+      
+      if (generationError || !generation) {
+        console.error(`[API reports/generations] Generació ${generationId} no trobada o sense permisos:`, generationError);
+        return NextResponse.json({ 
+          error: 'Generació no trobada o sense permisos d\'accés.' 
+        }, { status: 404 });
+      }
+      
+      // Retornar només aquesta generació amb format consistent
+      const generationWithDetails = {
+        id: generation.id,
+        excel_row_index: generation.excel_row_index,
+        row_data: generation.row_data,
+        status: generation.status,
+        error_message: generation.error_message,
+        retry_count: generation.retry_count || 0,
+        created_at: generation.created_at,
+        updated_at: generation.updated_at,
+        generated_content: [],
+        content_stats: {
+          total_placeholders: 5,
+          completed_placeholders: generation.status === 'generated' ? 5 : 0,
+          refined_placeholders: generation.status === 'generated' ? 5 : 0,
+          completion_percentage: generation.status === 'generated' ? 100 : 0
+        }
+      };
+      
+      console.log(`[API reports/generations] ✅ Retornant generació específica ${generationId} amb estat: ${generation.status}`);
+      
+      return NextResponse.json({
+        project: {
+          id: (generation as any).projects.id,
+          name: (generation as any).projects.project_name,
+          excel_filename: (generation as any).projects.excel_filename
+        },
+        generation: generationWithDetails,
+        pollingMode: true
+      }, { status: 200 });
+    }
+    
+    // Consulta de totes les generacions d'un projecte (comportament original)
+    if (!projectId) {
+      return NextResponse.json({ error: 'project_id és obligatori per consultar totes les generacions.' }, { status: 400 });
+    }
+    
+    // Verificar que el projecte pertany a l'usuari
     const { data: project, error: projectError } = await serviceClient
       .from('projects')
       .select('id, user_id, project_name, excel_filename')

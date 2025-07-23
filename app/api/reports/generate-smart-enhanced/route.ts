@@ -1,42 +1,60 @@
 /**
  * API Endpoint: /api/reports/generate-smart-enhanced
  * 
- * Versió millorada que soluciona el problema de excel_data null
- * i permet generació individual intel·ligent
+ * API Disparador Asíncron per a la Generació Intel·ligent
+ * Aquest endpoint inicia la tasca i retorna immediatament, delegant
+ * la feina pesada al worker de fons.
  */
 
 import { NextRequest, NextResponse } from 'next/server';
-import { SmartDocumentProcessor } from '@/lib/smart/SmartDocumentProcessor';
-import { BatchProcessingConfig, isValidExcelData } from '@/lib/smart/types';
 import { createServerClient } from '@supabase/ssr';
-import supabaseServerClient from '@/lib/supabase/server';
-
+import { createClient } from '@supabase/supabase-js';
+ 
 export const runtime = 'nodejs';
-export const maxDuration = 300;
+export const maxDuration = 30; // Només 30 segons per al disparador
 
 export async function POST(request: NextRequest) {
   const startTime = Date.now();
   
   try {
-    console.log(`🚀 [SmartAPI-Enhanced] Nova petició de generació intel·ligent`);
+    console.log(`🚀 [API-Trigger] Nova petició de generació asíncrona`);
 
     const body = await request.json();
+    console.log('[API-Trigger] Body rebut:', { 
+      projectId: body.projectId, 
+      mode: body.mode, 
+      generationIdsLength: body.generationIds?.length 
+    });
+
     const { 
-      templateId, 
       projectId,
-      generationIds, // Opcional: array d'IDs específics per generar
-      mode = 'batch' // 'batch' o 'individual'
+      generationIds, // Array d'IDs per mode individual
+      mode = 'individual' // Només mode individual per ara
     } = body;
 
     // Validacions bàsiques
-    if (!templateId && !projectId) {
+    if (!projectId) {
       return NextResponse.json(
-        { success: false, error: 'templateId o projectId són obligatoris' },
+        { success: false, error: 'projectId és obligatori' },
         { status: 400 }
       );
     }
 
-    // Crear client SSR per llegir cookies de la sessió
+    if (mode === 'individual' && (!generationIds || !Array.isArray(generationIds) || generationIds.length === 0)) {
+      return NextResponse.json(
+        { success: false, error: 'generationIds és obligatori per al mode individual' },
+        { status: 400 }
+      );
+    }
+
+    if (mode === 'batch') {
+      return NextResponse.json(
+        { success: false, error: 'Mode batch encara no suportat en la versió asíncrona' },
+        { status: 501 }
+      );
+    }
+
+    // Crear client SSR per autenticació
     const supabase = createServerClient(
       process.env.NEXT_PUBLIC_SUPABASE_URL!,
       process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
@@ -55,291 +73,195 @@ export async function POST(request: NextRequest) {
       }
     );
 
-    // Obtenir userId de la sessió
-    const { data: { user }, error: authError } = await supabase.auth.getUser();
-    if (authError || !user) {
-      console.error(`❌ [SmartAPI-Enhanced] Error d'autenticació:`, authError);
-      return NextResponse.json(
-        { success: false, error: 'Usuari no autenticat' },
-        { status: 401 }
-      );
-    }
+    // Obtenir userId de la sessió o del mode de test
+    let user: { id: string } | null = null;
+    const internalTestHeader = request.headers.get('X-Internal-Test-Auth');
 
-    console.log(`👤 [SmartAPI-Enhanced] Usuari autenticat: ${user.id}`);
-
-    // Si tenim projectId, obtenir templateId i excel_data
-    let finalTemplateId = templateId;
-    let excelData = body.excelData;
-
-    if (projectId) {
-      console.log(`📋 [SmartAPI-Enhanced] Carregant dades del projecte: ${projectId}`);
-      
-      // Obtenir informació del projecte (RLS filtra automàticament per user_id)
-      const { data: project, error: projectError } = await supabase
-        .from('projects')
-        .select('template_id, excel_data, total_rows')
-        .eq('id', projectId)
-        .single();
-
-      if (projectError || !project) {
-        console.error(`❌ [SmartAPI-Enhanced] Error obtenint projecte:`, projectError);
+    if (process.env.NODE_ENV === 'development' && internalTestHeader === process.env.WORKER_SECRET_TOKEN && body.testUserId) {
+      console.log(`[API-Trigger] Mode de test intern activat. Simulant usuari: ${body.testUserId}`);
+      user = { id: body.testUserId };
+    } else {
+      const { data: authData, error: authError } = await supabase.auth.getUser();
+      if (authError || !authData.user) {
+        console.error(`❌ [API-Trigger] Error d'autenticació:`, authError);
         return NextResponse.json(
-          { success: false, error: 'Projecte no trobat' },
-          { status: 404 }
+          { success: false, error: 'Usuari no autenticat' },
+          { status: 401 }
         );
       }
+      user = authData.user;
+    }
 
-      finalTemplateId = project.template_id;
+    console.log(`👤 [API-Trigger] Usuari autenticat: ${user.id}`);
 
-      // Si excel_data és null (projectes grans), carregar només les files necessàries
-      if (!project.excel_data && generationIds && generationIds.length > 0) {
-        console.log(`🔍 [SmartAPI-Enhanced] Carregant dades específiques per ${generationIds.length} generacions`);
-        
-        // RLS filtra automàticament per user_id via project_id
-        const { data: generations, error: genError } = await supabase
-          .from('generations')
-          .select('row_data, excel_row_index')
-          .in('id', generationIds)
-          .eq('project_id', projectId);
+    // Validar accés al projecte
+    let project: { id: string; template_id: any; } | null = null;
+    let projectError: any = null;
 
-        if (genError || !generations) {
-          console.error(`❌ [SmartAPI-Enhanced] Error obtenint generacions:`, genError);
-          return NextResponse.json(
-            { success: false, error: 'Generacions no trobades' },
-            { status: 404 }
-          );
-        }
-
-        excelData = generations.map(g => g.row_data);
+    if (process.env.NODE_ENV === 'development' && internalTestHeader === process.env.WORKER_SECRET_TOKEN) {
+      const serviceClient = createClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.SUPABASE_SERVICE_ROLE_KEY!);
+      const { data, error } = await serviceClient.from('projects').select('id, template_id, user_id').eq('id', projectId).single();
+      if (error || !data || data.user_id !== user.id) {
+        projectError = error || new Error('Test: User ID mismatch');
       } else {
-        excelData = project.excel_data;
+        project = data;
+      }
+    } else {
+      const { data, error } = await supabase.from('projects').select('id, template_id').eq('id', projectId).single();
+      if (error || !data) {
+        projectError = error;
+      } else {
+        project = data;
       }
     }
 
-    // Validar que tenim dades Excel
-    if (!excelData || !isValidExcelData(excelData)) {
-      console.error(`❌ [SmartAPI-Enhanced] Dades Excel invàlides o buides`);
+    if (projectError || !project) {
+      console.error(`❌ [API-Trigger] Projecte no trobat:`, projectError);
       return NextResponse.json(
-        { success: false, error: 'No hi ha dades Excel disponibles' },
-        { status: 400 }
-      );
-    }
-
-    // Validar que l'usuari té accés a la plantilla via projecte
-    // Primer, comprovar que el projecte existeix i pertany a l'usuari (amb client de cookies)
-    if (projectId) {
-      const { data: projectValidation, error: projectValidationError } = await supabase
-        .from('projects')
-        .select('template_id')
-        .eq('id', projectId)
-        .eq('template_id', finalTemplateId)
-        .single();
-
-      if (projectValidationError || !projectValidation) {
-        console.error(`❌ [SmartAPI-Enhanced] Accés no autoritzat al projecte/plantilla:`, projectValidationError);
-        return NextResponse.json(
-          { success: false, error: 'Accés no autoritzat al projecte o plantilla' },
-          { status: 403 }
-        );
-      }
-    }
-
-    // Un cop validat l'accés, obtenir la plantilla amb el client de servidor
-    // Utilitzant les columnes correctes segons l'esquema real
-    console.log(`🔍 [SmartAPI-Enhanced] Obtenint plantilla ${finalTemplateId} amb permisos de servidor`);
-    const { data: templateRaw, error: templateError } = await supabaseServerClient
-      .from('plantilla_configs')
-      .select('*')
-      .eq('id', finalTemplateId)
-      .single();
-
-    if (templateError || !templateRaw) {
-      console.error(`❌ [SmartAPI-Enhanced] Plantilla no trobada: ${finalTemplateId}`, templateError);
-      return NextResponse.json(
-        { success: false, error: 'Plantilla no trobada' },
+        { success: false, error: 'Projecte no trobat o sense accés' },
         { status: 404 }
       );
     }
 
-    // Mappejar columnes reals a les esperadas pel sistema
-    const template = {
-      id: templateRaw.id,
-      user_id: templateRaw.user_id,
-      config_name: templateRaw.config_name,
-      // Utilitzar final_html com a contingut de la plantilla (és el que conté la configuració)
-      template_content: templateRaw.final_html || templateRaw.ai_instructions || null,
-      // Prioritzar els diferents paths de document disponibles
-      docx_storage_path: templateRaw.docx_storage_path || 
-                        templateRaw.base_docx_storage_path || 
-                        templateRaw.placeholder_docx_storage_path ||
-                        templateRaw.indexed_docx_storage_path ||
-                        null
-    };
+    // Per al mode individual, validar que les generacions existeixen i pertanyen al projecte
+    let generations: { id: string; status: string; }[] | null = null;
+    let generationsError: any = null;
 
-    console.log(`📋 [SmartAPI-Enhanced] Plantilla mappejada:`, {
-      id: template.id,
-      name: template.config_name,
-      hasContent: !!template.template_content,
-      hasDocxPath: !!template.docx_storage_path,
-      userId: template.user_id
-    });
+    if (process.env.NODE_ENV === 'development' && internalTestHeader === process.env.WORKER_SECRET_TOKEN) {
+      const serviceClient = createClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.SUPABASE_SERVICE_ROLE_KEY!);
+      const { data, error } = await serviceClient.from('generations').select('id, status').in('id', generationIds).eq('project_id', projectId);
+      generations = data;
+      generationsError = error;
+    } else {
+      const { data, error } = await supabase.from('generations').select('id, status').in('id', generationIds).eq('project_id', projectId);
+      generations = data;
+      generationsError = error;
+    }
 
-    // Validació addicional de seguretat: verificar que la plantilla pertany a l'usuari
-    // o és accessible via el projecte validat anteriorment
-    if (template.user_id !== user.id && !projectId) {
-      console.error(`❌ [SmartAPI-Enhanced] Accés no autoritzat a plantilla per usuari ${user.id}`);
+    if (generationsError || !generations || generations.length !== generationIds.length) {
+      console.error(`❌ [API-Trigger] Generacions no trobades:`, generationsError);
       return NextResponse.json(
-        { success: false, error: 'Accés no autoritzat a aquesta plantilla' },
-        { status: 403 }
+        { success: false, error: 'Una o més generacions no trobades' },
+        { status: 404 }
       );
     }
 
-    // Validar que la plantilla té el contingut necessari
-    if (!template.template_content || !template.docx_storage_path) {
-      console.error(`❌ [SmartAPI-Enhanced] Plantilla incompleta:`, {
-        hasContent: !!template.template_content,
-        hasDocxPath: !!template.docx_storage_path,
-        availableColumns: Object.keys(templateRaw)
-      });
+    // Comprovar que les generacions no estiguin ja en procés
+    const processingGenerations = generations.filter(g => g.status === 'processing');
+    if (processingGenerations.length > 0) {
       return NextResponse.json(
         { 
           success: false, 
-          error: 'Plantilla incompleta - falta contingut o document',
-          details: {
-            hasContent: !!template.template_content,
-            hasDocxPath: !!template.docx_storage_path,
-            availableContent: templateRaw.final_html ? 'final_html' : templateRaw.ai_instructions ? 'ai_instructions' : 'none',
-            availableDocxPaths: [
-              templateRaw.docx_storage_path && 'docx_storage_path',
-              templateRaw.base_docx_storage_path && 'base_docx_storage_path',
-              templateRaw.placeholder_docx_storage_path && 'placeholder_docx_storage_path',
-              templateRaw.indexed_docx_storage_path && 'indexed_docx_storage_path'
-            ].filter(Boolean)
-          }
+          error: `${processingGenerations.length} generacions ja estan en procés`,
+          processingIds: processingGenerations.map(g => g.id)
         },
-        { status: 400 }
+        { status: 409 }
       );
     }
 
-    // Construir configuració per al processament
-    const config: BatchProcessingConfig = {
-      templateId: finalTemplateId,
-      templateContent: template.template_content,
-      templateStoragePath: template.docx_storage_path,
-      excelData: excelData,
-      userId: user.id,
-    };
+    console.log(`🚀 [API-Trigger] Iniciant ${generationIds.length} tasques asíncrones`);
 
-    console.log(`📋 [SmartAPI-Enhanced] Configuració preparada:`, {
-      templateId: config.templateId,
-      documentsToGenerate: config.excelData.length,
-      mode: mode,
-      hasGenerationIds: !!generationIds,
-    });
+    // Marcar generacions com a 'processing' inicialment
+    const { error: updateError } = await supabase
+      .from('generations')
+      .update({ 
+        status: 'processing',
+        updated_at: new Date().toISOString(),
+        error_message: null
+      })
+      .in('id', generationIds);
 
-    // Processar segons el mode
-    const processor = new SmartDocumentProcessor();
-    const result = await processor.processBatch(config);
-
-    // Gestionar resultat
-    if (!result.success) {
-      console.error(`❌ [SmartAPI-Enhanced] Error en processament:`, result.errorMessage);
+    if (updateError) {
+      console.error(`❌ [API-Trigger] Error actualitzant estat:`, updateError);
       return NextResponse.json(
-        { 
-          success: false, 
-          error: 'Error en processament de documents',
-          details: result.errorMessage 
-        },
+        { success: false, error: 'Error actualitzant estat de les generacions' },
         { status: 500 }
       );
     }
 
-    // Si el mode és individual, actualitzem l'estat de les generacions
-    if (mode === 'individual' && generationIds && generationIds.length > 0) {
-      console.log(`🔄 [SmartAPI-Enhanced] Actualitzant l'estat per a ${generationIds.length} generacions.`);
-      
-      const updatePromises = generationIds.map((genId: string, index: number) => {
-        // Trobar el document generat corresponent per l'índex.
-        // Això assumeix que l'ordre de `result.documents` correspon a l'ordre de `excelData`.
-        const docResult = result.documents.find(d => d.documentIndex === index);
-        const originalData = excelData[index];
+    // Obtenir URL base per al worker
+    const protocol = request.headers.get('x-forwarded-proto') || 'http';
+    const host = request.headers.get('host') || 'localhost:3000';
+    const baseUrl = `${protocol}://${host}`;
+    const workerUrl = `${baseUrl}/api/worker/generation-processor`;
 
-        if (!docResult || !originalData) return null;
+    console.log(`🔧 [API-Trigger] Invocant worker a: ${workerUrl}`);
 
-        return supabase
-          .from('generations')
-          .update({
-            status: 'generated',
-            row_data: {
-              ...originalData,
-              smart_content: docResult.placeholderValues,
-              smart_generation_id: result.generationId,
-              generated_at: new Date().toISOString()
-            },
-            error_message: null // Netejar errors anteriors
+    // Disparar workers per a cada generació (sense esperar)
+    const workerPromises = generationIds.map(async (generationId: string) => {
+      try {
+        console.log(`🔧 [API-Trigger] Disparant worker per generació ${generationId}`);
+        
+        // Crida asíncrona al worker (fire-and-forget)
+        fetch(workerUrl, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${process.env.WORKER_SECRET_TOKEN}`
+          },
+          body: JSON.stringify({
+            projectId,
+            generationId,
+            userId: user.id
           })
-          .eq('id', genId);
-      }).filter((p: any) => p !== null);
+        }).catch(error => {
+          console.error(`❌ [API-Trigger] Error disparant worker per ${generationId}:`, error);
+        });
 
-      if (updatePromises.length > 0) {
-        await Promise.all(updatePromises);
-        console.log(`✅ [SmartAPI-Enhanced] Estat actualitzat per a ${updatePromises.length} generacions.`);
+        return { generationId, dispatched: true };
+      } catch (error) {
+        console.error(`❌ [API-Trigger] Error preparant worker per ${generationId}:`, error);
+        return { generationId, dispatched: false, error: error instanceof Error ? error.message : 'Error desconegut' };
       }
-    }
-
-    // Obtenir mètriques
-    const metrics = processor.getPerformanceMetrics();
-    const totalTime = Date.now() - startTime;
-
-    console.log(`✅ [SmartAPI-Enhanced] Processament completat:`, {
-      mode: mode,
-      generationId: result.generationId,
-      documentsGenerated: result.documentsGenerated,
-      totalApiTimeMs: totalTime,
     });
 
-    // Resposta adaptada segons el mode
-    const response: any = {
-      success: true,
-      mode: mode,
-      generationId: result.generationId,
-      documentsGenerated: result.documentsGenerated,
-      processingTimeMs: result.processingTimeMs,
-      totalApiTimeMs: totalTime,
-      metrics: {
-        aiCallTimeMs: metrics.aiCallTime,
-        docxGenerationTimeMs: metrics.docxGenerationTime,
-        storageUploadTimeMs: metrics.storageUploadTime,
-        documentsPerSecond: metrics.documentsPerSecond,
-      },
-      documents: result.documents.map(doc => ({
-        documentIndex: doc.documentIndex,
-        storagePath: doc.storagePath,
-        placeholderValues: doc.placeholderValues,
-      })),
-      message: mode === 'individual' 
-        ? `Document generat amb èxit en ${(result.processingTimeMs / 1000).toFixed(2)} segons`
-        : `${result.documentsGenerated} documents generats amb èxit en ${(result.processingTimeMs / 1000).toFixed(2)} segons`,
-    };
+    // Esperar que es disparin tots els workers (però no que completin)
+    const dispatchResults = await Promise.all(workerPromises);
+    const successfulDispatches = dispatchResults.filter(r => r.dispatched);
+    const failedDispatches = dispatchResults.filter(r => !r.dispatched);
 
-    // Si és mode individual, afegir informació per revisió
-    if (mode === 'individual' && generationIds) {
-      response.generationId = generationIds[0];
-      response.reviewUrl = `/informes/${projectId}/generacions/${generationIds[0]}/review`;
+    if (failedDispatches.length > 0) {
+      console.error(`❌ [API-Trigger] ${failedDispatches.length} workers no s'han pogut disparar`);
+      
+      // Revertir estat de les generacions que han fallat
+      const failedIds = failedDispatches.map(f => f.generationId);
+      await supabase
+        .from('generations')
+        .update({ 
+          status: 'error',
+          error_message: 'Error iniciant el processament',
+          updated_at: new Date().toISOString()
+        })
+        .in('id', failedIds);
     }
 
-    return NextResponse.json(response);
+    const totalTime = Date.now() - startTime;
+
+    console.log(`✅ [API-Trigger] ${successfulDispatches.length} tasques iniciades correctament en ${totalTime}ms`);
+
+    // Resposta immediata
+    return NextResponse.json({
+      success: true,
+      mode: 'individual',
+      tasksStarted: successfulDispatches.length,
+      tasksFailed: failedDispatches.length,
+      generationIds: successfulDispatches.map(r => r.generationId),
+      failedGenerationIds: failedDispatches.map(r => r.generationId),
+      dispatchTimeMs: totalTime,
+      message: `${successfulDispatches.length} tasques iniciades en segon pla`,
+      pollingAdvice: 'Utilitza GET /api/reports/generations per consultar l\'estat'
+    }, { status: 202 }); // 202 Accepted
 
   } catch (error) {
     const totalTime = Date.now() - startTime;
-    console.error(`❌ [SmartAPI-Enhanced] Error crític:`, error);
+    console.error(`❌ [API-Trigger] Error crític:`, error);
     
     return NextResponse.json(
       { 
         success: false, 
-        error: 'Error intern del servidor',
+        error: 'Error intern del disparador',
         details: error instanceof Error ? error.message : 'Error desconegut',
-        processingTimeMs: totalTime,
+        dispatchTimeMs: totalTime,
       },
       { status: 500 }
     );
@@ -446,10 +368,12 @@ export async function GET(request: NextRequest) {
       recommendation: requiresLazyLoad 
         ? 'Utilitza mode individual per millor rendiment'
         : 'Pots utilitzar mode batch o individual',
+      asyncMode: true,
+      message: 'API configurada per a processament asíncron'
     });
 
   } catch (error) {
-    console.error(`❌ [SmartAPI-Enhanced GET] Error:`, error);
+    console.error(`❌ [API-Trigger GET] Error:`, error);
     return NextResponse.json(
       { 
         success: false, 
