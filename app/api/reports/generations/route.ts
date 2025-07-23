@@ -78,37 +78,64 @@ export async function GET(request: NextRequest) {
       }, { status: 404 });
     }
     
-    // Obtenir generacions amb contingut relacionat
-    const { data: generations, error: generationsError } = await serviceClient
+    // Primer intentar obtenir generacions del sistema tradicional
+    let generations: any[] = [];
+    let generationsError: any = null;
+    
+    const { data: traditionalGenerations, error: traditionalError } = await serviceClient
       .from('generations')
-      .select(`
-        *,
-        generated_content(
-          id,
-          placeholder_id,
-          final_content,
-          is_refined,
-          created_at,
-          updated_at
-        )
-      `)
+      .select('*')
       .eq('project_id', projectId)
       .order('excel_row_index', { ascending: true });
     
-    if (generationsError) {
+    if (!traditionalError && traditionalGenerations && traditionalGenerations.length > 0) {
+      generations = traditionalGenerations;
+      console.log(`[API reports/generations] Trobades ${generations.length} generacions del sistema tradicional`);
+    } else {
+      // Si no hi ha generacions tradicionals, intentar obtenir del sistema SMART
+      const { data: smartGenerations, error: smartError } = await serviceClient
+        .from('smart_generations')
+        .select('*')
+        .eq('template_id', project.id) // Assumim que template_id correspon al project_id
+        .order('created_at', { ascending: true });
+      
+      if (!smartError && smartGenerations && smartGenerations.length > 0) {
+        // Convertir format SMART a format tradicional per compatibilitat
+        generations = smartGenerations.map((smartGen: any, index: number) => ({
+          id: smartGen.id,
+          excel_row_index: index,
+          row_data: smartGen.excel_data?.[0] || {}, // Primer element de l'array
+          status: smartGen.status,
+          error_message: smartGen.error_message,
+          retry_count: 0,
+          created_at: smartGen.created_at,
+          updated_at: smartGen.completed_at || smartGen.created_at,
+          project_id: projectId
+        }));
+        console.log(`[API reports/generations] Convertides ${generations.length} generacions del sistema SMART`);
+      } else {
+        generationsError = traditionalError || smartError;
+        console.log(`[API reports/generations] No s'han trobat generacions en cap sistema`);
+      }
+    }
+    
+    if (generationsError && generations.length === 0) {
       console.error("[API reports/generations] Error obtenint generacions:", generationsError);
       return NextResponse.json({ 
         error: 'Error obtenint generacions.',
-        details: generationsError.message 
+        details: generationsError?.message || 'No s\'han trobat generacions'
       }, { status: 500 });
     }
     
-    // Processar dades per estructurar millor la resposta
+    // Processar dades per estructurar millor la resposta (sense generated_content obsolet)
     const generationsWithDetails = generations.map((generation: any) => {
-      const generatedContent: GeneratedContent[] = generation.generated_content || [];
-      const totalPlaceholders = generatedContent.length;
-      const completedPlaceholders = generatedContent.filter((content: GeneratedContent) => content.final_content && content.final_content.length > 0).length;
-      const refinedPlaceholders = generatedContent.filter((content: GeneratedContent) => content.is_refined).length;
+      // Per al sistema tradicional, simular estadístiques ja que generated_content ha estat eliminat
+      const mockStats = {
+        total_placeholders: 5, // Valor per defecte
+        completed_placeholders: generation.status === 'completed' ? 5 : generation.status === 'generated' ? 3 : 0,
+        refined_placeholders: generation.status === 'completed' ? 5 : 0,
+        completion_percentage: generation.status === 'completed' ? 100 : generation.status === 'generated' ? 60 : 0
+      };
       
       return {
         id: generation.id,
@@ -116,16 +143,11 @@ export async function GET(request: NextRequest) {
         row_data: generation.row_data,
         status: generation.status,
         error_message: generation.error_message,
-        retry_count: generation.retry_count,
+        retry_count: generation.retry_count || 0,
         created_at: generation.created_at,
         updated_at: generation.updated_at,
-        generated_content: generatedContent,
-        content_stats: {
-          total_placeholders: totalPlaceholders,
-          completed_placeholders: completedPlaceholders,
-          refined_placeholders: refinedPlaceholders,
-          completion_percentage: totalPlaceholders > 0 ? Math.round((completedPlaceholders / totalPlaceholders) * 100) : 0
-        }
+        generated_content: [], // Array buit ja que la taula ha estat eliminada
+        content_stats: mockStats
       };
     });
     

@@ -77,16 +77,7 @@ export async function DELETE(request: NextRequest) {
         if (generations && generations.length > 0) {
           const generationIds = generations.map(g => g.id);
           
-          // Eliminar generated_content (usar server client per bypassing RLS)
-          const { error: contentError } = await supabaseServerClient
-            .from('generated_content')
-            .delete()
-            .in('generation_id', generationIds);
-          
-          if (contentError) {
-            console.error(`Error eliminant generated_content per projecte ${project.id}:`, contentError);
-            relatedErrors.push({ project: project.id, step: 'delete_content', error: contentError });
-          }
+          // NOTA: generated_content eliminat durant migració al sistema SMART
           
           // Eliminar generation_jobs (usar server client per bypassing RLS)
           const { error: jobsError } = await supabaseServerClient

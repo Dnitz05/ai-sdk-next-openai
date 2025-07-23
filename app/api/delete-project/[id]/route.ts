@@ -131,19 +131,8 @@ export async function DELETE(request: NextRequest) {
 
     if (generationIdsError) {
       console.warn("Error obtenint generation IDs:", generationIdsError);
-    } else if (generationIds && generationIds.length > 0) {
-      // 5.4. Eliminar generated_content relacionat (RLS automàtic)
-      const ids = generationIds.map(g => g.id);
-      const { error: contentError } = await supabase
-        .from('generated_content')
-        .delete()
-        .in('generation_id', ids);
-
-      if (contentError) {
-        console.warn("Error eliminant generated_content:", contentError);
-        // No fallem completament, continuem amb la resta
-      }
     }
+    // NOTA: generated_content eliminat durant migració al sistema SMART
 
     // 5.5. Eliminar generations relacionades (RLS automàtic)
     const { error: generationsError } = await supabase
