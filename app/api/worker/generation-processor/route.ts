@@ -15,6 +15,7 @@ export const maxDuration = 300; // 5 minuts per al worker
 
 export async function POST(request: NextRequest) {
   const startTime = Date.now();
+  let generationId: string | null = null; // Variable accessible per al finally
   
   try {
     // 1. Verificació del Secret del Worker
@@ -35,9 +36,12 @@ export async function POST(request: NextRequest) {
 
     const { 
       projectId,
-      generationId,
+      generationId: bodyGenerationId,
       userId
     } = body;
+
+    // Assignar generationId a la variable accessible
+    generationId = bodyGenerationId;
 
     // Validacions bàsiques
     if (!projectId || !generationId || !userId) {
@@ -284,10 +288,9 @@ export async function POST(request: NextRequest) {
     
     console.error(`❌ [Worker] Error crític:`, error);
     
-    try {
-      // Intentar actualitzar l'estat a error
-      const { generationId } = await request.json();
-      if (generationId) {
+    // Intentar actualitzar l'estat a error utilitzant la variable accessible
+    if (generationId) {
+      try {
         await supabaseServerClient
           .from('generations')
           .update({ 
@@ -296,9 +299,10 @@ export async function POST(request: NextRequest) {
             updated_at: new Date().toISOString()
           })
           .eq('id', generationId);
+        console.log(`🔧 [Worker] Estat actualitzat a 'error' per la generació ${generationId}`);
+      } catch (updateError) {
+        console.error(`❌ [Worker] Error actualitzant estat a BD:`, updateError);
       }
-    } catch (updateError) {
-      console.error(`❌ [Worker] Error actualitzant estat a BD:`, updateError);
     }
     
     return NextResponse.json(
@@ -310,5 +314,42 @@ export async function POST(request: NextRequest) {
       },
       { status: 500 }
     );
+  } finally {
+    // Bloc FINALLY: Garanteix que cap generació es quedi en estat "processing"
+    if (generationId) {
+      try {
+        console.log(`🔧 [Worker] Finally: Verificant estat final de la generació ${generationId}`);
+        
+        // Comprovar l'estat actual
+        const { data: finalState, error: finalStateError } = await supabaseServerClient
+          .from('generations')
+          .select('status')
+          .eq('id', generationId)
+          .single();
+
+        if (!finalStateError && finalState && finalState.status === 'processing') {
+          // Si encara està en "processing", quelcom ha anat malament. Forçar a "error"
+          console.log(`⚠️ [Worker] Finally: Generació ${generationId} encara en 'processing'. Forçant a 'error'.`);
+          
+          await supabaseServerClient
+            .from('generations')
+            .update({ 
+              status: 'error', 
+              error_message: 'Worker interromput - estat no resolt',
+              updated_at: new Date().toISOString()
+            })
+            .eq('id', generationId);
+            
+          console.log(`🔧 [Worker] Finally: Estat forçat a 'error' per evitar "processing" infinit`);
+        } else {
+          console.log(`✅ [Worker] Finally: Generació ${generationId} en estat final correcte: ${finalState?.status}`);
+        }
+      } catch (finallyError) {
+        console.error(`❌ [Worker] Error en bloc finally:`, finallyError);
+      }
+    }
+    
+    const totalTime = Date.now() - startTime;
+    console.log(`🏁 [Worker] Processament finalitzat en ${totalTime}ms`);
   }
 }

@@ -47,10 +47,11 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    if (mode === 'batch') {
+    // El mode batch no requereix generationIds ja que els buscarà automàticament
+    if (!['individual', 'batch'].includes(mode)) {
       return NextResponse.json(
-        { success: false, error: 'Mode batch encara no suportat en la versió asíncrona' },
-        { status: 501 }
+        { success: false, error: 'mode ha de ser "individual" o "batch"' },
+        { status: 400 }
       );
     }
 
@@ -123,27 +124,86 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Per al mode individual, validar que les generacions existeixen i pertanyen al projecte
+    // Determinar les generacions a processar segons el mode
+    let targetGenerationIds: string[];
     let generations: { id: string; status: string; }[] | null = null;
     let generationsError: any = null;
 
-    if (process.env.NODE_ENV === 'development' && internalTestHeader === process.env.WORKER_SECRET_TOKEN) {
-      const serviceClient = createClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.SUPABASE_SERVICE_ROLE_KEY!);
-      const { data, error } = await serviceClient.from('generations').select('id, status').in('id', generationIds).eq('project_id', projectId);
-      generations = data;
-      generationsError = error;
-    } else {
-      const { data, error } = await supabase.from('generations').select('id, status').in('id', generationIds).eq('project_id', projectId);
-      generations = data;
-      generationsError = error;
-    }
+    if (mode === 'batch') {
+      console.log(`🔄 [API-Trigger] Mode batch: Buscant totes les generacions pendents per al projecte ${projectId}`);
+      
+      // Mode batch: buscar totes les generacions amb estat 'pending'
+      if (process.env.NODE_ENV === 'development' && internalTestHeader === process.env.WORKER_SECRET_TOKEN) {
+        const serviceClient = createClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.SUPABASE_SERVICE_ROLE_KEY!);
+        const { data, error } = await serviceClient
+          .from('generations')
+          .select('id, status')
+          .eq('project_id', projectId)
+          .eq('status', 'pending')
+          .order('created_at', { ascending: true });
+        generations = data;
+        generationsError = error;
+      } else {
+        const { data, error } = await supabase
+          .from('generations')
+          .select('id, status')
+          .eq('project_id', projectId)
+          .eq('status', 'pending')
+          .order('created_at', { ascending: true });
+        generations = data;
+        generationsError = error;
+      }
 
-    if (generationsError || !generations || generations.length !== generationIds.length) {
-      console.error(`❌ [API-Trigger] Generacions no trobades:`, generationsError);
-      return NextResponse.json(
-        { success: false, error: 'Una o més generacions no trobades' },
-        { status: 404 }
-      );
+      if (generationsError) {
+        console.error(`❌ [API-Trigger] Error buscant generacions pendents:`, generationsError);
+        return NextResponse.json(
+          { success: false, error: 'Error consultant generacions pendents' },
+          { status: 500 }
+        );
+      }
+
+      if (!generations || generations.length === 0) {
+        console.log(`🟡 [API-Trigger] No hi ha generacions pendents per al projecte ${projectId}`);
+        return NextResponse.json(
+          { 
+            success: true, 
+            message: 'No hi ha generacions pendents per processar',
+            tasksStarted: 0,
+            tasksFailed: 0,
+            generationIds: [],
+            mode: 'batch'
+          },
+          { status: 200 }
+        );
+      }
+
+      targetGenerationIds = generations.map(g => g.id);
+      console.log(`📋 [API-Trigger] Mode batch: ${generations.length} generacions pendents trobades`);
+
+    } else {
+      // Mode individual: validar que les generacions existeixen i pertanyen al projecte
+      console.log(`🔄 [API-Trigger] Mode individual: Validant ${generationIds.length} generacions específiques`);
+      
+      if (process.env.NODE_ENV === 'development' && internalTestHeader === process.env.WORKER_SECRET_TOKEN) {
+        const serviceClient = createClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.SUPABASE_SERVICE_ROLE_KEY!);
+        const { data, error } = await serviceClient.from('generations').select('id, status').in('id', generationIds).eq('project_id', projectId);
+        generations = data;
+        generationsError = error;
+      } else {
+        const { data, error } = await supabase.from('generations').select('id, status').in('id', generationIds).eq('project_id', projectId);
+        generations = data;
+        generationsError = error;
+      }
+
+      if (generationsError || !generations || generations.length !== generationIds.length) {
+        console.error(`❌ [API-Trigger] Generacions no trobades:`, generationsError);
+        return NextResponse.json(
+          { success: false, error: 'Una o més generacions no trobades' },
+          { status: 404 }
+        );
+      }
+
+      targetGenerationIds = generationIds;
     }
 
     // Comprovar que les generacions no estiguin ja en procés
@@ -159,7 +219,7 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    console.log(`🚀 [API-Trigger] Iniciant ${generationIds.length} tasques asíncrones`);
+    console.log(`🚀 [API-Trigger] Iniciant ${targetGenerationIds.length} tasques asíncrones`);
 
     // Marcar generacions com a 'processing' inicialment
     const { error: updateError } = await supabase
@@ -169,7 +229,7 @@ export async function POST(request: NextRequest) {
         updated_at: new Date().toISOString(),
         error_message: null
       })
-      .in('id', generationIds);
+      .in('id', targetGenerationIds);
 
     if (updateError) {
       console.error(`❌ [API-Trigger] Error actualitzant estat:`, updateError);
@@ -188,7 +248,7 @@ export async function POST(request: NextRequest) {
     console.log(`🔧 [API-Trigger] Invocant worker a: ${workerUrl}`);
 
     // Disparar workers per a cada generació (sense esperar)
-    const workerPromises = generationIds.map(async (generationId: string) => {
+    const workerPromises = targetGenerationIds.map(async (generationId: string) => {
       try {
         console.log(`🔧 [API-Trigger] Disparant worker per generació ${generationId}`);
         
@@ -242,7 +302,7 @@ export async function POST(request: NextRequest) {
     // Resposta immediata
     return NextResponse.json({
       success: true,
-      mode: 'individual',
+      mode: mode,
       tasksStarted: successfulDispatches.length,
       tasksFailed: failedDispatches.length,
       generationIds: successfulDispatches.map(r => r.generationId),
