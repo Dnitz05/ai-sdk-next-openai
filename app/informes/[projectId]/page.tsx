@@ -423,18 +423,29 @@ const ProjectDetailPage: React.FC = () => {
         return null;
       }
 
-      const response = await fetch(`/api/reports/generations?generationId=${generationId}`, {
+      // Forçar URL relativa i evitar cache
+      const baseUrl = typeof window !== 'undefined' ? window.location.origin : '';
+      const url = `${baseUrl}/api/reports/generations?generationId=${generationId}&_t=${Date.now()}`;
+      
+      console.log(`🔄 Polling status for ${generationId} at:`, url);
+
+      const response = await fetch(url, {
+        method: 'GET',
         headers: {
           'Authorization': `Bearer ${session.access_token}`,
           'Content-Type': 'application/json',
+          'Cache-Control': 'no-cache',
         },
+        cache: 'no-store',
       });
 
       if (!response.ok) {
+        console.error(`❌ Status check failed for ${generationId}:`, response.status, response.statusText);
         return null;
       }
 
       const data = await response.json();
+      console.log(`✅ Status response for ${generationId}:`, data.generation?.status);
       return data.generation || null;
     } catch (error) {
       console.error(`Error consultant estat de generació ${generationId}:`, error);
