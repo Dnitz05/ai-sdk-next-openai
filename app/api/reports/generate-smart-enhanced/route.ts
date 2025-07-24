@@ -1,9 +1,9 @@
 /**
  * API Endpoint: /api/reports/generate-smart-enhanced
  * 
- * API Disparador Asíncron per a la Generació Intel·ligent
- * Aquest endpoint inicia la tasca i retorna immediatament, delegant
- * la feina pesada al worker de fons.
+ * API Disparador Simplificat per a la Generació Individual
+ * Aquest endpoint processa un sol document a la vegada, delegant
+ * al frontend la gestió de la cua i el control del flux.
  */
 
 import { NextRequest, NextResponse } from 'next/server';
@@ -17,19 +17,17 @@ export async function POST(request: NextRequest) {
   const startTime = Date.now();
   
   try {
-    console.log(`🚀 [API-Trigger] Nova petició de generació asíncrona`);
+    console.log(`🚀 [API-Trigger] Nova petició de generació individual`);
 
     const body = await request.json();
     console.log('[API-Trigger] Body rebut:', { 
       projectId: body.projectId, 
-      mode: body.mode, 
-      generationIdsLength: body.generationIds?.length 
+      generationId: body.generationId
     });
 
     const { 
       projectId,
-      generationIds, // Array d'IDs per mode individual
-      mode = 'individual' // Només mode individual per ara
+      generationId // Un sol ID per processar
     } = body;
 
     // Validacions bàsiques
@@ -40,17 +38,9 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    if (mode === 'individual' && (!generationIds || !Array.isArray(generationIds) || generationIds.length === 0)) {
+    if (!generationId) {
       return NextResponse.json(
-        { success: false, error: 'generationIds és obligatori per al mode individual' },
-        { status: 400 }
-      );
-    }
-
-    // El mode batch no requereix generationIds ja que els buscarà automàticament
-    if (!['individual', 'batch'].includes(mode)) {
-      return NextResponse.json(
-        { success: false, error: 'mode ha de ser "individual" o "batch"' },
+        { success: false, error: 'generationId és obligatori' },
         { status: 400 }
       );
     }
@@ -74,47 +64,25 @@ export async function POST(request: NextRequest) {
       }
     );
 
-    // Obtenir userId de la sessió o del mode de test
-    let user: { id: string } | null = null;
-    const internalTestHeader = request.headers.get('X-Internal-Test-Auth');
-
-    if (process.env.NODE_ENV === 'development' && internalTestHeader === process.env.WORKER_SECRET_TOKEN && body.testUserId) {
-      console.log(`[API-Trigger] Mode de test intern activat. Simulant usuari: ${body.testUserId}`);
-      user = { id: body.testUserId };
-    } else {
-      const { data: authData, error: authError } = await supabase.auth.getUser();
-      if (authError || !authData.user) {
-        console.error(`❌ [API-Trigger] Error d'autenticació:`, authError);
-        return NextResponse.json(
-          { success: false, error: 'Usuari no autenticat' },
-          { status: 401 }
-        );
-      }
-      user = authData.user;
+    // Obtenir userId de la sessió
+    const { data: authData, error: authError } = await supabase.auth.getUser();
+    if (authError || !authData.user) {
+      console.error(`❌ [API-Trigger] Error d'autenticació:`, authError);
+      return NextResponse.json(
+        { success: false, error: 'Usuari no autenticat' },
+        { status: 401 }
+      );
     }
 
+    const user = authData.user;
     console.log(`👤 [API-Trigger] Usuari autenticat: ${user.id}`);
 
-    // Validar accés al projecte
-    let project: { id: string; template_id: any; } | null = null;
-    let projectError: any = null;
-
-    if (process.env.NODE_ENV === 'development' && internalTestHeader === process.env.WORKER_SECRET_TOKEN) {
-      const serviceClient = createClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.SUPABASE_SERVICE_ROLE_KEY!);
-      const { data, error } = await serviceClient.from('projects').select('id, template_id, user_id').eq('id', projectId).single();
-      if (error || !data || data.user_id !== user.id) {
-        projectError = error || new Error('Test: User ID mismatch');
-      } else {
-        project = data;
-      }
-    } else {
-      const { data, error } = await supabase.from('projects').select('id, template_id').eq('id', projectId).single();
-      if (error || !data) {
-        projectError = error;
-      } else {
-        project = data;
-      }
-    }
+    // Validar accés al projecte (RLS filtra automàticament)
+    const { data: project, error: projectError } = await supabase
+      .from('projects')
+      .select('id, template_id')
+      .eq('id', projectId)
+      .single();
 
     if (projectError || !project) {
       console.error(`❌ [API-Trigger] Projecte no trobat:`, projectError);
@@ -124,104 +92,37 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Determinar les generacions a processar segons el mode
-    let targetGenerationIds: string[];
-    let generations: { id: string; status: string; }[] | null = null;
-    let generationsError: any = null;
+    // Validar que la generació existeix i pertany al projecte
+    const { data: generation, error: generationError } = await supabase
+      .from('generations')
+      .select('id, status')
+      .eq('id', generationId)
+      .eq('project_id', projectId)
+      .single();
 
-    if (mode === 'batch') {
-      console.log(`🔄 [API-Trigger] Mode batch: Buscant totes les generacions pendents per al projecte ${projectId}`);
-      
-      // Mode batch: buscar totes les generacions amb estat 'pending'
-      if (process.env.NODE_ENV === 'development' && internalTestHeader === process.env.WORKER_SECRET_TOKEN) {
-        const serviceClient = createClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.SUPABASE_SERVICE_ROLE_KEY!);
-        const { data, error } = await serviceClient
-          .from('generations')
-          .select('id, status')
-          .eq('project_id', projectId)
-          .eq('status', 'pending')
-          .order('created_at', { ascending: true });
-        generations = data;
-        generationsError = error;
-      } else {
-        const { data, error } = await supabase
-          .from('generations')
-          .select('id, status')
-          .eq('project_id', projectId)
-          .eq('status', 'pending')
-          .order('created_at', { ascending: true });
-        generations = data;
-        generationsError = error;
-      }
-
-      if (generationsError) {
-        console.error(`❌ [API-Trigger] Error buscant generacions pendents:`, generationsError);
-        return NextResponse.json(
-          { success: false, error: 'Error consultant generacions pendents' },
-          { status: 500 }
-        );
-      }
-
-      if (!generations || generations.length === 0) {
-        console.log(`🟡 [API-Trigger] No hi ha generacions pendents per al projecte ${projectId}`);
-        return NextResponse.json(
-          { 
-            success: true, 
-            message: 'No hi ha generacions pendents per processar',
-            tasksStarted: 0,
-            tasksFailed: 0,
-            generationIds: [],
-            mode: 'batch'
-          },
-          { status: 200 }
-        );
-      }
-
-      targetGenerationIds = generations.map(g => g.id);
-      console.log(`📋 [API-Trigger] Mode batch: ${generations.length} generacions pendents trobades`);
-
-    } else {
-      // Mode individual: validar que les generacions existeixen i pertanyen al projecte
-      console.log(`🔄 [API-Trigger] Mode individual: Validant ${generationIds.length} generacions específiques`);
-      
-      if (process.env.NODE_ENV === 'development' && internalTestHeader === process.env.WORKER_SECRET_TOKEN) {
-        const serviceClient = createClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.SUPABASE_SERVICE_ROLE_KEY!);
-        const { data, error } = await serviceClient.from('generations').select('id, status').in('id', generationIds).eq('project_id', projectId);
-        generations = data;
-        generationsError = error;
-      } else {
-        const { data, error } = await supabase.from('generations').select('id, status').in('id', generationIds).eq('project_id', projectId);
-        generations = data;
-        generationsError = error;
-      }
-
-      if (generationsError || !generations || generations.length !== generationIds.length) {
-        console.error(`❌ [API-Trigger] Generacions no trobades:`, generationsError);
-        return NextResponse.json(
-          { success: false, error: 'Una o més generacions no trobades' },
-          { status: 404 }
-        );
-      }
-
-      targetGenerationIds = generationIds;
+    if (generationError || !generation) {
+      console.error(`❌ [API-Trigger] Generació no trobada:`, generationError);
+      return NextResponse.json(
+        { success: false, error: 'Generació no trobada' },
+        { status: 404 }
+      );
     }
 
-    // Comprovar que les generacions no estiguin ja en procés
-    const processingGenerations = generations.filter(g => g.status === 'processing');
-    if (processingGenerations.length > 0) {
+    // Comprovar que la generació no estigui ja en procés
+    if (generation.status === 'processing') {
       return NextResponse.json(
         { 
           success: false, 
-          error: `${processingGenerations.length} generacions ja estan en procés`,
-          processingIds: processingGenerations.map(g => g.id)
+          error: 'La generació ja està en procés',
+          generationId: generationId
         },
         { status: 409 }
       );
     }
 
-    console.log(`🚀 [API-Trigger] Iniciant ${targetGenerationIds.length} tasques asíncrones`);
+    console.log(`🚀 [API-Trigger] Iniciant tasca per generació ${generationId}`);
 
-    // Marcar generacions com a 'processing' inicialment
+    // Marcar generació com a 'processing'
     const { error: updateError } = await supabase
       .from('generations')
       .update({ 
@@ -229,12 +130,12 @@ export async function POST(request: NextRequest) {
         updated_at: new Date().toISOString(),
         error_message: null
       })
-      .in('id', targetGenerationIds);
+      .eq('id', generationId);
 
     if (updateError) {
       console.error(`❌ [API-Trigger] Error actualitzant estat:`, updateError);
       return NextResponse.json(
-        { success: false, error: 'Error actualitzant estat de les generacions' },
+        { success: false, error: 'Error actualitzant estat de la generació' },
         { status: 500 }
       );
     }
@@ -247,44 +148,39 @@ export async function POST(request: NextRequest) {
 
     console.log(`🔧 [API-Trigger] Invocant worker a: ${workerUrl}`);
 
-    // Disparar workers per a cada generació (sense esperar)
-    const workerPromises = targetGenerationIds.map(async (generationId: string) => {
-      try {
-        console.log(`🔧 [API-Trigger] Disparant worker per generació ${generationId}`);
-        
-        // Crida asíncrona al worker (fire-and-forget)
-        fetch(workerUrl, {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            'Authorization': `Bearer ${process.env.WORKER_SECRET_TOKEN}`
-          },
-          body: JSON.stringify({
-            projectId,
-            generationId,
-            userId: user.id
-          })
-        }).catch(error => {
-          console.error(`❌ [API-Trigger] Error disparant worker per ${generationId}:`, error);
-        });
+    // Disparar worker (fire-and-forget)
+    try {
+      fetch(workerUrl, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${process.env.WORKER_SECRET_TOKEN}`
+        },
+        body: JSON.stringify({
+          projectId,
+          generationId,
+          userId: user.id
+        })
+      }).catch(error => {
+        console.error(`❌ [API-Trigger] Error disparant worker:`, error);
+      });
 
-        return { generationId, dispatched: true };
-      } catch (error) {
-        console.error(`❌ [API-Trigger] Error preparant worker per ${generationId}:`, error);
-        return { generationId, dispatched: false, error: error instanceof Error ? error.message : 'Error desconegut' };
-      }
-    });
+      const totalTime = Date.now() - startTime;
+      console.log(`✅ [API-Trigger] Tasca iniciada correctament en ${totalTime}ms`);
 
-    // Esperar que es disparin tots els workers (però no que completin)
-    const dispatchResults = await Promise.all(workerPromises);
-    const successfulDispatches = dispatchResults.filter(r => r.dispatched);
-    const failedDispatches = dispatchResults.filter(r => !r.dispatched);
+      // Resposta immediata
+      return NextResponse.json({
+        success: true,
+        generationId: generationId,
+        message: 'Tasca iniciada en segon pla',
+        dispatchTimeMs: totalTime,
+        pollingAdvice: 'Utilitza GET /api/reports/generations per consultar l\'estat'
+      }, { status: 202 }); // 202 Accepted
 
-    if (failedDispatches.length > 0) {
-      console.error(`❌ [API-Trigger] ${failedDispatches.length} workers no s'han pogut disparar`);
+    } catch (error) {
+      console.error(`❌ [API-Trigger] Error preparant worker:`, error);
       
-      // Revertir estat de les generacions que han fallat
-      const failedIds = failedDispatches.map(f => f.generationId);
+      // Revertir estat de la generació
       await supabase
         .from('generations')
         .update({ 
@@ -292,25 +188,13 @@ export async function POST(request: NextRequest) {
           error_message: 'Error iniciant el processament',
           updated_at: new Date().toISOString()
         })
-        .in('id', failedIds);
+        .eq('id', generationId);
+
+      return NextResponse.json(
+        { success: false, error: 'Error iniciant la tasca' },
+        { status: 500 }
+      );
     }
-
-    const totalTime = Date.now() - startTime;
-
-    console.log(`✅ [API-Trigger] ${successfulDispatches.length} tasques iniciades correctament en ${totalTime}ms`);
-
-    // Resposta immediata
-    return NextResponse.json({
-      success: true,
-      mode: mode,
-      tasksStarted: successfulDispatches.length,
-      tasksFailed: failedDispatches.length,
-      generationIds: successfulDispatches.map(r => r.generationId),
-      failedGenerationIds: failedDispatches.map(r => r.generationId),
-      dispatchTimeMs: totalTime,
-      message: `${successfulDispatches.length} tasques iniciades en segon pla`,
-      pollingAdvice: 'Utilitza GET /api/reports/generations per consultar l\'estat'
-    }, { status: 202 }); // 202 Accepted
 
   } catch (error) {
     const totalTime = Date.now() - startTime;

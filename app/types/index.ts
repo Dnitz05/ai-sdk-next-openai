@@ -117,7 +117,7 @@ export interface Generation {
   project_id: string;
   excel_row_index: number;
   row_data?: any; // JSONB - dades específiques de la fila
-  status: 'pending' | 'generated' | 'reviewed' | 'completed' | 'error';
+  status: 'pending' | 'processing' | 'generated' | 'reviewed' | 'completed' | 'error';
   error_message?: string;
   retry_count: number;
   created_at: string;
