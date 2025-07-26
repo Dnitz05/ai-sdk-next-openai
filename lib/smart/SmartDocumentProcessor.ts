@@ -40,7 +40,83 @@ export class SmartDocumentProcessor {
   }
 
   // ============================================================================
-  // MÈTODE PRINCIPAL - PROCESSAMENT BATCH
+  // MÈTODE PRINCIPAL - PROCESSAMENT INDIVIDUAL (NOU)
+  // ============================================================================
+
+  /**
+   * Processa un únic document de manera ultra-optimitzada
+   * Aquest mètode està específicament dissenyat per a generacions individuals
+   * i seqüencials, evitant la sobrecàrrega del processament batch
+   */
+  async processSingle(
+    templateContent: string,
+    templateStoragePath: string,
+    rowData: any,
+    templateId: string,
+    userId: string
+  ): Promise<BatchProcessingResult> {
+    const startTime = Date.now();
+    
+    try {
+      console.log(`🚀 [SmartProcessor-Single] Iniciant processament individual optimitzat`);
+
+      // 1. Extreure placeholders del template
+      const placeholders = this.extractPlaceholders(templateContent);
+      console.log(`📝 [SmartProcessor-Single] Placeholders trobats:`, placeholders.map(p => p.id));
+
+      // 2. Construir prompt optimitzat per a un sol document
+      const optimizedPrompt = this.buildSingleDocumentPrompt(
+        templateContent,
+        rowData,
+        placeholders
+      );
+
+      // 3. Crida eficient a Mistral AI amb timeout
+      const aiResponse = await this.callMistralAISingle(optimizedPrompt);
+      
+      if (!aiResponse.success) {
+        throw new Error(`Error en crida Mistral AI: ${aiResponse.errorMessage}`);
+      }
+
+      // 4. Generar document DOCX individual
+      const document = await this.generateSingleDocx(
+        aiResponse.documentsData[0], // Utilitzar el primer (i únic) document
+        templateStoragePath,
+        rowData
+      );
+
+      // 5. Calcular mètriques de rendiment
+      const processingTime = Date.now() - startTime;
+      this.performanceMetrics.totalProcessingTime = processingTime;
+      this.performanceMetrics.documentsPerSecond = 1 / (processingTime / 1000);
+
+      console.log(`✅ [SmartProcessor-Single] Document generat en ${processingTime}ms`);
+
+      return {
+        success: true,
+        generationId: `single_${Date.now()}`,
+        documentsGenerated: 1,
+        processingTimeMs: processingTime,
+        documents: [document],
+      };
+
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : 'Error desconegut';
+      console.error(`❌ [SmartProcessor-Single] Error: ${errorMessage}`, error);
+      
+      return {
+        success: false,
+        generationId: '',
+        documentsGenerated: 0,
+        processingTimeMs: Date.now() - startTime,
+        documents: [],
+        errorMessage,
+      };
+    }
+  }
+
+  // ============================================================================
+  // MÈTODE PRINCIPAL - PROCESSAMENT BATCH (EXISTENT)
   // ============================================================================
 
   /**
@@ -164,7 +240,52 @@ export class SmartDocumentProcessor {
   }
 
   // ============================================================================
-  // CONSTRUCCIÓ DEL PROMPT GLOBAL
+  // CONSTRUCCIÓ DEL PROMPT INDIVIDUAL (NOU)
+  // ============================================================================
+
+  /**
+   * Construeix un prompt ultra-optimitzat per a un únic document
+   * Aquest prompt és molt més eficient que buildGlobalPrompt per a un sol document
+   */
+  private buildSingleDocumentPrompt(
+    templateContent: string,
+    rowData: any,
+    placeholders: SmartPlaceholder[]
+  ): string {
+    return `
+TASCA: Genera contingut per UN ÚNIC document professional
+
+PLANTILLA:
+${templateContent}
+
+PLACEHOLDERS A SUBSTITUIR (${placeholders.length}):
+${placeholders.map(p => `- {${p.id}}: ${p.instruction}`).join('\n')}
+
+DADES D'AQUEST DOCUMENT:
+${JSON.stringify(rowData, null, 2)}
+
+INSTRUCCIONS:
+1. Substitueix TOTS els placeholders amb contingut adequat basat en les dades
+2. Mantén coherència gramatical i concordança de gènere/nombre
+3. Formata números, dates i imports segons estàndards catalans
+4. Utilitza un to professional i formal
+
+FORMAT DE SORTIDA:
+Retorna NOMÉS un objecte JSON amb els placeholders com a claus i el contingut generat com a valors.
+
+EXEMPLE:
+{
+  "CONTRACTISTA": "La contractista Maria Soler i Associats, S.L.",
+  "OBRA": "la reforma integral de les oficines centrals",
+  "IMPORT": "12.345,67 €"
+}
+
+RESPOSTA (només l'objecte JSON):
+`;
+  }
+
+  // ============================================================================
+  // CONSTRUCCIÓ DEL PROMPT GLOBAL (EXISTENT)
   // ============================================================================
 
   /**
@@ -223,7 +344,123 @@ DOCUMENTS PROCESSATS (retorna només l'array JSON):
   }
 
   // ============================================================================
-  // CRIDA A MISTRAL AI
+  // CRIDA A MISTRAL AI INDIVIDUAL (NOU)
+  // ============================================================================
+
+  /**
+   * Crida optimitzada a Mistral AI per a un sol document amb timeout agressiu
+   * Aquesta crida està específicament dissenyada per a velocitat màxima
+   */
+  private async callMistralAISingle(prompt: string): Promise<MistralResponse> {
+    const aiStartTime = Date.now();
+    const TIMEOUT_MS = 90000; // 90 segons timeout per a un sol document
+    
+    try {
+      console.log(`🤖 [MistralAI-Single] Iniciant crida optimitzada...`);
+
+      // Crear AbortController per timeout controlat
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), TIMEOUT_MS);
+
+      const response = await fetch('https://api.mistral.ai/v1/chat/completions', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${this.mistralApiKey}`,
+        },
+        signal: controller.signal,
+        body: JSON.stringify({
+          model: 'mistral-small-latest', // Model més ràpid per documents individuals
+          messages: [
+            {
+              role: 'user',
+              content: prompt,
+            },
+          ],
+          temperature: 0.3, // Menys creativitat = més rapidesa
+          max_tokens: 2000, // Límit més restrictiu per a un sol document
+        }),
+      });
+
+      clearTimeout(timeoutId);
+
+      if (!response.ok) {
+        throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+      }
+
+      const data = await response.json();
+      const aiContent = data.choices[0]?.message?.content;
+
+      if (!aiContent) {
+        throw new Error('Resposta buida de Mistral AI');
+      }
+
+      // Parsejar la resposta JSON
+      const documentData = this.parseAISingleResponse(aiContent);
+      
+      this.performanceMetrics.aiCallTime = Date.now() - aiStartTime;
+      
+      console.log(`✅ [MistralAI-Single] Crida completada:`, {
+        aiCallTimeMs: this.performanceMetrics.aiCallTime,
+        tokensUsed: data.usage?.total_tokens || 'N/A',
+      });
+
+      return {
+        success: true,
+        documentsData: [documentData], // Empaquetar en array per compatibilitat
+        tokensUsed: data.usage?.total_tokens,
+      };
+
+    } catch (error) {
+      this.performanceMetrics.aiCallTime = Date.now() - aiStartTime;
+      
+      if (error instanceof Error && error.name === 'AbortError') {
+        console.error(`❌ [MistralAI-Single] Timeout després de ${TIMEOUT_MS}ms`);
+        return {
+          success: false,
+          documentsData: [],
+          errorMessage: `Timeout de la IA després de ${TIMEOUT_MS/1000} segons`,
+        };
+      }
+      
+      console.error(`❌ [MistralAI-Single] Error en crida:`, error);
+      
+      return {
+        success: false,
+        documentsData: [],
+        errorMessage: error instanceof Error ? error.message : 'Error desconegut en Mistral AI',
+      };
+    }
+  }
+
+  /**
+   * Parseja la resposta de Mistral AI per a un sol document
+   */
+  private parseAISingleResponse(aiContent: string): Record<string, string> {
+    try {
+      // Intentar extreure JSON de la resposta
+      const jsonMatch = aiContent.match(/\{[\s\S]*\}/);
+      if (!jsonMatch) {
+        throw new Error('No s\'ha trobat objecte JSON en la resposta');
+      }
+
+      const documentData = JSON.parse(jsonMatch[0]);
+
+      if (typeof documentData !== 'object' || documentData === null) {
+        throw new Error('La resposta no és un objecte vàlid');
+      }
+
+      return documentData;
+
+    } catch (error) {
+      console.error(`❌ [Parser-Single] Error parseant resposta AI:`, error);
+      console.error(`Contingut rebut:`, aiContent.substring(0, 500) + '...');
+      throw new Error(`Error parseant resposta de Mistral AI: ${error instanceof Error ? error.message : 'Error desconegut'}`);
+    }
+  }
+
+  // ============================================================================
+  // CRIDA A MISTRAL AI BATCH (EXISTENT)
   // ============================================================================
 
   /**
@@ -333,7 +570,66 @@ DOCUMENTS PROCESSATS (retorna només l'array JSON):
   }
 
   // ============================================================================
-  // GENERACIÓ DE DOCUMENTS DOCX
+  // GENERACIÓ DE DOCUMENT DOCX INDIVIDUAL (NOU)
+  // ============================================================================
+
+  /**
+   * Genera un únic document DOCX de manera optimitzada
+   * Aquest mètode està específicament dissenyat per a generacions individuals
+   */
+  private async generateSingleDocx(
+    documentData: Record<string, string>,
+    templateStoragePath: string,
+    rowData: any
+  ): Promise<ProcessedDocument> {
+    const docxStartTime = Date.now();
+    
+    try {
+      console.log(`📄 [DocxGenerator-Single] Generant document DOCX individual...`);
+
+      // Descarregar plantilla original
+      const templateBuffer = await this.downloadTemplateFromStorage(templateStoragePath);
+      
+      // Crear instància de docxtemplater
+      const zip = new PizZip(templateBuffer);
+      const doc = new Docxtemplater(zip, {
+        paragraphLoop: SMART_GENERATION_CONSTANTS.DOCX_DEFAULTS.PARAGRAPH_LOOP,
+        linebreaks: SMART_GENERATION_CONSTANTS.DOCX_DEFAULTS.LINEBREAKS,
+        nullGetter: SMART_GENERATION_CONSTANTS.DOCX_DEFAULTS.NULL_GETTER,
+      });
+
+      // SUBSTITUCIÓ QUIRÚRGICA: només canvia el text dins de les etiquetes XML
+      doc.setData(documentData);
+      doc.render();
+
+      // Generar buffer del document final
+      const documentBuffer = doc.getZip().generate({ type: 'nodebuffer' });
+
+      // Per a generacions individuals, no pugem a storage per defecte
+      // (es pot afegir en el futur si es necessita)
+      
+      this.performanceMetrics.docxGenerationTime = Date.now() - docxStartTime;
+      
+      console.log(`✅ [DocxGenerator-Single] Document generat:`, {
+        docxGenerationTimeMs: this.performanceMetrics.docxGenerationTime,
+      });
+
+      return {
+        documentIndex: 0,
+        rowData: rowData,
+        placeholderValues: documentData,
+        documentBuffer,
+        storagePath: '', // No storage per defecte en mode individual
+      } as ProcessedDocument;
+
+    } catch (error) {
+      console.error(`❌ [DocxGenerator-Single] Error generant document:`, error);
+      throw error;
+    }
+  }
+
+  // ============================================================================
+  // GENERACIÓ DE DOCUMENTS DOCX BATCH (EXISTENT)
   // ============================================================================
 
   /**
