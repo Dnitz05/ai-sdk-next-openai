@@ -453,13 +453,41 @@ const ProjectDetailPage: React.FC = () => {
     }
   };
 
-  // Effect per al polling automàtic (només per generació individual)
+  // Effect per al polling automàtic amb timeout (només per generació individual)
   useEffect(() => {
     if (!pollingActive || pollingGenerationIds.length === 0 || isBatchRunning) {
       return;
     }
 
+    // Timeout del polling: 6 minuts màxim
+    const POLLING_TIMEOUT_MS = 6 * 60 * 1000; // 6 minuts
+    const pollingStartTime = Date.now();
+
     const pollInterval = setInterval(async () => {
+      // Comprovar timeout del polling
+      const pollingDuration = Date.now() - pollingStartTime;
+      if (pollingDuration > POLLING_TIMEOUT_MS) {
+        console.error(`❌ Timeout del polling després de ${POLLING_TIMEOUT_MS/1000} segons`);
+        
+        // Marcar generacions com a error per timeout
+        const timeoutError = 'Timeout: El processament ha trigat més del temps permès. Prova-ho més tard.';
+        setGenerations(prev => prev.map(g => 
+          pollingGenerationIds.includes(g.id) && g.status === 'processing' 
+            ? { ...g, status: 'error', error_message: timeoutError } 
+            : g
+        ));
+        
+        // Aturar polling
+        setPollingActive(false);
+        setPollingGenerationIds([]);
+        setCurrentGenerationId(null);
+        
+        // Mostrar error a l'usuari
+        setError('Timeout: La generació ha trigat més del temps permès. Prova-ho més tard o contacta amb suport si el problema persisteix.');
+        
+        return;
+      }
+
       let allCompleted = true;
       let hasUpdates = false;
 

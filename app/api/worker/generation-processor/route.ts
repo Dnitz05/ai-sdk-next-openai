@@ -13,9 +13,13 @@ import supabaseServerClient from '@/lib/supabase/server';
 export const runtime = 'nodejs';
 export const maxDuration = 300; // 5 minuts per al worker
 
+// Timeout intern per evitar que Vercel mata el procés abruptament
+const INTERNAL_TIMEOUT_MS = 4 * 60 * 1000 + 30 * 1000; // 4 minuts 30 segons
+
 export async function POST(request: NextRequest) {
   const startTime = Date.now();
   let generationId: string | null = null; // Variable accessible per al finally
+  let isProcessingCompleted = false; // Flag per controlar l'estat final
   
   try {
     // 1. Verificació del Secret del Worker
@@ -210,20 +214,34 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Configurar processament
-    const config: BatchProcessingConfig = {
-      templateId: templateId,
-      templateContent: template.template_content,
-      templateStoragePath: template.docx_storage_path,
-      excelData: excelData,
-      userId: userId,
-    };
+    console.log(`🔧 [Worker] Configuració preparada. Iniciant processament individual optimitzat...`);
 
-    console.log(`🔧 [Worker] Configuració preparada. Iniciant processament...`);
+    // Crear una promesa de timeout intern per evitar terminació abrupta de Vercel
+    const timeoutPromise = new Promise<never>((_, reject) => {
+      setTimeout(() => {
+        reject(new Error(`Timeout intern del worker després de ${INTERNAL_TIMEOUT_MS/1000} segons`));
+      }, INTERNAL_TIMEOUT_MS);
+    });
 
-    // Executar generació
-    const processor = new SmartDocumentProcessor();
-    const result = await processor.processBatch(config);
+    // Crear una promesa per al processament optimitzat individual
+    const processingPromise = (async () => {
+      const processor = new SmartDocumentProcessor();
+      
+      // Utilitzar processSingle optimitzat per a generacions individuals
+      const result = await processor.processSingle(
+        template.template_content,
+        template.docx_storage_path,
+        generation.row_data,
+        templateId,
+        userId
+      );
+      
+      return result;
+    })();
+
+    // Executar amb timeout controat (race entre processament i timeout)
+    console.log(`⏱️ [Worker] Iniciant processament amb timeout de ${INTERNAL_TIMEOUT_MS/1000} segons...`);
+    const result = await Promise.race([processingPromise, timeoutPromise]);
 
     console.log(`🔧 [Worker] Processament completat:`, { 
       success: result.success, 
@@ -231,7 +249,7 @@ export async function POST(request: NextRequest) {
     });
 
     if (!result.success) {
-      const errorMsg = `Error en processament: ${result.errorMessage}`;
+      const errorMsg = `Error en processament individual: ${result.errorMessage}`;
       console.error(`❌ [Worker] ${errorMsg}`);
       
       // Actualitzar estat a error
@@ -244,6 +262,8 @@ export async function POST(request: NextRequest) {
         })
         .eq('id', generationId);
 
+      isProcessingCompleted = true; // Marcar com completat per evitar doble actualització
+      
       return NextResponse.json(
         { success: false, error: errorMsg },
         { status: 500 }
@@ -269,9 +289,10 @@ export async function POST(request: NextRequest) {
       })
       .eq('id', generationId);
 
+    isProcessingCompleted = true; // Marcar com completat per evitar doble actualització
     const totalTime = Date.now() - startTime;
 
-    console.log(`✅ [Worker] Tasca completada amb èxit en ${totalTime}ms`);
+    console.log(`✅ [Worker] Tasca individual completada amb èxit en ${totalTime}ms`);
 
     return NextResponse.json({
       success: true,
@@ -279,27 +300,37 @@ export async function POST(request: NextRequest) {
       documentsGenerated: result.documentsGenerated,
       processingTimeMs: result.processingTimeMs,
       totalTimeMs: totalTime,
-      details: `Document generat amb èxit per generació ${generationId}`
+      details: `Document generat amb èxit per generació ${generationId}`,
+      optimizedMode: 'processSingle'
     });
 
   } catch (error) {
     const totalTime = Date.now() - startTime;
     const errorMsg = error instanceof Error ? error.message : 'Error desconegut';
     
-    console.error(`❌ [Worker] Error crític:`, error);
+    // Detectar si ha estat un timeout intern
+    const isTimeoutError = errorMsg.includes('Timeout intern del worker');
+    
+    console.error(`❌ [Worker] Error crític${isTimeoutError ? ' (TIMEOUT)' : ''}:`, error);
     
     // Intentar actualitzar l'estat a error utilitzant la variable accessible
-    if (generationId) {
+    if (generationId && !isProcessingCompleted) {
       try {
+        const finalErrorMsg = isTimeoutError 
+          ? 'Timeout: El processament ha trigat més del temps permès'
+          : `Error intern: ${errorMsg}`;
+          
         await supabaseServerClient
           .from('generations')
           .update({ 
             status: 'error', 
-            error_message: `Error intern: ${errorMsg}`,
+            error_message: finalErrorMsg,
             updated_at: new Date().toISOString()
           })
           .eq('id', generationId);
-        console.log(`🔧 [Worker] Estat actualitzat a 'error' per la generació ${generationId}`);
+          
+        console.log(`🔧 [Worker] Estat actualitzat a 'error' per la generació ${generationId}${isTimeoutError ? ' (TIMEOUT)' : ''}`);
+        isProcessingCompleted = true;
       } catch (updateError) {
         console.error(`❌ [Worker] Error actualitzant estat a BD:`, updateError);
       }
@@ -308,19 +339,20 @@ export async function POST(request: NextRequest) {
     return NextResponse.json(
       { 
         success: false, 
-        error: 'Error intern del worker',
+        error: isTimeoutError ? 'Timeout del processament' : 'Error intern del worker',
         details: errorMsg,
         processingTimeMs: totalTime,
+        timeoutError: isTimeoutError,
       },
-      { status: 500 }
+      { status: isTimeoutError ? 408 : 500 }
     );
   } finally {
-    // Bloc FINALLY: Garanteix que cap generació es quedi en estat "processing"
-    if (generationId) {
+    // Bloc FINALLY MILLORAT: Garanteix que cap generació es quedi en estat "processing"
+    if (generationId && !isProcessingCompleted) {
       try {
         console.log(`🔧 [Worker] Finally: Verificant estat final de la generació ${generationId}`);
         
-        // Comprovar l'estat actual
+        // Comprovar l'estat actual només si no hem marcat com completat
         const { data: finalState, error: finalStateError } = await supabaseServerClient
           .from('generations')
           .select('status')
@@ -335,7 +367,7 @@ export async function POST(request: NextRequest) {
             .from('generations')
             .update({ 
               status: 'error', 
-              error_message: 'Worker interromput - estat no resolt',
+              error_message: 'Worker interromput inesperadament - processament incomplet',
               updated_at: new Date().toISOString()
             })
             .eq('id', generationId);
@@ -346,10 +378,25 @@ export async function POST(request: NextRequest) {
         }
       } catch (finallyError) {
         console.error(`❌ [Worker] Error en bloc finally:`, finallyError);
+        
+        // Últim intent deseseperat per evitar estat "processing" penjat
+        try {
+          await supabaseServerClient
+            .from('generations')
+            .update({ 
+              status: 'error', 
+              error_message: 'Error crític: no s\'ha pogut determinar l\'estat final',
+              updated_at: new Date().toISOString()
+            })
+            .eq('id', generationId);
+          console.log(`🆘 [Worker] Finally: Últim intent per evitar estat penjat completat`);
+        } catch (lastResortError) {
+          console.error(`💀 [Worker] Finally: Últim intent fallit:`, lastResortError);
+        }
       }
     }
     
     const totalTime = Date.now() - startTime;
-    console.log(`🏁 [Worker] Processament finalitzat en ${totalTime}ms`);
+    console.log(`🏁 [Worker] Processament finalitzat en ${totalTime}ms (completed: ${isProcessingCompleted})`);
   }
 }
