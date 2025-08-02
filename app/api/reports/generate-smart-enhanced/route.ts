@@ -150,7 +150,8 @@ export async function POST(request: NextRequest) {
 
     // Disparar worker (fire-and-forget)
     try {
-      fetch(workerUrl, {
+      // CANVI CLAU: Ara fem 'await' i gestionem la resposta del worker
+      const workerResponse = await fetch(workerUrl, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -161,37 +162,62 @@ export async function POST(request: NextRequest) {
           generationId,
           userId: user.id
         })
-      }).catch(error => {
-        console.error(`❌ [API-Trigger] Error disparant worker:`, error);
       });
 
       const totalTime = Date.now() - startTime;
-      console.log(`✅ [API-Trigger] Tasca iniciada correctament en ${totalTime}ms`);
 
-      // Resposta immediata
+      // Comprovar si el worker ha respost correctament
+      if (!workerResponse.ok) {
+        // Si el worker ha fallat, agafem el seu missatge d'error
+        const errorData = await workerResponse.json();
+        const errorMessage = errorData.error || `El worker ha fallat amb estat ${workerResponse.status}`;
+        console.error(`❌ [API-Trigger] El worker ha fallat:`, errorMessage);
+
+        // Actualitzar l'estat de la generació a 'error' amb el missatge del worker
+        await supabase
+          .from('generations')
+          .update({
+            status: 'error',
+            error_message: errorMessage,
+            updated_at: new Date().toISOString()
+          })
+          .eq('id', generationId);
+
+        return NextResponse.json(
+          { success: false, error: errorMessage },
+          { status: 500 }
+        );
+      }
+      
+      const resultData = await workerResponse.json();
+      console.log(`✅ [API-Trigger] El worker ha completat la tasca en ${totalTime}ms`);
+
+      // El worker ja ha actualitzat l'estat a 'generated'.
+      // Responem amb èxit indicant que tot el procés s'ha completat.
       return NextResponse.json({
         success: true,
         generationId: generationId,
-        message: 'Tasca iniciada en segon pla',
-        dispatchTimeMs: totalTime,
-        pollingAdvice: 'Utilitza GET /api/reports/generations per consultar l\'estat'
-      }, { status: 202 }); // 202 Accepted
+        message: 'Generació completada amb èxit',
+        data: resultData
+      }, { status: 200 }); // 200 OK
 
     } catch (error) {
-      console.error(`❌ [API-Trigger] Error preparant worker:`, error);
+      console.error(`❌ [API-Trigger] Error crític durant la invocació del worker:`, error);
       
-      // Revertir estat de la generació
+      const errorMessage = error instanceof Error ? error.message : 'Error desconegut';
+
+      // Revertir estat de la generació a 'error'
       await supabase
         .from('generations')
-        .update({ 
+        .update({
           status: 'error',
-          error_message: 'Error iniciant el processament',
+          error_message: `Error crític del disparador: ${errorMessage}`,
           updated_at: new Date().toISOString()
         })
         .eq('id', generationId);
 
       return NextResponse.json(
-        { success: false, error: 'Error iniciant la tasca' },
+        { success: false, error: 'Error crític iniciant la tasca', details: errorMessage },
         { status: 500 }
       );
     }
