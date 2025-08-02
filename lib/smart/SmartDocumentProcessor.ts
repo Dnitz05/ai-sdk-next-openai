@@ -750,27 +750,36 @@ DOCUMENTS PROCESSATS (retorna només l'array JSON):
    * Descarrega la plantilla original de Supabase Storage
    */
   private async downloadTemplateFromStorage(templatePath: string): Promise<Buffer> {
-    try {
-      console.log(`[DIAGNOSTIC] Iniciant descàrrega de plantilla: ${templatePath}`);
-      
+    const STORAGE_TIMEOUT_MS = 30000; // 30 segons de timeout per a la descàrrega
+
+    const downloadPromise = (async () => {
       const { data, error } = await this.supabase.storage
         .from('template-docx')
         .download(templatePath);
 
       if (error) {
-        throw new Error(`Error descarregant plantilla: ${error.message}`);
+        throw new Error(`Error descarregant plantilla de Storage: ${error.message}`);
+      }
+      
+      if (!data) {
+        throw new Error('No s\'han rebut dades de la plantilla de Storage');
       }
 
-      const buffer = Buffer.from(await data.arrayBuffer());
-      
-      console.log(`[DIAGNOSTIC] Descàrrega de plantilla completada amb èxit: ${templatePath}`);
-      
-      return buffer;
+      return Buffer.from(await data.arrayBuffer());
+    })();
 
+    const timeoutPromise = new Promise<never>((_, reject) => {
+      setTimeout(() => {
+        reject(new Error(`Timeout de descàrrega de plantilla després de ${STORAGE_TIMEOUT_MS / 1000} segons`));
+      }, STORAGE_TIMEOUT_MS);
+    });
+
+    try {
+      return await Promise.race([downloadPromise, timeoutPromise]);
     } catch (error) {
-      console.error(`❌ [DIAGNOSTIC] Error durant la descàrrega de la plantilla:`, error);
-      console.error(`❌ [Storage] Error descarregant plantilla:`, error);
-      throw error;
+        console.error(`❌ [Storage] Error descarregant plantilla '${templatePath}':`, error);
+        // Llançar l'error per a que sigui capturat pel processador principal
+        throw error;
     }
   }
 
