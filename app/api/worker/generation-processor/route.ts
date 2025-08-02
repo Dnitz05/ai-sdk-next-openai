@@ -3,11 +3,14 @@
  * 
  * Aquest endpoint executa la lògica de generació completa de manera asíncrona.
  * És invocat internament per l'API disparador i actualitza l'estat a la BD.
+ * 
+ * Versió Millorada: Inclou logging estructurat i gestió d'errors robusta
  */
 
 import { NextRequest, NextResponse } from 'next/server';
 import { SmartDocumentProcessor } from '@/lib/smart/SmartDocumentProcessor';
 import { BatchProcessingConfig, isValidExcelData } from '@/lib/smart/types';
+import { logger, createContextLogger } from '@/lib/utils/logger';
 import supabaseServerClient from '@/lib/supabase/server';
 
 export const runtime = 'nodejs';
@@ -21,21 +24,31 @@ export async function POST(request: NextRequest) {
   let generationId: string | null = null; // Variable accessible per al finally
   let isProcessingCompleted = false; // Flag per controlar l'estat final
   
+  // Context logging per aquesta petició del worker
+  const logContext = {
+    component: 'GenerationWorker',
+    function: 'POST',
+    timestamp: new Date().toISOString(),
+  };
+
   try {
     // 1. Verificació del Secret del Worker
     const authToken = request.headers.get('Authorization');
     if (authToken !== `Bearer ${process.env.WORKER_SECRET_TOKEN}`) {
-      console.error('❌ [Worker] Secret del worker invàlid o no proporcionat');
+      logger.error('Secret del worker invàlid o no proporcionat', null, logContext);
       return NextResponse.json({ success: false, error: 'Accés no autoritzat' }, { status: 401 });
     }
 
-    console.log(`🔧 [Worker] Processant nova tasca de generació`);
+    logger.info('Processant nova tasca de generació amb sistema millorat', logContext);
 
     const body = await request.json();
-    console.log('[Worker DEBUG] Body rebut:', { 
-      projectId: body.projectId, 
-      generationId: body.generationId, 
-      userId: body.userId 
+    logger.info('Body rebut pel worker', {
+      ...logContext,
+      requestData: {
+        projectId: body.projectId, 
+        generationId: body.generationId, 
+        userId: body.userId 
+      }
     });
 
     const { 
@@ -44,19 +57,32 @@ export async function POST(request: NextRequest) {
       userId
     } = body;
 
-    // Assignar generationId a la variable accessible
+    // Assignar generationId a la variable accessible i actualitzar context
     generationId = bodyGenerationId;
+    const enrichedContext = {
+      ...logContext,
+      generationId: generationId || undefined, // Convertir null a undefined
+      projectId,
+      userId,
+    };
 
     // Validacions bàsiques
     if (!projectId || !generationId || !userId) {
-      console.error(`❌ [Worker] Paràmetres obligatoris faltants`);
+      logger.error('Paràmetres obligatoris faltants', null, enrichedContext);
       return NextResponse.json(
         { success: false, error: 'projectId, generationId i userId són obligatoris' },
         { status: 400 }
       );
     }
 
-    console.log(`🔧 [Worker] Iniciant processament per usuari ${userId}, projecte ${projectId}, generació ${generationId}`);
+    logger.info('Iniciant processament amb paràmetres vàlids', {
+      ...enrichedContext,
+      validatedParams: {
+        userId,
+        projectId, 
+        generationId
+      }
+    });
 
     // 2. Comprovació d'Idempotència
     const { data: currentState, error: stateError } = await supabaseServerClient
