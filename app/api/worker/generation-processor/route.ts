@@ -39,16 +39,13 @@ export async function POST(request: NextRequest) {
 
   try {
     // 1. Verificació del Secret del Worker
-    const authToken = request.headers.get('Authorization');
-    const expectedToken = `Bearer ${process.env.WORKER_SECRET_TOKEN}`;
-
-    // DEBUG: Imprimir tokens per comparació
-    console.log(`[DIAGNOSTIC-WORKER] Auth Token Rebut (primers 15 chars): ${authToken?.substring(0, 15)}...`);
-    console.log(`[DIAGNOSTIC-WORKER] Auth Token Esperat (primers 15 chars): ${expectedToken.substring(0, 15)}...`);
+    // Llegim la capçalera personalitzada 'X-Worker-Token'
+    const authToken = request.headers.get('X-Worker-Token');
+    const expectedToken = process.env.WORKER_SECRET_TOKEN;
 
     if (authToken !== expectedToken) {
-      logger.error('Secret del worker invàlid o no proporcionat', { received: authToken, expected: expectedToken }, logContext);
-      return NextResponse.json({ success: false, error: 'Accés no autoritzat: testimoni invàlid.' }, { status: 401 });
+      logger.error('Secret del worker invàlid o no proporcionat sota X-Worker-Token', null, logContext);
+      return NextResponse.json({ success: false, error: 'Accés no autoritzat' }, { status: 401 });
     }
 
     logger.info('Processant nova tasca de generació amb sistema millorat', logContext);
