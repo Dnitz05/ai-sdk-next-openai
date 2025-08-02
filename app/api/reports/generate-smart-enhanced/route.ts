@@ -168,9 +168,22 @@ export async function POST(request: NextRequest) {
 
       // Comprovar si el worker ha respost correctament
       if (!workerResponse.ok) {
-        // Si el worker ha fallat, agafem el seu missatge d'error
-        const errorData = await workerResponse.json();
-        const errorMessage = errorData.error || `El worker ha fallat amb estat ${workerResponse.status}`;
+        let errorMessage;
+        const contentType = workerResponse.headers.get('content-type');
+        
+        // Si la resposta sembla JSON, la parsegem. Si no, agafem el text.
+        if (contentType && contentType.includes('application/json')) {
+          try {
+            const errorData = await workerResponse.json();
+            errorMessage = errorData.error || errorData.details || `El worker ha fallat amb estat ${workerResponse.status}`;
+          } catch (e) {
+            errorMessage = `El worker ha retornat una resposta JSON invàlida amb estat ${workerResponse.status}`;
+          }
+        } else {
+          // La resposta no és JSON (probablement una pàgina d'error HTML de Vercel)
+          errorMessage = `El worker ha retornat una resposta no esperada (possiblement un error d'infraestructura) amb estat ${workerResponse.status}`;
+        }
+        
         console.error(`❌ [API-Trigger] El worker ha fallat:`, errorMessage);
 
         // Actualitzar l'estat de la generació a 'error' amb el missatge del worker
