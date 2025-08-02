@@ -11,7 +11,13 @@ import { NextRequest, NextResponse } from 'next/server';
 import { SmartDocumentProcessor } from '@/lib/smart/SmartDocumentProcessor';
 import { BatchProcessingConfig, isValidExcelData } from '@/lib/smart/types';
 import { logger, createContextLogger } from '@/lib/utils/logger';
-import supabaseServerClient from '@/lib/supabase/server';
+import { createClient } from '@supabase/supabase-js';
+
+// Utilitzar el client admin per a operacions de backend sense dependre de la sessió d'usuari
+const supabaseAdmin = createClient(
+  process.env.NEXT_PUBLIC_SUPABASE_URL!,
+  process.env.SUPABASE_SERVICE_ROLE_KEY!
+);
 
 export const runtime = 'nodejs';
 export const maxDuration = 300; // 5 minuts per al worker
@@ -85,7 +91,7 @@ export async function POST(request: NextRequest) {
     });
 
     // 2. Comprovació d'Idempotència
-    const { data: currentState, error: stateError } = await supabaseServerClient
+    const { data: currentState, error: stateError } = await supabaseAdmin
       .from('generations')
       .select('status')
       .eq('id', generationId)
@@ -101,9 +107,9 @@ export async function POST(request: NextRequest) {
     }
 
     // 3. Actualitzar estat inicial a 'processing' amb timestamp
-    await supabaseServerClient
+    await supabaseAdmin
       .from('generations')
-      .update({ 
+      .update({
         status: 'processing', 
         updated_at: new Date().toISOString(),
         error_message: null 
@@ -113,7 +119,7 @@ export async function POST(request: NextRequest) {
     console.log(`🔧 [Worker] Estat actualitzat a 'processing'`);
 
     // Obtenir informació del projecte
-    const { data: project, error: projectError } = await supabaseServerClient
+    const { data: project, error: projectError } = await supabaseAdmin
       .from('projects')
       .select('template_id, excel_data, total_rows')
       .eq('id', projectId)
@@ -125,9 +131,9 @@ export async function POST(request: NextRequest) {
       console.error(`❌ [Worker] ${errorMsg}`);
       
       // Actualitzar estat a error
-      await supabaseServerClient
+      await supabaseAdmin
         .from('generations')
-        .update({ 
+        .update({
           status: 'error', 
           error_message: errorMsg,
           updated_at: new Date().toISOString()
@@ -143,7 +149,7 @@ export async function POST(request: NextRequest) {
     const templateId = project.template_id;
 
     // 4. Obtenir dades de la generació específica
-    const { data: generation, error: genError } = await supabaseServerClient
+    const { data: generation, error: genError } = await supabaseAdmin
       .from('generations')
       .select('row_data, excel_row_index')
       .eq('id', generationId)
@@ -152,7 +158,7 @@ export async function POST(request: NextRequest) {
     if (genError || !generation) {
       const errorMsg = `Generació no trobada: ${genError?.message}`;
       console.error(`❌ [Worker] ${errorMsg}`);
-      await supabaseServerClient.from('generations').update({ status: 'error', error_message: errorMsg }).eq('id', generationId);
+      await supabaseAdmin.from('generations').update({ status: 'error', error_message: errorMsg }).eq('id', generationId);
       return NextResponse.json({ success: false, error: errorMsg }, { status: 404 });
     }
 
@@ -164,9 +170,9 @@ export async function POST(request: NextRequest) {
       const errorMsg = 'No hi ha dades Excel disponibles';
       console.error(`❌ [Worker] ${errorMsg}`);
       
-      await supabaseServerClient
+      await supabaseAdmin
         .from('generations')
-        .update({ 
+        .update({
           status: 'error', 
           error_message: errorMsg,
           updated_at: new Date().toISOString()
@@ -182,7 +188,7 @@ export async function POST(request: NextRequest) {
     // Obtenir plantilla
     console.log(`🔧 [Worker] Obtenint plantilla ${templateId}`);
 
-    const { data: templateRaw, error: templateError } = await supabaseServerClient
+    const { data: templateRaw, error: templateError } = await supabaseAdmin
       .from('plantilla_configs')
       .select('*')
       .eq('id', templateId)
@@ -192,9 +198,9 @@ export async function POST(request: NextRequest) {
       const errorMsg = `Plantilla no trobada: ${templateError?.message}`;
       console.error(`❌ [Worker] ${errorMsg}`);
       
-      await supabaseServerClient
+      await supabaseAdmin
         .from('generations')
-        .update({ 
+        .update({
           status: 'error', 
           error_message: errorMsg,
           updated_at: new Date().toISOString()
@@ -225,9 +231,9 @@ export async function POST(request: NextRequest) {
       const errorMsg = 'Plantilla incompleta - falta contingut o document';
       console.error(`❌ [Worker] ${errorMsg}`);
       
-      await supabaseServerClient
+      await supabaseAdmin
         .from('generations')
-        .update({ 
+        .update({
           status: 'error', 
           error_message: errorMsg,
           updated_at: new Date().toISOString()
@@ -279,9 +285,9 @@ export async function POST(request: NextRequest) {
       console.error(`❌ [Worker] ${errorMsg}`);
       
       // Actualitzar estat a error
-      await supabaseServerClient
+      await supabaseAdmin
         .from('generations')
-        .update({ 
+        .update({
           status: 'error', 
           error_message: errorMsg,
           updated_at: new Date().toISOString()
@@ -300,7 +306,7 @@ export async function POST(request: NextRequest) {
     const docResult = result.documents[0]; // Primer (i únic) document
     const originalData = excelData[0];
 
-    await supabaseServerClient
+    await supabaseAdmin
       .from('generations')
       .update({
         status: 'generated',
@@ -346,9 +352,9 @@ export async function POST(request: NextRequest) {
           ? 'Timeout: El processament ha trigat més del temps permès'
           : `Error intern: ${errorMsg}`;
           
-        await supabaseServerClient
+        await supabaseAdmin
           .from('generations')
-          .update({ 
+          .update({
             status: 'error', 
             error_message: finalErrorMsg,
             updated_at: new Date().toISOString()
@@ -379,7 +385,7 @@ export async function POST(request: NextRequest) {
         console.log(`🔧 [Worker] Finally: Verificant estat final de la generació ${generationId}`);
         
         // Comprovar l'estat actual només si no hem marcat com completat
-        const { data: finalState, error: finalStateError } = await supabaseServerClient
+        const { data: finalState, error: finalStateError } = await supabaseAdmin
           .from('generations')
           .select('status')
           .eq('id', generationId)
@@ -389,9 +395,9 @@ export async function POST(request: NextRequest) {
           // Si encara està en "processing", quelcom ha anat malament. Forçar a "error"
           console.log(`⚠️ [Worker] Finally: Generació ${generationId} encara en 'processing'. Forçant a 'error'.`);
           
-          await supabaseServerClient
+          await supabaseAdmin
             .from('generations')
-            .update({ 
+            .update({
               status: 'error', 
               error_message: 'Worker interromput inesperadament - processament incomplet',
               updated_at: new Date().toISOString()
@@ -407,9 +413,9 @@ export async function POST(request: NextRequest) {
         
         // Últim intent deseseperat per evitar estat "processing" penjat
         try {
-          await supabaseServerClient
+          await supabaseAdmin
             .from('generations')
-            .update({ 
+            .update({
               status: 'error', 
               error_message: 'Error crític: no s\'ha pogut determinar l\'estat final',
               updated_at: new Date().toISOString()
