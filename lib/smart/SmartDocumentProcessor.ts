@@ -12,6 +12,8 @@
 import PizZip from 'pizzip';
 import Docxtemplater from 'docxtemplater';
 import supabaseServerClient from '@/lib/supabase/server';
+import { retryAsync, DEFAULT_API_RETRY_CONFIG } from '@/lib/utils/retry';
+import { logger } from '@/lib/utils/logger';
 import {
   BatchProcessingConfig,
   BatchProcessingResult,
@@ -348,62 +350,90 @@ DOCUMENTS PROCESSATS (retorna només l'array JSON):
   // ============================================================================
 
   /**
-   * Crida optimitzada a Mistral AI per a un sol document amb timeout agressiu
-   * Aquesta crida està específicament dissenyada per a velocitat màxima
+   * Crida optimitzada a Mistral AI per a un sol document amb resiliència integrada
+   * Aquesta crida està específicament dissenyada per a velocitat màxima i fiabilitat
    */
   private async callMistralAISingle(prompt: string): Promise<MistralResponse> {
     const aiStartTime = Date.now();
     const TIMEOUT_MS = 90000; // 90 segons timeout per a un sol document
     
+    const logContext = {
+      component: 'SmartDocumentProcessor',
+      function: 'callMistralAISingle',
+    };
+
     try {
-      console.log(`🤖 [MistralAI-Single] Iniciant crida optimitzada...`);
+      logger.info('Iniciant crida optimitzada a Mistral AI amb resiliència', logContext);
 
-      // Crear AbortController per timeout controlat
-      const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), TIMEOUT_MS);
+      // Funció de crida a Mistral que serà reintentada
+      const callMistralAPI = async (): Promise<{ data: any; aiContent: string }> => {
+        // Crear AbortController per timeout controlat
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), TIMEOUT_MS);
 
-      const response = await fetch('https://api.mistral.ai/v1/chat/completions', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${this.mistralApiKey}`,
-        },
-        signal: controller.signal,
-        body: JSON.stringify({
-          model: 'mistral-small-latest', // Model més ràpid per documents individuals
-          messages: [
-            {
-              role: 'user',
-              content: prompt,
+        try {
+          const response = await fetch('https://api.mistral.ai/v1/chat/completions', {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              'Authorization': `Bearer ${this.mistralApiKey}`,
             },
-          ],
-          temperature: 0.3, // Menys creativitat = més rapidesa
-          max_tokens: 2000, // Límit més restrictiu per a un sol document
-        }),
+            signal: controller.signal,
+            body: JSON.stringify({
+              model: 'mistral-small-latest', // Model més ràpid per documents individuals
+              messages: [
+                {
+                  role: 'user',
+                  content: prompt,
+                },
+              ],
+              temperature: 0.3, // Menys creativitat = més rapidesa
+              max_tokens: 2000, // Límit més restrictiu per a un sol document
+            }),
+          });
+
+          clearTimeout(timeoutId);
+
+          if (!response.ok) {
+            throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+          }
+
+          const data = await response.json();
+          const aiContent = data.choices[0]?.message?.content;
+
+          if (!aiContent) {
+            throw new Error('Resposta buida de Mistral AI');
+          }
+
+          return { data, aiContent };
+
+        } catch (error) {
+          clearTimeout(timeoutId);
+          throw error;
+        }
+      };
+
+      // Executar amb lògica de reintent
+      const { data, aiContent } = await retryAsync(callMistralAPI, {
+        ...DEFAULT_API_RETRY_CONFIG,
+        onRetry: (error, attempt) => {
+          logger.warn(
+            `Reintent ${attempt}/${DEFAULT_API_RETRY_CONFIG.retries} per crida a Mistral AI`,
+            logContext,
+            error
+          );
+        },
       });
-
-      clearTimeout(timeoutId);
-
-      if (!response.ok) {
-        throw new Error(`HTTP ${response.status}: ${response.statusText}`);
-      }
-
-      const data = await response.json();
-      const aiContent = data.choices[0]?.message?.content;
-
-      if (!aiContent) {
-        throw new Error('Resposta buida de Mistral AI');
-      }
 
       // Parsejar la resposta JSON
       const documentData = this.parseAISingleResponse(aiContent);
       
       this.performanceMetrics.aiCallTime = Date.now() - aiStartTime;
       
-      console.log(`✅ [MistralAI-Single] Crida completada:`, {
+      logger.metrics('Crida a Mistral AI completada amb èxit', {
         aiCallTimeMs: this.performanceMetrics.aiCallTime,
-        tokensUsed: data.usage?.total_tokens || 'N/A',
-      });
+        tokensUsed: data.usage?.total_tokens || 0,
+      }, logContext);
 
       return {
         success: true,
@@ -415,15 +445,17 @@ DOCUMENTS PROCESSATS (retorna només l'array JSON):
       this.performanceMetrics.aiCallTime = Date.now() - aiStartTime;
       
       if (error instanceof Error && error.name === 'AbortError') {
-        console.error(`❌ [MistralAI-Single] Timeout després de ${TIMEOUT_MS}ms`);
+        const errorMessage = `Timeout de la IA després de ${TIMEOUT_MS/1000} segons`;
+        logger.error('Timeout en crida a Mistral AI', error, logContext);
+        
         return {
           success: false,
           documentsData: [],
-          errorMessage: `Timeout de la IA després de ${TIMEOUT_MS/1000} segons`,
+          errorMessage,
         };
       }
       
-      console.error(`❌ [MistralAI-Single] Error en crida:`, error);
+      logger.error('Error crític en crida a Mistral AI', error, logContext);
       
       return {
         success: false,
@@ -719,6 +751,8 @@ DOCUMENTS PROCESSATS (retorna només l'array JSON):
    */
   private async downloadTemplateFromStorage(templatePath: string): Promise<Buffer> {
     try {
+      console.log(`[DIAGNOSTIC] Iniciant descàrrega de plantilla: ${templatePath}`);
+      
       const { data, error } = await this.supabase.storage
         .from('template-docx')
         .download(templatePath);
@@ -727,9 +761,14 @@ DOCUMENTS PROCESSATS (retorna només l'array JSON):
         throw new Error(`Error descarregant plantilla: ${error.message}`);
       }
 
-      return Buffer.from(await data.arrayBuffer());
+      const buffer = Buffer.from(await data.arrayBuffer());
+      
+      console.log(`[DIAGNOSTIC] Descàrrega de plantilla completada amb èxit: ${templatePath}`);
+      
+      return buffer;
 
     } catch (error) {
+      console.error(`❌ [DIAGNOSTIC] Error durant la descàrrega de la plantilla:`, error);
       console.error(`❌ [Storage] Error descarregant plantilla:`, error);
       throw error;
     }
