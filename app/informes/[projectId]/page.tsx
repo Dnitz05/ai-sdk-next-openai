@@ -197,8 +197,8 @@ const ProjectDetailPage: React.FC = () => {
 
       // Carregar dades del projecte
       const projectResponse = await fetch('/api/reports/projects', {
+        credentials: 'include', // Envia cookies de sessió automàticament
         headers: {
-          'Authorization': `Bearer ${session.access_token}`,
           'Content-Type': 'application/json',
         },
       });
@@ -230,8 +230,8 @@ const ProjectDetailPage: React.FC = () => {
 
       // Carregar generacions
       const generationsResponse = await fetch(`/api/reports/generations?project_id=${projectId}`, {
+        credentials: 'include', // Envia cookies de sessió automàticament
         headers: {
-          'Authorization': `Bearer ${session.access_token}`,
           'Content-Type': 'application/json',
         },
       });
@@ -276,8 +276,8 @@ const ProjectDetailPage: React.FC = () => {
 
       const response = await fetch('/api/reports/generate-smart-enhanced', {
         method: 'POST',
+        credentials: 'include', // Envia cookies de sessió automàticament
         headers: {
-          'Authorization': `Bearer ${session.access_token}`,
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
