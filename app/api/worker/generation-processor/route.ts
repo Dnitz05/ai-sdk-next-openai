@@ -44,12 +44,8 @@ export async function POST(request: NextRequest) {
     const expectedToken = process.env.WORKER_SECRET_TOKEN;
 
     if (authToken !== expectedToken) {
-      const debugErrorMessage = `Accés no autoritzat. El worker esperava un token que comença per '${expectedToken?.substring(0, 5)}...' però ha rebut un token que comença per '${authToken?.substring(0, 5)}...'. Assegura't que la variable d'entorn WORKER_SECRET_TOKEN estigui configurada i desplegada correctament.`;
-      logger.error('Secret del worker invàlid o no proporcionat sota X-Worker-Token', {
-        expectedPrefix: expectedToken?.substring(0, 5),
-        receivedPrefix: authToken?.substring(0, 5)
-      }, logContext);
-      return NextResponse.json({ success: false, error: debugErrorMessage }, { status: 401 });
+      logger.error('Secret del worker invàlid o no proporcionat sota X-Worker-Token', null, logContext);
+      return NextResponse.json({ success: false, error: 'Accés no autoritzat' }, { status: 401 });
     }
 
     logger.info('Processant nova tasca de generació amb sistema millorat', logContext);
