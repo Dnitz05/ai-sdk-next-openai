@@ -162,8 +162,6 @@ const ProjectDetailPage: React.FC = () => {
   const [currentGenerationIndex, setCurrentGenerationIndex] = useState<number>(0);
   const [isBatchRunning, setIsBatchRunning] = useState<boolean>(false);
   const [currentGenerationId, setCurrentGenerationId] = useState<string | null>(null);
-  const [pollingActive, setPollingActive] = useState<boolean>(false);
-  const [pollingGenerationIds, setPollingGenerationIds] = useState<string[]>([]);
   
   const router = useRouter();
   const params = useParams();
@@ -257,19 +255,24 @@ const ProjectDetailPage: React.FC = () => {
   // SISTEMA SEQÜENCIAL GUIAT PER L'USUARI - FUNCIONS PRINCIPALS
   // ============================================================================
 
-  // Generar un sol document
+  // Generar un sol document (versió síncrona)
   const handleGenerateIndividual = async (generationId: string) => {
-    try {
-      setError(null);
-      setCurrentGenerationId(generationId);
+    setCurrentGenerationId(generationId);
+    setError(null);
 
+    // Actualitza l'estat a 'processing' immediatament per a feedback visual
+    setGenerations(prev => prev.map(g =>
+      g.id === generationId ? { ...g, status: 'processing', error_message: undefined } : g
+    ));
+
+    try {
       const { data: { session }, error: sessionError } = await supabase.auth.getSession();
       if (sessionError || !session) {
         router.push('/');
         return;
       }
 
-      console.log(`🚀 Iniciant generació individual per ${generationId}...`);
+      console.log(`🚀 Iniciant generació síncrona per ${generationId}...`);
 
       const response = await fetch('/api/reports/generate-smart-enhanced', {
         method: 'POST',
@@ -283,27 +286,34 @@ const ProjectDetailPage: React.FC = () => {
         })
       });
 
-      if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(errorData.error || 'Error en generació individual');
-      }
-
       const result = await response.json();
-      console.log(`✅ Generació individual iniciada per ${generationId}`);
 
-      // Iniciar polling per aquest document
-      setPollingGenerationIds([generationId]);
-      setPollingActive(true);
+      if (!response.ok) {
+        // L'API ha retornat un error (4xx o 5xx)
+        throw new Error(result.error || `Error ${response.status} en la generació`);
+      }
+      
+      console.log(`✅ Generació completada per ${generationId}. Resultat:`, result);
 
-      // Actualitzar immediatament l'estat local a 'processing'
-      setGenerations(prev => prev.map(g => 
-        g.id === generationId ? { ...g, status: 'processing' } : g
+      // Actualitzar l'estat local amb el resultat final
+      setGenerations(prev => prev.map(g =>
+        g.id === generationId ? { ...g, ...result.generation, status: result.generation.status || 'completed' } : g
       ));
 
     } catch (err) {
       console.error('Error en generació individual:', err);
-      setError(err instanceof Error ? err.message : 'Error en generació individual');
-      setCurrentGenerationId(null);
+      const errorMessage = err instanceof Error ? err.message : 'Error desconegut en la generació';
+      setError(errorMessage);
+      
+      // Marcar la generació com a error
+      setGenerations(prev => prev.map(g =>
+        g.id === generationId ? { ...g, status: 'error', error_message: errorMessage } : g
+      ));
+    } finally {
+      // Neteja l'ID actual independentment del resultat
+      if (currentGenerationId === generationId) {
+        setCurrentGenerationId(null);
+      }
     }
   };
 
@@ -336,21 +346,14 @@ const ProjectDetailPage: React.FC = () => {
 
         console.log(`📋 Processant document ${i + 1}/${queue.length}: ${generationId}`);
 
-        try {
-          await handleGenerateIndividual(generationId);
-          
-          // Esperar que es completi abans de continuar
-          await waitForGenerationComplete(generationId);
-          
-          console.log(`✅ Document ${i + 1}/${queue.length} completat`);
-          
-          // Pausa breu entre documents per evitar sobrecàrrega
-          await new Promise(resolve => setTimeout(resolve, 1000));
-          
-        } catch (docError) {
-          console.error(`❌ Error processant document ${i + 1}/${queue.length}:`, docError);
-          // Continuar amb el següent document encara que aquest falli
-        }
+        // La nova funció `handleGenerateIndividual` ja és síncrona i gestiona els seus propis errors.
+        // Simplement la cridem i esperem que acabi.
+        await handleGenerateIndividual(generationId);
+        
+        console.log(`✅ Procés per al document ${i + 1}/${queue.length} finalitzat.`);
+
+        // Pausa breu opcional entre documents per no saturar la UI o el backend
+        await new Promise(resolve => setTimeout(resolve, 500));
       }
 
       console.log(`🎉 Generació seqüencial completada!`);
@@ -371,164 +374,8 @@ const ProjectDetailPage: React.FC = () => {
     }
   };
 
-  // Esperar que una generació es completi
-  const waitForGenerationComplete = async (generationId: string): Promise<void> => {
-    return new Promise((resolve) => {
-      const checkStatus = async () => {
-        try {
-          const { data: { session } } = await supabase.auth.getSession();
-          if (!session) return;
-
-          const response = await fetch(`/api/reports/generations?generationId=${generationId}`, {
-            headers: {
-              'Authorization': `Bearer ${session.access_token}`,
-              'Content-Type': 'application/json',
-            },
-          });
-
-          if (response.ok) {
-            const data = await response.json();
-            const status = data.generation?.status;
-            
-            if (['generated', 'completed', 'error'].includes(status)) {
-              // Actualitzar estat local
-              setGenerations(prev => prev.map(g => 
-                g.id === generationId ? { ...g, ...data.generation } : g
-              ));
-              resolve();
-              return;
-            }
-          }
-
-          // Continuar polling cada 2 segons
-          setTimeout(checkStatus, 2000);
-        } catch (error) {
-          console.error('Error comprovant estat:', error);
-          setTimeout(checkStatus, 2000);
-        }
-      };
-
-      checkStatus();
-    });
-  };
-
-  // ============================================================================
-  // SISTEMA DE POLLING PER GENERACIÓ INDIVIDUAL
-  // ============================================================================
-
-  const checkGenerationStatus = async (generationId: string) => {
-    try {
-      const { data: { session }, error: sessionError } = await supabase.auth.getSession();
-      if (sessionError || !session) {
-        return null;
-      }
-
-      // Forçar URL relativa i evitar cache
-      const baseUrl = typeof window !== 'undefined' ? window.location.origin : '';
-      const url = `${baseUrl}/api/reports/generations?generationId=${generationId}&_t=${Date.now()}`;
-      
-      console.log(`🔄 Polling status for ${generationId} at:`, url);
-
-      const response = await fetch(url, {
-        method: 'GET',
-        headers: {
-          'Authorization': `Bearer ${session.access_token}`,
-          'Content-Type': 'application/json',
-          'Cache-Control': 'no-cache',
-        },
-        cache: 'no-store',
-      });
-
-      if (!response.ok) {
-        console.error(`❌ Status check failed for ${generationId}:`, response.status, response.statusText);
-        return null;
-      }
-
-      const data = await response.json();
-      console.log(`✅ Status response for ${generationId}:`, data.generation?.status);
-      return data.generation || null;
-    } catch (error) {
-      console.error(`Error consultant estat de generació ${generationId}:`, error);
-      return null;
-    }
-  };
-
-  // Effect per al polling automàtic amb timeout (només per generació individual)
-  useEffect(() => {
-    if (!pollingActive || pollingGenerationIds.length === 0 || isBatchRunning) {
-      return;
-    }
-
-    // Timeout del polling: 6 minuts màxim
-    const POLLING_TIMEOUT_MS = 6 * 60 * 1000; // 6 minuts
-    const pollingStartTime = Date.now();
-
-    const pollInterval = setInterval(async () => {
-      // Comprovar timeout del polling
-      const pollingDuration = Date.now() - pollingStartTime;
-      if (pollingDuration > POLLING_TIMEOUT_MS) {
-        console.error(`❌ Timeout del polling després de ${POLLING_TIMEOUT_MS/1000} segons`);
-        
-        // Marcar generacions com a error per timeout
-        const timeoutError = 'Timeout: El processament ha trigat més del temps permès. Prova-ho més tard.';
-        setGenerations(prev => prev.map(g => 
-          pollingGenerationIds.includes(g.id) && g.status === 'processing' 
-            ? { ...g, status: 'error', error_message: timeoutError } 
-            : g
-        ));
-        
-        // Aturar polling
-        setPollingActive(false);
-        setPollingGenerationIds([]);
-        setCurrentGenerationId(null);
-        
-        // Mostrar error a l'usuari
-        setError('Timeout: La generació ha trigat més del temps permès. Prova-ho més tard o contacta amb suport si el problema persisteix.');
-        
-        return;
-      }
-
-      let allCompleted = true;
-      let hasUpdates = false;
-
-      for (const generationId of pollingGenerationIds) {
-        const status = await checkGenerationStatus(generationId);
-        if (status) {
-          const isCompleted = ['generated', 'completed', 'error'].includes(status.status);
-          if (!isCompleted) {
-            allCompleted = false;
-          }
-
-          // Actualitzar la generació a la llista local si hi ha canvis
-          const currentGeneration = generations.find(g => g.id === generationId);
-          if (currentGeneration && currentGeneration.status !== status.status) {
-            hasUpdates = true;
-            setGenerations(prev => prev.map(g => 
-              g.id === generationId ? { ...g, ...status } : g
-            ));
-          }
-        } else {
-          allCompleted = false;
-        }
-      }
-
-      if (allCompleted) {
-        console.log(`✅ Generació individual completada. Aturant polling.`);
-        setPollingActive(false);
-        setPollingGenerationIds([]);
-        setCurrentGenerationId(null);
-        
-        // Refrescar dades del projecte
-        setTimeout(() => {
-          loadProjectData();
-        }, 1000);
-      }
-    }, 3000); // Polling cada 3 segons
-
-    return () => {
-      clearInterval(pollInterval);
-    };
-  }, [pollingActive, pollingGenerationIds, generations, isBatchRunning]);
+  // El sistema de polling ja no és necessari per al nou flux síncron.
+  // Esborrem `waitForGenerationComplete`, `checkGenerationStatus` i el `useEffect` del polling.
 
   const handleViewContent = (generationId: string) => {
     router.push(`/informes/${projectId}/generacions/${generationId}`);
@@ -559,7 +406,7 @@ const ProjectDetailPage: React.FC = () => {
   }
 
   const pendingCount = generations.filter(g => g.status === 'pending').length;
-  const isProcessing = isBatchRunning || pollingActive || currentGenerationId !== null;
+  const isProcessing = isBatchRunning || currentGenerationId !== null;
 
   return (
     <div className="min-h-screen bg-gray-50">
@@ -681,18 +528,7 @@ const ProjectDetailPage: React.FC = () => {
           </div>
         )}
 
-        {/* Indicador de polling individual */}
-        {pollingActive && !isBatchRunning && currentGenerationId && (
-          <div className="mb-6 bg-green-50 border border-green-200 rounded-lg p-4">
-            <div className="flex items-center">
-              <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-green-600 mr-3"></div>
-              <div>
-                <p className="text-green-800 font-medium">Processant generació individual</p>
-                <p className="text-green-600 text-sm">Document ID: {currentGenerationId}</p>
-              </div>
-            </div>
-          </div>
-        )}
+        {/* L'indicador de "processing" ara es mostra a cada GenerationItem individualment */}
 
         {/* Llista de generacions */}
         <div>
