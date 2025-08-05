@@ -13,6 +13,7 @@ import PizZip from 'pizzip';
 import Docxtemplater from 'docxtemplater';
 import supabaseServerClient from '@/lib/supabase/server';
 import { retryAsync, DEFAULT_API_RETRY_CONFIG } from '@/lib/utils/retry';
+import { withTimeout } from '@/lib/utils/timeout';
 import { logger } from '@/lib/utils/logger';
 import {
   BatchProcessingConfig,
@@ -750,9 +751,9 @@ DOCUMENTS PROCESSATS (retorna només l'array JSON):
    * Descarrega la plantilla original de Supabase Storage
    */
   private async downloadTemplateFromStorage(templatePath: string): Promise<Buffer> {
-    const STORAGE_TIMEOUT_MS = 30000; // 30 segons de timeout per a la descàrrega
+    const STORAGE_TIMEOUT_MS = 30000; // 30 segons de timeout
 
-    const downloadPromise = (async () => {
+    const downloadOperation = async () => {
       const { data, error } = await this.supabase.storage
         .from('template-docx')
         .download(templatePath);
@@ -766,19 +767,14 @@ DOCUMENTS PROCESSATS (retorna només l'array JSON):
       }
 
       return Buffer.from(await data.arrayBuffer());
-    })();
-
-    const timeoutPromise = new Promise<never>((_, reject) => {
-      setTimeout(() => {
-        reject(new Error(`Timeout de descàrrega de plantilla després de ${STORAGE_TIMEOUT_MS / 1000} segons`));
-      }, STORAGE_TIMEOUT_MS);
-    });
+    };
 
     try {
-      return await Promise.race([downloadPromise, timeoutPromise]);
+      const timeoutMessage = `Timeout de descàrrega de plantilla '${templatePath}' després de ${STORAGE_TIMEOUT_MS / 1000} segons`;
+      return await withTimeout(downloadOperation(), STORAGE_TIMEOUT_MS, timeoutMessage);
     } catch (error) {
-        console.error(`❌ [Storage] Error descarregant plantilla '${templatePath}':`, error);
-        // Llançar l'error per a que sigui capturat pel processador principal
+        console.error(`❌ [Storage] Error en la descàrrega de la plantilla:`, error);
+        // Rellençar l'error per a que sigui capturat pel processador principal
         throw error;
     }
   }
