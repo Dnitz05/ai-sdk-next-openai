@@ -39,8 +39,9 @@ export async function POST(request: NextRequest) {
 
   try {
     // 1. Verificació del Secret del Worker
-    // Llegim la capçalera personalitzada 'X-Worker-Token'
-    const authToken = request.headers.get('X-Worker-Token');
+    // 1. Verificació del Secret del Worker usant l'estàndard 'Authorization: Bearer'
+    const authHeader = request.headers.get('Authorization');
+    const authToken = authHeader?.replace('Bearer ', '');
     const expectedToken = process.env.WORKER_SECRET_TOKEN;
 
     if (!expectedToken) {
@@ -49,7 +50,7 @@ export async function POST(request: NextRequest) {
     }
 
     if (authToken !== expectedToken) {
-      logger.error('Secret del worker invàlid o no proporcionat sota X-Worker-Token', null, logContext);
+      logger.error('Token de Bearer invàlid o no proporcionat a la capçalera Authorization', null, logContext);
       return NextResponse.json({ success: false, error: 'Accés no autoritzat' }, { status: 401 });
     }
 
