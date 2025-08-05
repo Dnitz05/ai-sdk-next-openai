@@ -54,7 +54,9 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ success: false, error: 'Error de configuració del servidor' }, { status: 500 });
     }
 
-    if (authToken !== expectedToken) {
+    // --- DEPURACIÓ AVANÇADA DE TOKENS ---
+    console.log(`[Worker-DEBUG] Comparant tokens. Longitud rebuda: ${authToken?.length}, Longitud esperada: ${expectedToken?.length}`);
+    if (!authToken || !expectedToken || authToken.trim() !== expectedToken.trim()) {
       logger.error('Token de Bearer invàlid o no proporcionat a la capçalera Authorization', null, logContext);
       return NextResponse.json({ success: false, error: 'Accés no autoritzat' }, { status: 401 });
     }
