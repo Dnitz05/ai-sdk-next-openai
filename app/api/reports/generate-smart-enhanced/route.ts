@@ -155,12 +155,15 @@ export async function POST(request: NextRequest) {
         throw new Error('WORKER_SECRET_TOKEN no està configurat al servidor trigger.');
       }
       
+      const authHeader = `Bearer ${workerToken}`;
+      console.log(`[API-Trigger-DEBUG] Enviant capçalera Authorization amb prefix: ${authHeader.substring(0, 12)}...`);
+
       // CANVI CLAU: Ara fem 'await' i gestionem la resposta del worker
       const workerResponse = await fetch(workerUrl, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'Authorization': `Bearer ${workerToken}`
+          'Authorization': authHeader
         },
         body: JSON.stringify({
           projectId,

@@ -41,6 +41,11 @@ export async function POST(request: NextRequest) {
     // 1. Verificació del Secret del Worker
     // 1. Verificació del Secret del Worker usant l'estàndard 'Authorization: Bearer'
     const authHeader = request.headers.get('Authorization');
+    
+    // --- LOG DE DEPURACIÓ CRÍTIC ---
+    console.log(`[Worker-DEBUG] Capçalera 'Authorization' rebuda: ${authHeader}`);
+    // ---------------------------------
+    
     const authToken = authHeader?.replace('Bearer ', '');
     const expectedToken = process.env.WORKER_SECRET_TOKEN;
 
