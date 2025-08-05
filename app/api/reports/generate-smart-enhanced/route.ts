@@ -150,12 +150,17 @@ export async function POST(request: NextRequest) {
 
     // Disparar worker (fire-and-forget)
     try {
+      const workerToken = process.env.WORKER_SECRET_TOKEN;
+      if (!workerToken) {
+        throw new Error('WORKER_SECRET_TOKEN no està configurat al servidor trigger.');
+      }
+      
       // CANVI CLAU: Ara fem 'await' i gestionem la resposta del worker
       const workerResponse = await fetch(workerUrl, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'Authorization': `Bearer ${process.env.WORKER_SECRET_TOKEN}`
+          'X-Worker-Token': workerToken
         },
         body: JSON.stringify({
           projectId,
