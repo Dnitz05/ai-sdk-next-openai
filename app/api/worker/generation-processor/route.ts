@@ -101,7 +101,28 @@ export async function POST(request: NextRequest) {
       }
     });
 
-    // 2. Comprovació d'Idempotència
+    // 2. Validació de Permisos (Zero Trust)
+    const { data: projectOwner, error: permissionError } = await supabaseAdmin
+      .from('projects')
+      .select('user_id')
+      .eq('id', projectId)
+      .single();
+
+    if (permissionError) {
+      throw new Error(`Error de BD validant permisos: ${permissionError.message}`);
+    }
+
+    if (!projectOwner || projectOwner.user_id !== userId) {
+      const errorMsg = `Error de permisos: L'usuari ${userId} no té accés al projecte ${projectId}.`;
+      logger.error(errorMsg, null, enrichedContext);
+      // Actualitzar l'estat a error abans de sortir
+      await supabaseAdmin.from('generations').update({ status: 'error', error_message: errorMsg }).eq('id', generationId);
+      return NextResponse.json({ success: false, error: errorMsg }, { status: 403 }); // 403 Forbidden
+    }
+
+    logger.info('Validació de permisos superada', enrichedContext);
+
+    // 3. Comprovació d'Idempotència
     const { data: currentState, error: stateError } = await supabaseAdmin
       .from('generations')
       .select('status')
@@ -117,24 +138,23 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ success: true, message: 'Ja processat, s\'omet.', status: currentState.status });
     }
 
-    // 3. Actualitzar estat inicial a 'processing' amb timestamp
+    // 4. Actualitzar estat inicial a 'processing' amb timestamp
     await supabaseAdmin
       .from('generations')
       .update({
-        status: 'processing', 
+        status: 'processing',
         updated_at: new Date().toISOString(),
-        error_message: null 
+        error_message: null
       })
       .eq('id', generationId);
 
     console.log(`🔧 [Worker] Estat actualitzat a 'processing'`);
 
-    // Obtenir informació del projecte
+    // Obtenir informació del projecte (ara sense la comprovació de user_id, ja validada)
     const { data: project, error: projectError } = await supabaseAdmin
       .from('projects')
       .select('template_id, excel_data, total_rows')
       .eq('id', projectId)
-      .eq('user_id', userId) // Seguretat: només projectes de l'usuari
       .single();
 
     if (projectError || !project) {
