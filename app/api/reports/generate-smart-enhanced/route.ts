@@ -111,13 +111,32 @@ export async function POST(request: NextRequest) {
     // Comprovar que la generació no estigui ja en procés
     if (generation.status === 'processing') {
       return NextResponse.json(
-        { 
-          success: false, 
+        {
+          success: false,
           error: 'La generació ja està en procés',
           generationId: generationId
         },
-        { status: 409 }
+        { status: 409 } // Conflict
       );
+    }
+
+    // --- FASE 3: Validació d'Integritat de la Plantilla ---
+    const { data: templateData, error: templateError } = await supabase
+      .from('plantilla_configs')
+      .select('template_content, docx_storage_path')
+      .eq('id', project.template_id)
+      .single();
+
+    if (templateError || !templateData) {
+      const errorMsg = `Error recuperant la plantilla de configuració: ${templateError?.message || 'No trobada'}`;
+      await supabase.from('generations').update({ status: 'error', error_message: errorMsg }).eq('id', generationId);
+      return NextResponse.json({ success: false, error: errorMsg }, { status: 404 });
+    }
+
+    if (!templateData.template_content || !templateData.docx_storage_path) {
+      const errorMsg = 'La plantilla de configuració està incompleta. Falta contingut o el fitxer DOCX base.';
+      await supabase.from('generations').update({ status: 'error', error_message: errorMsg }).eq('id', generationId);
+      return NextResponse.json({ success: false, error: errorMsg }, { status: 400 });
     }
 
     console.log(`🚀 [API-Trigger] Iniciant tasca per generació ${generationId}`);
@@ -189,21 +208,31 @@ export async function POST(request: NextRequest) {
           errorMessage = `El worker ha retornat una resposta no esperada (possiblement un error d'infraestructura) amb estat ${workerResponse.status}`;
         }
         
-        console.error(`❌ [API-Trigger] El worker ha fallat:`, errorMessage);
+        console.error(`❌ [API-Trigger] El worker ha fallat (Estat ${workerResponse.status}):`, errorMessage);
 
-        // Actualitzar l'estat de la generació a 'error' amb el missatge del worker
-        await supabase
+        // --- BLINDATGE FIABLE DE L'ESTAT D'ERROR ---
+        // Assegurem que l'error es desa a la base de dades abans de respondre
+        const { error: dbError } = await supabase
           .from('generations')
           .update({
             status: 'error',
-            error_message: errorMessage,
+            error_message: `Error del worker: ${errorMessage}`,
             updated_at: new Date().toISOString()
           })
           .eq('id', generationId);
 
+        if (dbError) {
+            console.error(`❌ [API-Trigger] ERROR CRÍTIC: No s'ha pogut actualitzar l'estat d'error a la BD.`, dbError);
+            // Responem igualment al client amb l'error original del worker
+            return NextResponse.json(
+              { success: false, error: errorMessage, notification: "No s'ha pogut actualitzar l'estat a la BD." },
+              { status: 500 }
+            );
+        }
+
         return NextResponse.json(
           { success: false, error: errorMessage },
-          { status: 500 }
+          { status: 500 } // Retornem un 500 genèric al client, ja que és un error del servidor
         );
       }
       
