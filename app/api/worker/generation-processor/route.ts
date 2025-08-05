@@ -43,9 +43,6 @@ export async function POST(request: NextRequest) {
     const authHeader = request.headers.get('Authorization');
     
     // --- LOG DE DEPURACIÓ CRÍTIC ---
-    console.log(`[Worker-DEBUG] Capçalera 'Authorization' rebuda: ${authHeader}`);
-    // ---------------------------------
-    
     const authToken = authHeader?.replace('Bearer ', '');
     const expectedToken = process.env.WORKER_SECRET_TOKEN;
 
@@ -54,8 +51,6 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ success: false, error: 'Error de configuració del servidor' }, { status: 500 });
     }
 
-    // --- DEPURACIÓ AVANÇADA DE TOKENS ---
-    console.log(`[Worker-DEBUG] Comparant tokens. Longitud rebuda: ${authToken?.length}, Longitud esperada: ${expectedToken?.length}`);
     if (!authToken || !expectedToken || authToken.trim() !== expectedToken.trim()) {
       logger.error('Token de Bearer invàlid o no proporcionat a la capçalera Authorization', null, logContext);
       return NextResponse.json({ success: false, error: 'Accés no autoritzat' }, { status: 401 });

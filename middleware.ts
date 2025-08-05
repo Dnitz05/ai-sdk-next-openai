@@ -4,8 +4,6 @@ import { createServerClient } from '@supabase/ssr'
 import type { NextRequest } from 'next/server'
 
 export async function middleware(req: NextRequest) {
-  // LOG D'INTERCEPCIÓ GLOBAL
-  console.log(`[Middleware-GLOBAL] Interceptada petició: ${req.method} ${req.nextUrl.pathname}`);
   try {
     // 🔒 PROTECCIÓ DE SEGURETAT: Bloquejar endpoints de debug en producció
     if (req.nextUrl.pathname.startsWith('/api/debug')) {
