@@ -120,10 +120,10 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // --- FASE 3: Validació d'Integritat de la Plantilla ---
+    // --- FASE 3: Validació d'Integritat de la Plantilla (versió robusta) ---
     const { data: templateData, error: templateError } = await supabase
       .from('plantilla_configs')
-      .select('template_content, docx_storage_path')
+      .select('final_html, ai_instructions, template_content, docx_storage_path, base_docx_storage_path, placeholder_docx_storage_path')
       .eq('id', project.template_id)
       .single();
 
@@ -133,8 +133,15 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ success: false, error: errorMsg }, { status: 404 });
     }
 
-    if (!templateData.template_content || !templateData.docx_storage_path) {
-      const errorMsg = 'La plantilla de configuració està incompleta. Falta contingut o el fitxer DOCX base.';
+    const hasContent = templateData.final_html || templateData.ai_instructions || templateData.template_content;
+    const hasDocx = templateData.docx_storage_path || templateData.base_docx_storage_path || templateData.placeholder_docx_storage_path;
+
+    if (!hasContent || !hasDocx) {
+      let errorParts = [];
+      if (!hasContent) errorParts.push("falta contingut (final_html, ai_instructions, etc.)");
+      if (!hasDocx) errorParts.push("falta el fitxer DOCX base (docx_storage_path, etc.)");
+      
+      const errorMsg = `La plantilla de configuració està incompleta: ${errorParts.join(' i ')}.`;
       await supabase.from('generations').update({ status: 'error', error_message: errorMsg }).eq('id', generationId);
       return NextResponse.json({ success: false, error: errorMsg }, { status: 400 });
     }
