@@ -183,30 +183,51 @@ export async function POST(request: NextRequest) {
         throw new Error(`No es pot trobar la generació: ${genError?.message}`);
       }
       
-      // Obtenir la plantilla
+      // Obtenir la plantilla - CORRECCIÓ: usar template_id directament
       const { data: template, error: templateError } = await supabaseServerClient
         .from('plantilla_configs')
         .select('*')
-        .eq('id', project.template_id)
+        .eq('id', project.template_id)  // ✅ CORREGIT: template_id, no template.id
         .single();
         
       if (templateError || !template) {
         throw new Error(`No es pot trobar la plantilla: ${templateError?.message}`);
       }
       
+      // MAPPING CORRECTE - usar camps que SÍ existeixen
+      const templateContent = template.final_html || 
+                             JSON.stringify(template.ai_instructions) || 
+                             null;
+                             
+      const docxPath = template.docx_storage_path || 
+                      template.placeholder_docx_storage_path || 
+                      template.base_docx_storage_path ||
+                      template.indexed_docx_storage_path ||
+                      null;
+      
       // Verificar que la plantilla té els camps necessaris
-      if (!template.template_content || !template.docx_storage_path) {
-        throw new Error('La plantilla no té contingut o fitxer DOCX');
+      if (!templateContent || !docxPath) {
+        console.error('[API-Trigger] Plantilla incompleta:', {
+          hasContent: !!templateContent,
+          hasDocxPath: !!docxPath,
+          paths: {
+            docx_storage_path: template.docx_storage_path,
+            placeholder: template.placeholder_docx_storage_path,
+            base: template.base_docx_storage_path,
+            indexed: template.indexed_docx_storage_path
+          }
+        });
+        throw new Error('La plantilla no té contingut o fitxer DOCX configurat');
       }
       
       // Crear processador i executar
       const processor = new SmartDocumentProcessor();
       
       const result = await processor.processSingle(
-        template.template_content,
-        template.docx_storage_path,
+        templateContent,
+        docxPath,
         generation.row_data,
-        project.template_id,
+        project.template_id,  // ✅ CORREGIT: template_id
         user.id
       );
       
