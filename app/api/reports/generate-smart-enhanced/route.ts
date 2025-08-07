@@ -19,10 +19,17 @@ export async function POST(request: NextRequest) {
   const startTime = Date.now();
   
   try {
-    console.log(`🚀 [API-Trigger] Nova petició de generació individual`);
+    console.log(`🚀 [API-TIMING] ========== API CRIDADA ==========`);
+    console.log(`🚀 [API-TIMING] Hora d'inici: ${new Date().toISOString()}`);
+    console.log(`🚀 [API-TIMING] URL: ${request.url}`);
+    console.log(`🚀 [API-TIMING] Method: ${request.method}`);
 
+    const bodyStartTime = Date.now();
     const body = await request.json();
-    console.log('[API-Trigger] Body rebut:', { 
+    const bodyParseTime = Date.now() - bodyStartTime;
+    
+    console.log(`📥 [API-TIMING] Body parsing: ${bodyParseTime}ms`);
+    console.log(`📥 [API-TIMING] Body rebut:`, { 
       projectId: body.projectId, 
       generationId: body.generationId,
       adminMode: body.adminMode
@@ -52,8 +59,13 @@ export async function POST(request: NextRequest) {
     let user: any;
     let supabase: any;
 
+    // FASE 1: AUTENTICACIÓ - AMB TIMING DETALLAT
+    console.log(`🔐 [API-TIMING] ========== INICI AUTENTICACIÓ ==========`);
+    const authStartTime = Date.now();
+
     if (!adminMode) {
       // Mode normal - validar autenticació
+      const supabaseCreateTime = Date.now();
       supabase = createServerClient(
         process.env.NEXT_PUBLIC_SUPABASE_URL!,
         process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
@@ -71,11 +83,16 @@ export async function POST(request: NextRequest) {
           }
         }
       );
+      console.log(`🔐 [API-TIMING] Client Supabase creat: ${Date.now() - supabaseCreateTime}ms`);
 
       // Obtenir userId de la sessió
+      const getUserStartTime = Date.now();
       const { data: authData, error: authError } = await supabase.auth.getUser();
+      const getUserTime = Date.now() - getUserStartTime;
+      console.log(`🔐 [API-TIMING] getUser() completat: ${getUserTime}ms`);
+      
       if (authError || !authData.user) {
-        console.error(`❌ [API-Trigger] Error d'autenticació:`, authError);
+        console.error(`❌ [API-TIMING] Error d'autenticació després de ${getUserTime}ms:`, authError);
         return NextResponse.json(
           { success: false, error: 'Usuari no autenticat' },
           { status: 401 }
@@ -83,30 +100,44 @@ export async function POST(request: NextRequest) {
       }
 
       user = authData.user;
-      console.log(`👤 [API-Trigger] Usuari autenticat: ${user.id}`);
+      console.log(`👤 [API-TIMING] Usuari autenticat: ${user.id}`);
     } else {
       // Mode administratiu - usar service role client
       supabase = supabaseServerClient;
       user = { id: 'admin-mode' }; // ID fictici per mode admin
-      console.log(`🔧 [API-Trigger] Mode administratiu activat`);
+      console.log(`🔧 [API-TIMING] Mode administratiu activat`);
     }
 
-    // Validar accés al projecte (RLS filtra automàticament)
+    const authTotalTime = Date.now() - authStartTime;
+    console.log(`🔐 [API-TIMING] Autenticació completada: ${authTotalTime}ms`);
+
+    // FASE 2: VALIDACIÓ PROJECTE - AMB TIMING DETALLAT
+    console.log(`📊 [API-TIMING] ========== INICI VALIDACIÓ PROJECTE ==========`);
+    const projectValidationStartTime = Date.now();
+    
     const { data: project, error: projectError } = await supabase
       .from('projects')
       .select('id, template_id')
       .eq('id', projectId)
       .single();
 
+    const projectQueryTime = Date.now() - projectValidationStartTime;
+    console.log(`📊 [API-TIMING] Query projecte: ${projectQueryTime}ms`);
+
     if (projectError || !project) {
-      console.error(`❌ [API-Trigger] Projecte no trobat:`, projectError);
+      console.error(`❌ [API-TIMING] Projecte no trobat després de ${projectQueryTime}ms:`, projectError);
       return NextResponse.json(
         { success: false, error: 'Projecte no trobat o sense accés' },
         { status: 404 }
       );
     }
 
-    // Validar que la generació existeix i pertany al projecte
+    console.log(`📊 [API-TIMING] Projecte trobat: ${project.id}, template: ${project.template_id}`);
+
+    // FASE 3: VALIDACIÓ GENERACIÓ - AMB TIMING DETALLAT
+    console.log(`🔄 [API-TIMING] ========== INICI VALIDACIÓ GENERACIÓ ==========`);
+    const generationValidationStartTime = Date.now();
+    
     const { data: generation, error: generationError } = await supabase
       .from('generations')
       .select('id, status')
@@ -114,16 +145,22 @@ export async function POST(request: NextRequest) {
       .eq('project_id', projectId)
       .single();
 
+    const generationQueryTime = Date.now() - generationValidationStartTime;
+    console.log(`🔄 [API-TIMING] Query generació: ${generationQueryTime}ms`);
+
     if (generationError || !generation) {
-      console.error(`❌ [API-Trigger] Generació no trobada:`, generationError);
+      console.error(`❌ [API-TIMING] Generació no trobada després de ${generationQueryTime}ms:`, generationError);
       return NextResponse.json(
         { success: false, error: 'Generació no trobada' },
         { status: 404 }
       );
     }
 
+    console.log(`🔄 [API-TIMING] Generació trobada: ${generation.id}, estat: ${generation.status}`);
+
     // Comprovar que la generació no estigui ja en procés
     if (generation.status === 'processing') {
+      console.log(`⚠️ [API-TIMING] Generació ja en procés - retornant conflict`);
       return NextResponse.json(
         {
           success: false,
@@ -134,15 +171,22 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // --- FASE 3: Validació d'Integritat de la Plantilla (versió robusta) ---
+    // FASE 4: VALIDACIÓ PLANTILLA - AMB TIMING DETALLAT
+    console.log(`📄 [API-TIMING] ========== INICI VALIDACIÓ PLANTILLA ==========`);
+    const templateValidationStartTime = Date.now();
+    
     const { data: templateData, error: templateError } = await supabase
       .from('plantilla_configs')
       .select('*')
       .eq('id', project.template_id)
       .single();
 
+    const templateQueryTime = Date.now() - templateValidationStartTime;
+    console.log(`📄 [API-TIMING] Query plantilla: ${templateQueryTime}ms`);
+
     if (templateError || !templateData) {
       const errorMsg = `Error recuperant la plantilla de configuració: ${templateError?.message || 'No trobada'}`;
+      console.error(`❌ [API-TIMING] ${errorMsg} després de ${templateQueryTime}ms`);
       await supabase.from('generations').update({ status: 'error', error_message: errorMsg }).eq('id', generationId);
       return NextResponse.json({ success: false, error: errorMsg }, { status: 404 });
     }
@@ -150,19 +194,23 @@ export async function POST(request: NextRequest) {
     const hasContent = templateData.final_html || templateData.ai_instructions || templateData.template_content;
     const hasDocx = templateData.docx_storage_path || templateData.base_docx_storage_path || templateData.placeholder_docx_storage_path;
 
+    console.log(`📄 [API-TIMING] Plantilla validada - hasContent: ${!!hasContent}, hasDocx: ${!!hasDocx}`);
+
     if (!hasContent || !hasDocx) {
       let errorParts = [];
       if (!hasContent) errorParts.push("falta contingut (final_html, ai_instructions, etc.)");
       if (!hasDocx) errorParts.push("falta el fitxer DOCX base (docx_storage_path, etc.)");
       
       const errorMsg = `La plantilla de configuració està incompleta: ${errorParts.join(' i ')}.`;
+      console.error(`❌ [API-TIMING] ${errorMsg}`);
       await supabase.from('generations').update({ status: 'error', error_message: errorMsg }).eq('id', generationId);
       return NextResponse.json({ success: false, error: errorMsg }, { status: 400 });
     }
 
-    console.log(`🚀 [API-Trigger] Iniciant tasca per generació ${generationId}`);
-
-    // Marcar generació com a 'processing'
+    // FASE 5: ACTUALITZACIÓ ESTAT - AMB TIMING DETALLAT
+    console.log(`🔄 [API-TIMING] ========== INICI ACTUALITZACIÓ ESTAT ==========`);
+    const updateStatusStartTime = Date.now();
+    
     const { error: updateError } = await supabase
       .from('generations')
       .update({ 
@@ -172,35 +220,62 @@ export async function POST(request: NextRequest) {
       })
       .eq('id', generationId);
 
+    const updateStatusTime = Date.now() - updateStatusStartTime;
+    console.log(`🔄 [API-TIMING] Actualització estat: ${updateStatusTime}ms`);
+
     if (updateError) {
-      console.error(`❌ [API-Trigger] Error actualitzant estat:`, updateError);
+      console.error(`❌ [API-TIMING] Error actualitzant estat després de ${updateStatusTime}ms:`, updateError);
       return NextResponse.json(
         { success: false, error: 'Error actualitzant estat de la generació' },
         { status: 500 }
       );
     }
 
-    // Processar directament sense worker HTTP
+    // RESUM DE TIMING DE VALIDACIONS
+    const totalValidationTime = Date.now() - authStartTime;
+    console.log(`✅ [API-TIMING] ========== VALIDACIONS COMPLETADES ==========`);
+    console.log(`✅ [API-TIMING] Temps total validacions: ${totalValidationTime}ms`);
+    console.log(`✅ [API-TIMING] Breakdown validacions:`);
+    console.log(`   🔐 Autenticació: ${authTotalTime}ms (${((authTotalTime / totalValidationTime) * 100).toFixed(1)}%)`);
+    console.log(`   📊 Query projecte: ${projectQueryTime}ms (${((projectQueryTime / totalValidationTime) * 100).toFixed(1)}%)`);
+    console.log(`   🔄 Query generació: ${generationQueryTime}ms (${((generationQueryTime / totalValidationTime) * 100).toFixed(1)}%)`);
+    console.log(`   📄 Query plantilla: ${templateQueryTime}ms (${((templateQueryTime / totalValidationTime) * 100).toFixed(1)}%)`);
+    console.log(`   🔄 Actualització estat: ${updateStatusTime}ms (${((updateStatusTime / totalValidationTime) * 100).toFixed(1)}%)`);
+
+    console.log(`🚀 [API-TIMING] Iniciant processament per generació ${generationId}`);
+
+    // FASE 6: PROCESSAMENT DIRECTE - AMB TIMING DETALLAT
+    console.log(`🔧 [API-TIMING] ========== INICI PROCESSAMENT DIRECTE ==========`);
+    const processingStartTime = Date.now();
+    
     try {
-      console.log(`🔧 [API-Trigger] Processant directament generació ${generationId}`);
+      console.log(`🔧 [API-TIMING] Processant directament generació ${generationId}`);
       
-      // Obtenir dades necessàries per processar
+      // Obtenir dades necessàries per processar - AMB TIMING
+      const getGenerationStartTime = Date.now();
       const { data: generation, error: genError } = await supabase
         .from('generations')
         .select('*')
         .eq('id', generationId)
         .single();
+      const getGenerationTime = Date.now() - getGenerationStartTime;
+      console.log(`🔧 [API-TIMING] Query dades generació: ${getGenerationTime}ms`);
         
       if (genError || !generation) {
         throw new Error(`No es pot trobar la generació: ${genError?.message}`);
       }
       
-      // Obtenir la plantilla - CORRECCIÓ: usar template_id directament
+      console.log(`🔧 [API-TIMING] Dades generació carregades - row_data keys: ${Object.keys(generation.row_data || {}).length}`);
+      
+      // Obtenir la plantilla - CORRECCIÓ: usar template_id directament - AMB TIMING
+      const getTemplateStartTime = Date.now();
       const { data: template, error: templateError } = await supabaseServerClient
         .from('plantilla_configs')
         .select('*')
         .eq('id', project.template_id)  // ✅ CORREGIT: template_id, no template.id
         .single();
+      const getTemplateTime = Date.now() - getTemplateStartTime;
+      console.log(`🔧 [API-TIMING] Query plantilla completa: ${getTemplateTime}ms`);
         
       if (templateError || !template) {
         throw new Error(`No es pot trobar la plantilla: ${templateError?.message}`);
@@ -216,7 +291,7 @@ export async function POST(request: NextRequest) {
       
       // Verificar que la plantilla té el DOCX necessari
       if (!docxPath) {
-        console.error('[API-Trigger] Plantilla sense DOCX:', {
+        console.error(`❌ [API-TIMING] Plantilla sense DOCX:`, {
           paths: {
             placeholder: template.placeholder_docx_storage_path,
             docx_storage_path: template.docx_storage_path,
@@ -227,9 +302,11 @@ export async function POST(request: NextRequest) {
         throw new Error('La plantilla no té fitxer DOCX configurat');
       }
       
-      console.log(`📄 [API-Trigger] Usant DOCX: ${docxPath}`);
+      console.log(`📄 [API-TIMING] Usant DOCX: ${docxPath}`);
       
-      // Crear processador i executar amb sistema simple
+      // Crear processador i executar amb sistema simple - AMB TIMING DETALLAT
+      console.log(`🚀 [API-TIMING] ========== INICI PROCESSADOR ==========`);
+      const processorStartTime = Date.now();
       const processor = new SmartDocumentProcessor();
       
       const result = await processor.processSingle(
@@ -239,16 +316,21 @@ export async function POST(request: NextRequest) {
         project.template_id,
         user.id
       );
+      const processorTime = Date.now() - processorStartTime;
+      console.log(`🚀 [API-TIMING] Processador completat: ${processorTime}ms`);
       
       if (!result.success) {
         throw new Error(result.errorMessage || 'Error en processament');
       }
       
-      // Actualitzar la generació amb el resultat - VERSIÓ SIMPLIFICADA
+      // Actualitzar la generació amb el resultat - VERSIÓ SIMPLIFICADA - AMB TIMING
       if (!result.documentBuffer) {
         throw new Error('No s\'ha generat cap document');
       }
       
+      console.log(`📄 [API-TIMING] Document generat - mida: ${result.documentBuffer.length} bytes (${(result.documentBuffer.length / 1024 / 1024).toFixed(2)} MB)`);
+      
+      const updateResultStartTime = Date.now();
       const { error: updateError } = await supabase
         .from('generations')
         .update({
@@ -257,15 +339,29 @@ export async function POST(request: NextRequest) {
           error_message: null
         })
         .eq('id', generationId);
+      const updateResultTime = Date.now() - updateResultStartTime;
+      console.log(`📄 [API-TIMING] Actualització resultat: ${updateResultTime}ms`);
         
       if (updateError) {
         throw new Error(`Error actualitzant resultat: ${updateError.message}`);
       }
       
-      console.log(`✅ [API-Trigger] Generació ${generationId} completada amb èxit`);
+      const totalProcessingTime = Date.now() - processingStartTime;
+      console.log(`✅ [API-TIMING] ========== PROCESSAMENT COMPLETAT ==========`);
+      console.log(`✅ [API-TIMING] Temps total processament: ${totalProcessingTime}ms`);
+      console.log(`✅ [API-TIMING] Breakdown processament:`);
+      console.log(`   🔧 Query dades generació: ${getGenerationTime}ms (${((getGenerationTime / totalProcessingTime) * 100).toFixed(1)}%)`);
+      console.log(`   🔧 Query plantilla completa: ${getTemplateTime}ms (${((getTemplateTime / totalProcessingTime) * 100).toFixed(1)}%)`);
+      console.log(`   🚀 Processador document: ${processorTime}ms (${((processorTime / totalProcessingTime) * 100).toFixed(1)}%)`);
+      console.log(`   📄 Actualització resultat: ${updateResultTime}ms (${((updateResultTime / totalProcessingTime) * 100).toFixed(1)}%)`);
+      
+      const totalApiTime = Date.now() - startTime;
+      console.log(`🏁 [API-TIMING] ========== API COMPLETADA ==========`);
+      console.log(`🏁 [API-TIMING] Temps total API: ${totalApiTime}ms`);
+      console.log(`🏁 [API-TIMING] Eficiència: ${(result.documentBuffer.length / totalApiTime * 1000).toFixed(0)} bytes/segon`);
       
       // Retornar document directament per descàrrega
-      return new Response(result.documentBuffer, {
+      return new Response(result.documentBuffer as BodyInit, {
         status: 200,
         headers: {
           'Content-Type': 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',

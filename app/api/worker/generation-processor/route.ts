@@ -47,16 +47,14 @@ export async function POST(request: NextRequest) {
   };
 
   try {
-    // ========== DEBUG LOGGING DETALLAT DEL WORKER ==========
-    console.error('[DEBUG WORKER] ========== Inici Worker ==========');
-    console.error('[DEBUG WORKER] Request method:', request.method);
-    console.error('[DEBUG WORKER] Request URL:', request.url);
-    console.error('[DEBUG WORKER] All headers received:', Object.fromEntries(request.headers.entries()));
-    console.error('[DEBUG WORKER] Auth header raw:', request.headers.get('Authorization'));
-    console.error('[DEBUG WORKER] Content-Type header:', request.headers.get('Content-Type'));
-    console.error('[DEBUG WORKER] User-Agent header:', request.headers.get('User-Agent'));
-    console.error('[DEBUG WORKER] x-internal-request header:', request.headers.get('x-internal-request'));
-    console.error('[DEBUG WORKER] x-vercel-protection-bypass header:', request.headers.get('x-vercel-protection-bypass'));
+    // ========== TIMING LOGS DETALLATS DEL WORKER ==========
+    console.log(`🔧 [WORKER-TIMING] ========== WORKER INICIAT ==========`);
+    console.log(`🔧 [WORKER-TIMING] Hora d'inici: ${new Date().toISOString()}`);
+    console.log(`🔧 [WORKER-TIMING] Request method: ${request.method}`);
+    console.log(`🔧 [WORKER-TIMING] Request URL: ${request.url}`);
+    console.log(`🔧 [WORKER-TIMING] Headers rebuts: ${Object.keys(Object.fromEntries(request.headers.entries())).length}`);
+    console.log(`🔧 [WORKER-TIMING] Auth header present: ${!!request.headers.get('Authorization')}`);
+    console.log(`🔧 [WORKER-TIMING] Content-Type: ${request.headers.get('Content-Type')}`);
     
     // 1. Verificació del Secret del Worker
     // 1. Verificació del Secret del Worker usant l'estàndard 'Authorization: Bearer'

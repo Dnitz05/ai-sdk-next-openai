@@ -71,25 +71,53 @@ export class SmartDocumentProcessor {
     const startTime = Date.now();
     
     try {
-      console.log(`🚀 [SmartProcessor-Simple] Iniciant processament ultra-simple`);
-      console.log(`📊 [SmartProcessor-Simple] Dades Excel rebudes:`, Object.keys(rowData));
+      console.log(`🚀 [TIMING] ========== PROCESSAMENT INICIAT ==========`);
+      console.log(`🚀 [TIMING] Hora d'inici: ${new Date().toISOString()}`);
+      console.log(`📊 [TIMING] Dades Excel rebudes: ${Object.keys(rowData).length} camps`);
+      console.log(`📊 [TIMING] Camps Excel:`, Object.keys(rowData));
 
-      // 1. Descarregar plantilla DOCX
+      // 1. Descarregar plantilla DOCX - AMB TIMING DETALLAT
+      console.log(`📥 [TIMING] ========== INICI DESCÀRREGA PLANTILLA ==========`);
+      const downloadStartTime = Date.now();
       const templateBuffer = await this.downloadTemplateFromStorage(templateStoragePath);
+      const downloadEndTime = Date.now();
+      const downloadTime = downloadEndTime - downloadStartTime;
+      console.log(`📥 [TIMING] Descàrrega completada en: ${downloadTime}ms`);
+      console.log(`📥 [TIMING] Mida del buffer de plantilla: ${templateBuffer.length} bytes (${(templateBuffer.length / 1024 / 1024).toFixed(2)} MB)`);
       
-      // 2. Preparar dades per substitució directa
+      // 2. Preparar dades per substitució directa - AMB TIMING DETALLAT
+      console.log(`📝 [TIMING] ========== INICI PREPARACIÓ DADES ==========`);
+      const prepareStartTime = Date.now();
       const templateData = this.prepareTemplateData(rowData);
-      console.log(`📝 [SmartProcessor-Simple] Placeholders preparats:`, Object.keys(templateData));
+      const prepareEndTime = Date.now();
+      const prepareTime = prepareEndTime - prepareStartTime;
+      console.log(`📝 [TIMING] Preparació dades completada en: ${prepareTime}ms`);
+      console.log(`📝 [TIMING] Nombre de placeholders preparats: ${Object.keys(templateData).length}`);
+      console.log(`📝 [TIMING] Placeholders:`, Object.keys(templateData));
 
-      // 3. Aplicar substitucions amb docxtemplater
+      // 3. Aplicar substitucions amb docxtemplater - AMB TIMING DETALLAT
+      console.log(`📄 [TIMING] ========== INICI GENERACIÓ DOCX ==========`);
+      const docxStartTime = Date.now();
       const documentBuffer = await this.generateSimpleDocx(templateBuffer, templateData);
+      const docxEndTime = Date.now();
+      const docxTime = docxEndTime - docxStartTime;
+      console.log(`📄 [TIMING] Generació DOCX completada en: ${docxTime}ms`);
+      console.log(`📄 [TIMING] Mida del document generat: ${documentBuffer.length} bytes (${(documentBuffer.length / 1024 / 1024).toFixed(2)} MB)`);
 
-      // 4. Calcular mètriques
+      // 4. Calcular mètriques DETALLADES
       const processingTime = Date.now() - startTime;
       this.performanceMetrics.totalProcessingTime = processingTime;
       this.performanceMetrics.documentsPerSecond = 1 / (processingTime / 1000);
 
-      console.log(`✅ [SmartProcessor-Simple] Document generat en ${processingTime}ms`);
+      // RESUM FINAL DE TIMING
+      console.log(`✅ [TIMING] ========== PROCESSAMENT COMPLETAT ==========`);
+      console.log(`✅ [TIMING] Temps total: ${processingTime}ms`);
+      console.log(`✅ [TIMING] Breakdown detallat:`);
+      console.log(`   📥 Descàrrega plantilla: ${downloadTime}ms (${((downloadTime / processingTime) * 100).toFixed(1)}%)`);
+      console.log(`   📝 Preparació dades: ${prepareTime}ms (${((prepareTime / processingTime) * 100).toFixed(1)}%)`);
+      console.log(`   📄 Generació DOCX: ${docxTime}ms (${((docxTime / processingTime) * 100).toFixed(1)}%)`);
+      console.log(`   🔧 Overhead/altres: ${processingTime - downloadTime - prepareTime - docxTime}ms`);
+      console.log(`✅ [TIMING] Documents per segon: ${this.performanceMetrics.documentsPerSecond.toFixed(2)}`);
 
       return {
         success: true,
@@ -101,13 +129,17 @@ export class SmartDocumentProcessor {
 
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : 'Error desconegut';
-      console.error(`❌ [SmartProcessor-Simple] Error: ${errorMessage}`, error);
+      const totalTime = Date.now() - startTime;
+      console.error(`❌ [TIMING] ========== ERROR EN PROCESSAMENT ==========`);
+      console.error(`❌ [TIMING] Error després de: ${totalTime}ms`);
+      console.error(`❌ [TIMING] Missatge d'error: ${errorMessage}`);
+      console.error(`❌ [TIMING] Stack trace:`, error);
       
       return {
         success: false,
         generationId: '',
         documentsGenerated: 0,
-        processingTimeMs: Date.now() - startTime,
+        processingTimeMs: totalTime,
         errorMessage,
       };
     }
@@ -243,14 +275,17 @@ export class SmartDocumentProcessor {
    * VERSIÓ MILLORADA: Gestiona casos específics com "{{NOM_" i "NOM_}}"
    */
   private async cleanBrokenPlaceholders(templateBuffer: Buffer): Promise<Buffer> {
+    const cleaningStartTime = Date.now();
+    
     try {
-      console.log(`🧹 [Template-Cleaner] Iniciant neteja ultra-robusta de placeholders...`);
+      console.log(`🧹 [TIMING] ========== INICI NETEJA PLACEHOLDERS ==========`);
+      console.log(`🧹 [TIMING] Hora d'inici neteja: ${new Date().toISOString()}`);
       
       const zip = new PizZip(templateBuffer);
       let content = zip.file('word/document.xml')?.asText() || '';
       
       if (!content) {
-        console.warn(`⚠️ [Template-Cleaner] No s'ha trobat document.xml`);
+        console.warn(`⚠️ [TIMING] No s'ha trobat document.xml - retornant buffer original`);
         return templateBuffer;
       }
       
@@ -258,81 +293,110 @@ export class SmartDocumentProcessor {
       const originalContent = content;
       const originalLength = content.length;
       
-      console.log(`📊 [Template-Cleaner] Document original: ${originalLength} caràcters`);
+      console.log(`📊 [TIMING] Document original: ${originalLength} caràcters (${(originalLength / 1024).toFixed(2)} KB)`);
       
       // FASE 1: Detectar i mostrar tots els fragments de placeholders
+      const detectionStartTime = Date.now();
       const brokenPlaceholderFragments = content.match(/\{\{[^}]*|[^{]*\}\}/g) || [];
-      console.log(`🔍 [Template-Cleaner] Fragments detectats: ${brokenPlaceholderFragments.length}`);
+      const detectionTime = Date.now() - detectionStartTime;
+      console.log(`🔍 [TIMING] Detecció fragments: ${detectionTime}ms - ${brokenPlaceholderFragments.length} fragments trobats`);
       
       // FASE 2: Neteja ultra-agressiva iterativa
+      const iterationStartTime = Date.now();
       let iterations = 0;
       let previousContent = '';
       const maxIterations = 20;
       
+      console.log(`🔄 [TIMING] Iniciant bucle de neteja (màxim ${maxIterations} iteracions)`);
+      
       while (iterations < maxIterations && content !== previousContent) {
+        const iterStartTime = Date.now();
         previousContent = content;
+        const contentLengthBefore = content.length;
         
         // 2.1: Eliminar TOTS els tags XML dins de qualsevol cosa que sembli un placeholder
+        const xmlMatches = content.match(/(\{\{[^}]*?)(<[^>]*>)+([^}]*?\}\})/g) || [];
         content = content.replace(
           /(\{\{[^}]*?)(<[^>]*>)+([^}]*?\}\})/g,
           (match, start, xmlTags, end) => {
             const cleaned = start + end;
-            console.log(`🔧 [Iter ${iterations}] XML dins placeholder: ${match.substring(0, 60)}... → ${cleaned}`);
             return cleaned;
           }
         );
         
         // 2.2: Reunificar placeholders dividits per tags de format
+        const closeTagMatches = content.match(/(\{\{[^}]*?)(<\/[^>]*>)([^}]*?\}\})/g) || [];
         content = content.replace(
           /(\{\{[^}]*?)(<\/[^>]*>)([^}]*?\}\})/g,
           (match, start, closeTag, end) => {
             const cleaned = start + end;
-            console.log(`🔧 [Iter ${iterations}] Tag tancament: ${match.substring(0, 60)}... → ${cleaned}`);
             return cleaned;
           }
         );
         
         // 2.3: Netejar tags d'obertura dins de placeholders
+        const openTagMatches = content.match(/(\{\{[^}]*?)(<[^>]*>)([^}]*?\}\})/g) || [];
         content = content.replace(
           /(\{\{[^}]*?)(<[^>]*>)([^}]*?\}\})/g,
           (match, start, openTag, end) => {
             const cleaned = start + end;
-            console.log(`🔧 [Iter ${iterations}] Tag obertura: ${match.substring(0, 60)}... → ${cleaned}`);
             return cleaned;
           }
         );
         
         // 2.4: Eliminar text embebut entre tags dins de placeholders
+        const embeddedMatches = content.match(/(\{\{[^}]*?)(<[^>]*>[^<]*<\/[^>]*>)+([^}]*?\}\})/g) || [];
         content = content.replace(
           /(\{\{[^}]*?)(<[^>]*>[^<]*<\/[^>]*>)+([^}]*?\}\})/g,
           (match, start, xmlContent, end) => {
             // Extreure només el text, eliminant tots els tags
             const textOnly = xmlContent.replace(/<[^>]*>/g, '');
             const cleaned = start + textOnly + end;
-            console.log(`🔧 [Iter ${iterations}] Text embebut: ${match.substring(0, 60)}... → ${cleaned}`);
             return cleaned;
           }
         );
         
         // 2.5: Casos específics problemàtics detectats als logs
         // Arreglar "{{NOM_" sense tancament
+        const incompleteOpen = content.match(/\{\{([A-Z_]+)(?!.*\}\})/g) || [];
         content = content.replace(/\{\{([A-Z_]+)(?!.*\}\})/g, '{{$1}}');
         
         // Arreglar "NOM_}}" sense obertura
+        const incompleteClose = content.match(/(?<!\{\{.*)([A-Z_]+)\}\}/g) || [];
         content = content.replace(/(?<!\{\{.*)([A-Z_]+)\}\}/g, '{{$1}}');
         
         // 2.6: Eliminar duplicacions de claus
+        const doubleBraces = content.match(/\{\{\{\{|\}\}\}\}/g) || [];
         content = content.replace(/\{\{\{\{/g, '{{');
         content = content.replace(/\}\}\}\}/g, '}}');
+        
+        const iterTime = Date.now() - iterStartTime;
+        const contentLengthAfter = content.length;
+        const bytesChanged = Math.abs(contentLengthAfter - contentLengthBefore);
+        
+        console.log(`🔄 [TIMING] Iteració ${iterations + 1}: ${iterTime}ms`);
+        console.log(`   📊 Canvis: ${bytesChanged} bytes, ${xmlMatches.length + closeTagMatches.length + openTagMatches.length + embeddedMatches.length + incompleteOpen.length + incompleteClose.length + doubleBraces.length} patrons corregits`);
         
         iterations++;
       }
       
+      const totalIterationTime = Date.now() - iterationStartTime;
+      console.log(`🔄 [TIMING] Bucle completat: ${iterations} iteracions en ${totalIterationTime}ms (${(totalIterationTime / iterations).toFixed(1)}ms/iteració)`);
+      
+      if (iterations >= maxIterations) {
+        console.warn(`⚠️ [TIMING] ATENCIÓ: S'ha arribat al màxim d'iteracions (${maxIterations}) - possible bucle infinit evitat`);
+      }
+      
       // FASE 3: Neteja final de format
+      const finalCleaningStartTime = Date.now();
+      console.log(`🧽 [TIMING] ========== INICI NETEJA FINAL ==========`);
+      
       // 3.1: Eliminar espais extra dins placeholders
+      const spacesMatches = content.match(/\{\{\s*([^}]+?)\s*\}\}/g) || [];
       content = content.replace(/\{\{\s*([^}]+?)\s*\}\}/g, '{{$1}}');
       
       // 3.2: Normalitzar noms de placeholders
+      const normalizationMatches = content.match(/\{\{([^}]+)\}\}/g) || [];
       content = content.replace(/\{\{([^}]+)\}\}/g, (match, placeholder) => {
         const normalized = placeholder.toUpperCase().replace(/[^A-Z0-9_]/g, '_');
         if (normalized !== placeholder) {
@@ -341,21 +405,29 @@ export class SmartDocumentProcessor {
         return `{{${normalized}}}`;
       });
       
+      const finalCleaningTime = Date.now() - finalCleaningStartTime;
+      console.log(`🧽 [TIMING] Neteja final completada en: ${finalCleaningTime}ms`);
+      console.log(`   📊 Espais corregits: ${spacesMatches.length}, Normalitzacions: ${normalizationMatches.length}`);
+      
       // FASE 4: Validació exhaustiva
+      const validationStartTime = Date.now();
       const finalPlaceholders = content.match(/\{\{[^}]+\}\}/g) || [];
       const cleanedCount = finalPlaceholders.length;
       
-      console.log(`📊 [Template-Cleaner] Placeholders finals: ${cleanedCount}`);
+      console.log(`📊 [TIMING] Validació: ${Date.now() - validationStartTime}ms - ${cleanedCount} placeholders finals`);
       
-      // Mostrar tots els placeholders trobats
-      if (finalPlaceholders.length > 0) {
-        console.log(`📝 [Template-Cleaner] Placeholders detectats:`);
+      // Mostrar tots els placeholders trobats (només si són pocs per evitar spam)
+      if (finalPlaceholders.length > 0 && finalPlaceholders.length <= 20) {
+        console.log(`📝 [TIMING] Placeholders detectats:`);
         finalPlaceholders.forEach((placeholder, idx) => {
           console.log(`  ${idx + 1}. ${placeholder}`);
         });
+      } else if (finalPlaceholders.length > 20) {
+        console.log(`📝 [TIMING] ${finalPlaceholders.length} placeholders detectats (massa per mostrar tots)`);
       }
       
       // FASE 5: Detectar problemes residuals
+      const problemDetectionStartTime = Date.now();
       const problematicPatterns = [
         { pattern: /\{\{[^}]*\{\{/g, name: 'Doble obertura {{{{' },
         { pattern: /\}\}[^{]*\}\}/g, name: 'Doble tancament }}}}' },
@@ -365,40 +437,68 @@ export class SmartDocumentProcessor {
       ];
       
       let hasProblems = false;
+      let totalProblems = 0;
       problematicPatterns.forEach(({ pattern, name }) => {
         const matches = content.match(pattern);
         if (matches) {
-          console.warn(`⚠️ [Template-Cleaner] ${name}: ${matches.length} ocurrències`);
-          matches.forEach(match => console.warn(`    ${match.substring(0, 80)}...`));
+          console.warn(`⚠️ [TIMING] ${name}: ${matches.length} ocurrències`);
+          totalProblems += matches.length;
           hasProblems = true;
+          // Només mostrar els primers 3 exemples per evitar spam
+          matches.slice(0, 3).forEach(match => console.warn(`    ${match.substring(0, 80)}...`));
+          if (matches.length > 3) {
+            console.warn(`    ... i ${matches.length - 3} més`);
+          }
         }
       });
       
-      // FASE 6: Estadístiques finals
+      const problemDetectionTime = Date.now() - problemDetectionStartTime;
+      console.log(`🔍 [TIMING] Detecció problemes: ${problemDetectionTime}ms - ${totalProblems} problemes trobats`);
+      
+      // FASE 6: Estadístiques finals i generació del ZIP
+      const zipGenerationStartTime = Date.now();
       const finalLength = content.length;
       const sizeDiff = originalLength - finalLength;
-      
-      if (content !== originalContent) {
-        console.log(`✅ [Template-Cleaner] Document netejat amb ${iterations} iteracions`);
-        console.log(`📈 [Template-Cleaner] Mida: ${originalLength} → ${finalLength} (${sizeDiff > 0 ? '-' : '+'}${Math.abs(sizeDiff)} bytes)`);
-      } else {
-        console.log(`✅ [Template-Cleaner] Document ja estava net`);
-      }
-      
-      if (hasProblems) {
-        console.warn(`⚠️ [Template-Cleaner] ATENCIÓ: Encara hi ha patrons problemàtics`);
-        console.warn(`🔄 [Template-Cleaner] docxtemplater pot fallar amb aquests placeholders`);
-      } else {
-        console.log(`🎯 [Template-Cleaner] Document completament net - docxtemplater hauria de funcionar`);
-      }
+      const totalCleaningTime = Date.now() - cleaningStartTime;
       
       // Actualitzar el ZIP amb el contingut netejat
       zip.file('word/document.xml', content);
-      return zip.generate({ type: 'nodebuffer' });
+      const finalBuffer = zip.generate({ type: 'nodebuffer' });
+      const zipGenerationTime = Date.now() - zipGenerationStartTime;
+      
+      // RESUM FINAL DE TIMING DE NETEJA
+      console.log(`✅ [TIMING] ========== NETEJA PLACEHOLDERS COMPLETADA ==========`);
+      console.log(`✅ [TIMING] Temps total de neteja: ${totalCleaningTime}ms`);
+      console.log(`✅ [TIMING] Breakdown de neteja:`);
+      console.log(`   🔍 Detecció fragments: ${detectionTime}ms`);
+      console.log(`   🔄 Iteracions de neteja: ${totalIterationTime}ms (${iterations} iteracions)`);
+      console.log(`   🧽 Neteja final: ${finalCleaningTime}ms`);
+      console.log(`   📊 Validació: ${Date.now() - validationStartTime}ms`);
+      console.log(`   🔍 Detecció problemes: ${problemDetectionTime}ms`);
+      console.log(`   📦 Generació ZIP: ${zipGenerationTime}ms`);
+      
+      if (content !== originalContent) {
+        console.log(`📈 [TIMING] Canvis en document: ${originalLength} → ${finalLength} bytes (${sizeDiff > 0 ? '-' : '+'}${Math.abs(sizeDiff)} bytes)`);
+        console.log(`📈 [TIMING] Eficiència: ${(sizeDiff / totalCleaningTime * 1000).toFixed(1)} bytes/segon processats`);
+      } else {
+        console.log(`✅ [TIMING] Document ja estava net - cap canvi necessari`);
+      }
+      
+      if (hasProblems) {
+        console.warn(`⚠️ [TIMING] ATENCIÓ: ${totalProblems} patrons problemàtics detectats`);
+        console.warn(`🔄 [TIMING] docxtemplater pot fallar amb aquests placeholders`);
+      } else {
+        console.log(`🎯 [TIMING] Document completament net - docxtemplater hauria de funcionar perfectament`);
+      }
+      
+      return finalBuffer;
       
     } catch (error) {
-      console.error(`❌ [Template-Cleaner] Error crític netejant placeholders:`, error);
-      console.warn(`🔄 [Template-Cleaner] Retornant document original com a fallback`);
+      const errorTime = Date.now() - cleaningStartTime;
+      console.error(`❌ [TIMING] ========== ERROR EN NETEJA PLACEHOLDERS ==========`);
+      console.error(`❌ [TIMING] Error després de: ${errorTime}ms de neteja`);
+      console.error(`❌ [TIMING] Error crític:`, error);
+      console.warn(`🔄 [TIMING] Retornant document original com a fallback`);
       return templateBuffer;
     }
   }
@@ -412,7 +512,7 @@ export class SmartDocumentProcessor {
    */
   private async downloadTemplateFromStorage(templatePath: string): Promise<Buffer> {
     const downloadStartTime = Date.now();
-    const STORAGE_TIMEOUT_MS = 30000; // 30 segons de timeout
+    const STORAGE_TIMEOUT_MS = 5000; // 5 segons de timeout (reduït per debug)
 
     const downloadOperation = async () => {
       console.log(`📥 [Storage] Descarregant plantilla: ${templatePath}`);
