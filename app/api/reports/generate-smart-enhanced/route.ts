@@ -172,10 +172,10 @@ export async function POST(request: NextRequest) {
     const baseUrl = `${protocol}://${host}`;
     const constructedUrl = `${baseUrl}/api/worker/generation-processor`;
 
-    // TODO: ELIMINAR DESPRÉS DEL DEBUG - URL hardcodejada temporalment
-    const FIXED_WORKER_URL = 'https://ai-sdk-next-openai-94c61ocle-dnitzs-projects.vercel.app/api/worker/generation-processor';
-    const useFixedUrl = true; // Canviar a false per usar URL dinàmica
-    const workerUrl = useFixedUrl ? FIXED_WORKER_URL : constructedUrl;
+  // TODO: ELIMINAR DESPRÉS DEL DEBUG - URL hardcodejada temporalment
+  const FIXED_WORKER_URL = 'https://ai-sdk-next-openai-94c61ocle-dnitzs-projects.vercel.app/api/worker/generation-processor';
+  const useFixedUrl = false; // ✅ SOLUCIÓ: Usar URL dinàmica del mateix deployment
+  const workerUrl = useFixedUrl ? FIXED_WORKER_URL : constructedUrl;
 
     console.log(`🔧 [API-Trigger] Invocant worker a: ${workerUrl}`);
 
