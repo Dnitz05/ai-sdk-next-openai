@@ -87,6 +87,21 @@ export async function POST(request: NextRequest) {
         authTokenTrimmed: authToken?.trim(),
         expectedTokenTrimmed: expectedToken?.trim()
       });
+      
+      // LOGGING TEMPORAL AMB LOGGER PER VEURE ALS LOGS DE VERCEL
+      logger.error('DEBUG 401 - Token validation failed', {
+        receivedHeader: request.headers.get('Authorization'),
+        receivedToken: authToken?.substring(0, 10) + '...',
+        expectedToken: expectedToken?.substring(0, 10) + '...',
+        lengthMatch: authToken?.length === expectedToken?.length,
+        exactMatch: authToken === expectedToken,
+        trimmedMatch: authToken?.trim() === expectedToken?.trim(),
+        authTokenLength: authToken?.length,
+        expectedTokenLength: expectedToken?.length,
+        hasSpecialChars: authToken ? !/^[a-zA-Z0-9]+$/.test(authToken) : false,
+        expectedHasSpecialChars: expectedToken ? !/^[a-zA-Z0-9]+$/.test(expectedToken) : false
+      }, logContext);
+      
       logger.error('Token de Bearer invàlid o no proporcionat a la capçalera Authorization', null, logContext);
       return NextResponse.json({ success: false, error: 'Accés no autoritzat' }, { status: 401 });
     }
