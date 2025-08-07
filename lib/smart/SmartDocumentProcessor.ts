@@ -185,7 +185,7 @@ export class SmartDocumentProcessor {
   /**
    * Genera document DOCX amb substitució directa de placeholders
    * USA: docxtemplater estàndard amb placeholders {{PLACEHOLDER}}
-   * ELIMINA: Tot el sistema complex de parsing JSON
+   * INCLOU: Preprocessador robust per netejar placeholders trencats per edició
    */
   private async generateSimpleDocx(
     templateBuffer: Buffer,
@@ -196,8 +196,11 @@ export class SmartDocumentProcessor {
     try {
       console.log(`📄 [DocxGenerator-Simple] Generant document amb ${Object.keys(templateData).length} substitucions...`);
 
-      // Crear instància de docxtemplater amb configuració simple
-      const zip = new PizZip(templateBuffer);
+      // FASE 1: Preprocessar per netejar placeholders trencats
+      const cleanedBuffer = await this.cleanBrokenPlaceholders(templateBuffer);
+
+      // FASE 2: Crear instància de docxtemplater amb configuració simple
+      const zip = new PizZip(cleanedBuffer);
       const doc = new Docxtemplater(zip, {
         paragraphLoop: true,
         linebreaks: true,
@@ -205,11 +208,11 @@ export class SmartDocumentProcessor {
         errorLogging: false, // Desactivar logging d'errors per simplicitat
       });
 
-      // Aplicar substitucions directes
+      // FASE 3: Aplicar substitucions directes
       doc.setData(templateData);
       doc.render();
 
-      // Generar buffer del document final
+      // FASE 4: Generar buffer del document final
       const documentBuffer = doc.getZip().generate({ type: 'nodebuffer' });
       
       this.performanceMetrics.docxGenerationTime = Date.now() - docxStartTime;
@@ -231,6 +234,172 @@ export class SmartDocumentProcessor {
       }
       
       throw new Error(`Error generant document DOCX: ${error instanceof Error ? error.message : 'Error desconegut'}`);
+    }
+  }
+
+  /**
+   * Preprocessador ultra-robust per netejar placeholders trencats per edició manual
+   * Soluciona el problema quan Word divideix placeholders en múltiples nodes XML
+   * VERSIÓ MILLORADA: Gestiona casos específics com "{{NOM_" i "NOM_}}"
+   */
+  private async cleanBrokenPlaceholders(templateBuffer: Buffer): Promise<Buffer> {
+    try {
+      console.log(`🧹 [Template-Cleaner] Iniciant neteja ultra-robusta de placeholders...`);
+      
+      const zip = new PizZip(templateBuffer);
+      let content = zip.file('word/document.xml')?.asText() || '';
+      
+      if (!content) {
+        console.warn(`⚠️ [Template-Cleaner] No s'ha trobat document.xml`);
+        return templateBuffer;
+      }
+      
+      // Guardar l'original per comparació
+      const originalContent = content;
+      const originalLength = content.length;
+      
+      console.log(`📊 [Template-Cleaner] Document original: ${originalLength} caràcters`);
+      
+      // FASE 1: Detectar i mostrar tots els fragments de placeholders
+      const brokenPlaceholderFragments = content.match(/\{\{[^}]*|[^{]*\}\}/g) || [];
+      console.log(`🔍 [Template-Cleaner] Fragments detectats: ${brokenPlaceholderFragments.length}`);
+      
+      // FASE 2: Neteja ultra-agressiva iterativa
+      let iterations = 0;
+      let previousContent = '';
+      const maxIterations = 20;
+      
+      while (iterations < maxIterations && content !== previousContent) {
+        previousContent = content;
+        
+        // 2.1: Eliminar TOTS els tags XML dins de qualsevol cosa que sembli un placeholder
+        content = content.replace(
+          /(\{\{[^}]*?)(<[^>]*>)+([^}]*?\}\})/g,
+          (match, start, xmlTags, end) => {
+            const cleaned = start + end;
+            console.log(`🔧 [Iter ${iterations}] XML dins placeholder: ${match.substring(0, 60)}... → ${cleaned}`);
+            return cleaned;
+          }
+        );
+        
+        // 2.2: Reunificar placeholders dividits per tags de format
+        content = content.replace(
+          /(\{\{[^}]*?)(<\/[^>]*>)([^}]*?\}\})/g,
+          (match, start, closeTag, end) => {
+            const cleaned = start + end;
+            console.log(`🔧 [Iter ${iterations}] Tag tancament: ${match.substring(0, 60)}... → ${cleaned}`);
+            return cleaned;
+          }
+        );
+        
+        // 2.3: Netejar tags d'obertura dins de placeholders
+        content = content.replace(
+          /(\{\{[^}]*?)(<[^>]*>)([^}]*?\}\})/g,
+          (match, start, openTag, end) => {
+            const cleaned = start + end;
+            console.log(`🔧 [Iter ${iterations}] Tag obertura: ${match.substring(0, 60)}... → ${cleaned}`);
+            return cleaned;
+          }
+        );
+        
+        // 2.4: Eliminar text embebut entre tags dins de placeholders
+        content = content.replace(
+          /(\{\{[^}]*?)(<[^>]*>[^<]*<\/[^>]*>)+([^}]*?\}\})/g,
+          (match, start, xmlContent, end) => {
+            // Extreure només el text, eliminant tots els tags
+            const textOnly = xmlContent.replace(/<[^>]*>/g, '');
+            const cleaned = start + textOnly + end;
+            console.log(`🔧 [Iter ${iterations}] Text embebut: ${match.substring(0, 60)}... → ${cleaned}`);
+            return cleaned;
+          }
+        );
+        
+        // 2.5: Casos específics problemàtics detectats als logs
+        // Arreglar "{{NOM_" sense tancament
+        content = content.replace(/\{\{([A-Z_]+)(?!.*\}\})/g, '{{$1}}');
+        
+        // Arreglar "NOM_}}" sense obertura
+        content = content.replace(/(?<!\{\{.*)([A-Z_]+)\}\}/g, '{{$1}}');
+        
+        // 2.6: Eliminar duplicacions de claus
+        content = content.replace(/\{\{\{\{/g, '{{');
+        content = content.replace(/\}\}\}\}/g, '}}');
+        
+        iterations++;
+      }
+      
+      // FASE 3: Neteja final de format
+      // 3.1: Eliminar espais extra dins placeholders
+      content = content.replace(/\{\{\s*([^}]+?)\s*\}\}/g, '{{$1}}');
+      
+      // 3.2: Normalitzar noms de placeholders
+      content = content.replace(/\{\{([^}]+)\}\}/g, (match, placeholder) => {
+        const normalized = placeholder.toUpperCase().replace(/[^A-Z0-9_]/g, '_');
+        if (normalized !== placeholder) {
+          console.log(`🔧 [Normalize] ${placeholder} → ${normalized}`);
+        }
+        return `{{${normalized}}}`;
+      });
+      
+      // FASE 4: Validació exhaustiva
+      const finalPlaceholders = content.match(/\{\{[^}]+\}\}/g) || [];
+      const cleanedCount = finalPlaceholders.length;
+      
+      console.log(`📊 [Template-Cleaner] Placeholders finals: ${cleanedCount}`);
+      
+      // Mostrar tots els placeholders trobats
+      if (finalPlaceholders.length > 0) {
+        console.log(`📝 [Template-Cleaner] Placeholders detectats:`);
+        finalPlaceholders.forEach((placeholder, idx) => {
+          console.log(`  ${idx + 1}. ${placeholder}`);
+        });
+      }
+      
+      // FASE 5: Detectar problemes residuals
+      const problematicPatterns = [
+        { pattern: /\{\{[^}]*\{\{/g, name: 'Doble obertura {{{{' },
+        { pattern: /\}\}[^{]*\}\}/g, name: 'Doble tancament }}}}' },
+        { pattern: /\{\{[^}]{100,}\}\}/g, name: 'Placeholder massa llarg' },
+        { pattern: /\{\{[^A-Z0-9_{}]*\}\}/g, name: 'Caràcters invàlids' },
+        { pattern: /\{\{.*<.*\}\}/g, name: 'Tags XML residuals' },
+      ];
+      
+      let hasProblems = false;
+      problematicPatterns.forEach(({ pattern, name }) => {
+        const matches = content.match(pattern);
+        if (matches) {
+          console.warn(`⚠️ [Template-Cleaner] ${name}: ${matches.length} ocurrències`);
+          matches.forEach(match => console.warn(`    ${match.substring(0, 80)}...`));
+          hasProblems = true;
+        }
+      });
+      
+      // FASE 6: Estadístiques finals
+      const finalLength = content.length;
+      const sizeDiff = originalLength - finalLength;
+      
+      if (content !== originalContent) {
+        console.log(`✅ [Template-Cleaner] Document netejat amb ${iterations} iteracions`);
+        console.log(`📈 [Template-Cleaner] Mida: ${originalLength} → ${finalLength} (${sizeDiff > 0 ? '-' : '+'}${Math.abs(sizeDiff)} bytes)`);
+      } else {
+        console.log(`✅ [Template-Cleaner] Document ja estava net`);
+      }
+      
+      if (hasProblems) {
+        console.warn(`⚠️ [Template-Cleaner] ATENCIÓ: Encara hi ha patrons problemàtics`);
+        console.warn(`🔄 [Template-Cleaner] docxtemplater pot fallar amb aquests placeholders`);
+      } else {
+        console.log(`🎯 [Template-Cleaner] Document completament net - docxtemplater hauria de funcionar`);
+      }
+      
+      // Actualitzar el ZIP amb el contingut netejat
+      zip.file('word/document.xml', content);
+      return zip.generate({ type: 'nodebuffer' });
+      
+    } catch (error) {
+      console.error(`❌ [Template-Cleaner] Error crític netejant placeholders:`, error);
+      console.warn(`🔄 [Template-Cleaner] Retornant document original com a fallback`);
+      return templateBuffer;
     }
   }
 
