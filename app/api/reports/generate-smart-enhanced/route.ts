@@ -24,12 +24,14 @@ export async function POST(request: NextRequest) {
     const body = await request.json();
     console.log('[API-Trigger] Body rebut:', { 
       projectId: body.projectId, 
-      generationId: body.generationId
+      generationId: body.generationId,
+      adminMode: body.adminMode
     });
 
     const { 
       projectId,
-      generationId // Un sol ID per processar
+      generationId, // Un sol ID per processar
+      adminMode = false // Mode administratiu per saltar autenticació
     } = body;
 
     // Validacions bàsiques
@@ -47,37 +49,47 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Crear client SSR per autenticació
-    const supabase = createServerClient(
-      process.env.NEXT_PUBLIC_SUPABASE_URL!,
-      process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
-      {
-        cookies: {
-          getAll: () => {
-            return request.cookies.getAll().map(cookie => ({
-              name: cookie.name,
-              value: cookie.value,
-            }))
-          },
-          setAll: () => {
-            // No necessitem setAll en aquest context
+    let user: any;
+    let supabase: any;
+
+    if (!adminMode) {
+      // Mode normal - validar autenticació
+      supabase = createServerClient(
+        process.env.NEXT_PUBLIC_SUPABASE_URL!,
+        process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+        {
+          cookies: {
+            getAll: () => {
+              return request.cookies.getAll().map(cookie => ({
+                name: cookie.name,
+                value: cookie.value,
+              }))
+            },
+            setAll: () => {
+              // No necessitem setAll en aquest context
+            }
           }
         }
-      }
-    );
-
-    // Obtenir userId de la sessió
-    const { data: authData, error: authError } = await supabase.auth.getUser();
-    if (authError || !authData.user) {
-      console.error(`❌ [API-Trigger] Error d'autenticació:`, authError);
-      return NextResponse.json(
-        { success: false, error: 'Usuari no autenticat' },
-        { status: 401 }
       );
-    }
 
-    const user = authData.user;
-    console.log(`👤 [API-Trigger] Usuari autenticat: ${user.id}`);
+      // Obtenir userId de la sessió
+      const { data: authData, error: authError } = await supabase.auth.getUser();
+      if (authError || !authData.user) {
+        console.error(`❌ [API-Trigger] Error d'autenticació:`, authError);
+        return NextResponse.json(
+          { success: false, error: 'Usuari no autenticat' },
+          { status: 401 }
+        );
+      }
+
+      user = authData.user;
+      console.log(`👤 [API-Trigger] Usuari autenticat: ${user.id}`);
+    } else {
+      // Mode administratiu - usar service role client
+      supabase = supabaseServerClient;
+      user = { id: 'admin-mode' }; // ID fictici per mode admin
+      console.log(`🔧 [API-Trigger] Mode administratiu activat`);
+    }
 
     // Validar accés al projecte (RLS filtra automàticament)
     const { data: project, error: projectError } = await supabase
