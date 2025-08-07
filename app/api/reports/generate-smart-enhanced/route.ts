@@ -9,6 +9,8 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createServerClient } from '@supabase/ssr';
 import { createClient } from '@supabase/supabase-js';
+import { SmartDocumentProcessor } from '@/lib/smart/SmartDocumentProcessor';
+import supabaseServerClient from '@/lib/supabase/server';
  
 export const runtime = 'nodejs';
 export const maxDuration = 30; // Només 30 segons per al disparador
@@ -166,157 +168,98 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Obtenir URL base per al worker
-    const protocol = request.headers.get('x-forwarded-proto') || 'http';
-    const host = request.headers.get('host') || 'localhost:3000';
-    const baseUrl = `${protocol}://${host}`;
-    const constructedUrl = `${baseUrl}/api/worker/generation-processor`;
-
-  // TODO: ELIMINAR DESPRÉS DEL DEBUG - URL hardcodejada temporalment
-  const FIXED_WORKER_URL = 'https://ai-sdk-next-openai-94c61ocle-dnitzs-projects.vercel.app/api/worker/generation-processor';
-  const useFixedUrl = false; // ✅ SOLUCIÓ: Usar URL dinàmica del mateix deployment
-  const workerUrl = useFixedUrl ? FIXED_WORKER_URL : constructedUrl;
-
-    console.log(`🔧 [API-Trigger] Invocant worker a: ${workerUrl}`);
-
-    // Disparar worker (fire-and-forget)
+    // Processar directament sense worker HTTP
     try {
-      const workerToken = process.env.WORKER_SECRET_TOKEN;
-      if (!workerToken) {
-        throw new Error('WORKER_SECRET_TOKEN no està configurat al servidor trigger.');
-      }
-
-      // ========== DEBUG LOGGING DETALLAT ==========
-      console.error('[DEBUG TRIGGER] ========== Inici Debug Worker ==========');
-      console.error('[DEBUG TRIGGER] Worker URL construida:', constructedUrl);
-      console.error('[DEBUG TRIGGER] Worker URL usada:', workerUrl);
-      console.error('[DEBUG TRIGGER] Use fixed URL:', useFixedUrl);
-      console.error('[DEBUG TRIGGER] Protocol:', protocol);
-      console.error('[DEBUG TRIGGER] Host:', host);
-      console.error('[DEBUG TRIGGER] Base URL:', baseUrl);
-      console.error('[DEBUG TRIGGER] Token disponible:', !!workerToken);
-      console.error('[DEBUG TRIGGER] Token length:', workerToken?.length);
-      console.error('[DEBUG TRIGGER] Token prefix:', workerToken?.substring(0, 10));
-      console.error('[DEBUG TRIGGER] User ID:', user.id);
-      console.error('[DEBUG TRIGGER] Project ID:', projectId);
-      console.error('[DEBUG TRIGGER] Generation ID:', generationId);
-      console.error('[DEBUG TRIGGER] ================================================');
+      console.log(`🔧 [API-Trigger] Processant directament generació ${generationId}`);
       
-      // CANVI CLAU: Ara fem 'await' i gestionem la resposta del worker
-      const workerResponse = await fetch(workerUrl, {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${workerToken}`, // Primer per visibilitat
-          'Content-Type': 'application/json',
-          'x-vercel-protection-bypass': process.env.VERCEL_PROTECTION_BYPASS || '',
-          'User-Agent': 'Internal-Worker-Call',
-          'x-internal-request': 'true'
-        },
-        body: JSON.stringify({
-          projectId,
-          generationId,
-          userId: user.id
+      // Obtenir dades necessàries per processar
+      const { data: generation, error: genError } = await supabase
+        .from('generations')
+        .select('*')
+        .eq('id', generationId)
+        .single();
+        
+      if (genError || !generation) {
+        throw new Error(`No es pot trobar la generació: ${genError?.message}`);
+      }
+      
+      // Obtenir la plantilla
+      const { data: template, error: templateError } = await supabaseServerClient
+        .from('plantilla_configs')
+        .select('*')
+        .eq('id', project.template_id)
+        .single();
+        
+      if (templateError || !template) {
+        throw new Error(`No es pot trobar la plantilla: ${templateError?.message}`);
+      }
+      
+      // Verificar que la plantilla té els camps necessaris
+      if (!template.template_content || !template.docx_storage_path) {
+        throw new Error('La plantilla no té contingut o fitxer DOCX');
+      }
+      
+      // Crear processador i executar
+      const processor = new SmartDocumentProcessor();
+      
+      const result = await processor.processSingle(
+        template.template_content,
+        template.docx_storage_path,
+        generation.row_data,
+        project.template_id,
+        user.id
+      );
+      
+      if (!result.success) {
+        throw new Error(result.errorMessage || 'Error en processament');
+      }
+      
+      // Actualitzar la generació amb el resultat
+      const docResult = result.documents[0];
+      const placeholderMapping = Object.entries(docResult.placeholderValues)
+        .map(([key, value]) => ({ placeholder: key, generatedContent: value }));
+      
+      const { error: updateError } = await supabase
+        .from('generations')
+        .update({
+          status: 'generated',
+          content: JSON.stringify(placeholderMapping),
+          document_path: docResult.storagePath,
+          updated_at: new Date().toISOString(),
+          error_message: null
         })
-      });
-
-      const totalTime = Date.now() - startTime;
-
-      // Comprovar si el worker ha respost correctament
-      if (!workerResponse.ok) {
-        let errorMessage;
-        let errorText = '';
-        const contentType = workerResponse.headers.get('content-type');
+        .eq('id', generationId);
         
-        // ========== DEBUG ERROR LOGGING DETALLAT ==========
-        console.error('[DEBUG TRIGGER] ========== Worker Error Details ==========');
-        console.error('[DEBUG TRIGGER] Worker response status:', workerResponse.status);
-        console.error('[DEBUG TRIGGER] Worker response statusText:', workerResponse.statusText);
-        console.error('[DEBUG TRIGGER] Worker response headers:', Object.fromEntries(workerResponse.headers.entries()));
-        console.error('[DEBUG TRIGGER] Worker response content-type:', contentType);
-        
-        try {
-          errorText = await workerResponse.text();
-          console.error('[DEBUG TRIGGER] Worker response body:', errorText);
-        } catch (textError) {
-          console.error('[DEBUG TRIGGER] Error reading worker response body:', textError);
-          errorText = 'Could not read response body';
-        }
-        
-        // Si la resposta sembla JSON, la parsegem. Si no, agafem el text.
-        if (contentType && contentType.includes('application/json')) {
-          try {
-            const errorData = JSON.parse(errorText);
-            errorMessage = errorData.error || errorData.details || `El worker ha fallat amb estat ${workerResponse.status}`;
-            console.error('[DEBUG TRIGGER] Parsed JSON error:', errorData);
-          } catch (e) {
-            errorMessage = `El worker ha retornat una resposta JSON invàlida amb estat ${workerResponse.status}`;
-            console.error('[DEBUG TRIGGER] JSON parse error:', e);
-          }
-        } else {
-          // La resposta no és JSON (probablement una pàgina d'error HTML de Vercel)
-          errorMessage = `El worker ha retornat una resposta no esperada (possiblement un error d'infraestructura) amb estat ${workerResponse.status}`;
-          console.error('[DEBUG TRIGGER] Non-JSON response detected');
-        }
-        
-        console.error('[DEBUG TRIGGER] Final error message:', errorMessage);
-        console.error('[DEBUG TRIGGER] ================================================');
-        console.error(`❌ [API-Trigger] El worker ha fallat (Estat ${workerResponse.status}):`, errorMessage);
-
-        // --- BLINDATGE FIABLE DE L'ESTAT D'ERROR ---
-        // Assegurem que l'error es desa a la base de dades abans de respondre
-        const { error: dbError } = await supabase
-          .from('generations')
-          .update({
-            status: 'error',
-            error_message: `Error del worker: ${errorMessage}`,
-            updated_at: new Date().toISOString()
-          })
-          .eq('id', generationId);
-
-        if (dbError) {
-            console.error(`❌ [API-Trigger] ERROR CRÍTIC: No s'ha pogut actualitzar l'estat d'error a la BD.`, dbError);
-            // Responem igualment al client amb l'error original del worker
-            return NextResponse.json(
-              { success: false, error: errorMessage, notification: "No s'ha pogut actualitzar l'estat a la BD." },
-              { status: 500 }
-            );
-        }
-
-        return NextResponse.json(
-          { success: false, error: errorMessage },
-          { status: 500 } // Retornem un 500 genèric al client, ja que és un error del servidor
-        );
+      if (updateError) {
+        throw new Error(`Error actualitzant resultat: ${updateError.message}`);
       }
       
-      const resultData = await workerResponse.json();
-      console.log(`✅ [API-Trigger] El worker ha completat la tasca en ${totalTime}ms`);
-
-      // El worker ja ha actualitzat l'estat a 'generated'.
-      // Responem amb èxit indicant que tot el procés s'ha completat.
+      console.log(`✅ [API-Trigger] Generació ${generationId} completada amb èxit`);
+      
       return NextResponse.json({
         success: true,
         generationId: generationId,
         message: 'Generació completada amb èxit',
-        data: resultData
-      }, { status: 200 }); // 200 OK
-
+        documentPath: docResult.storagePath
+      });
+      
     } catch (error) {
-      console.error(`❌ [API-Trigger] Error crític durant la invocació del worker:`, error);
+      console.error(`❌ [API-Trigger] Error processant:`, error);
       
       const errorMessage = error instanceof Error ? error.message : 'Error desconegut';
-
-      // Revertir estat de la generació a 'error'
+      
+      // Actualitzar estat d'error
       await supabase
         .from('generations')
         .update({
           status: 'error',
-          error_message: `Error crític del disparador: ${errorMessage}`,
+          error_message: errorMessage,
           updated_at: new Date().toISOString()
         })
         .eq('id', generationId);
-
+        
       return NextResponse.json(
-        { success: false, error: 'Error crític iniciant la tasca', details: errorMessage },
+        { success: false, error: errorMessage },
         { status: 500 }
       );
     }
