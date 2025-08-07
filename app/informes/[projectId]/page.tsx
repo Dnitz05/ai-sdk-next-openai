@@ -237,7 +237,9 @@ const ProjectDetailPage: React.FC = () => {
       });
 
       if (!generationsResponse.ok) {
-        throw new Error('Error carregant generacions');
+        const errorText = await generationsResponse.text();
+        console.error('❌ Error carregant generacions:', generationsResponse.status, errorText);
+        throw new Error(`Error carregant generacions: ${generationsResponse.status} ${errorText}`);
       }
 
       const generationsData = await generationsResponse.json();
@@ -286,12 +288,14 @@ const ProjectDetailPage: React.FC = () => {
         })
       });
 
-      const result = await response.json();
-
+      // ✅ CRÍTICO: Validar response abans de parsejar JSON
       if (!response.ok) {
-        // L'API ha retornat un error (4xx o 5xx)
-        throw new Error(result.error || `Error ${response.status} en la generació`);
+        const errorText = await response.text();
+        console.error('❌ Error HTTP:', response.status, errorText);
+        throw new Error(`Error ${response.status}: ${errorText}`);
       }
+
+      const result = await response.json();
       
       console.log(`✅ Generació completada per ${generationId}. Resultat:`, result);
 
