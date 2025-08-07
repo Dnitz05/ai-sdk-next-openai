@@ -165,7 +165,7 @@ export async function POST(request: NextRequest) {
         classAvailable: !!SmartDocumentProcessor,
         instanceCreated: !!processor,
         hasProcessSingle: typeof processor.processSingle === 'function',
-        hasProcessBatch: typeof processor.processBatch === 'function',
+        hasProcessBatch: false, // Método eliminado en refactorización
         message: 'SmartDocumentProcessor disponible amb mètodes necessaris'
       };
       testResults.summary.passed++;

@@ -9,9 +9,18 @@
 
 import { NextRequest, NextResponse } from 'next/server';
 import { SmartDocumentProcessor } from '@/lib/smart/SmartDocumentProcessor';
-import { BatchProcessingConfig, isValidExcelData } from '@/lib/smart/types';
-import { logger, createContextLogger } from '@/lib/utils/logger';
 import { createClient } from '@supabase/supabase-js';
+
+// Función simple para validar datos Excel
+function isValidExcelData(data: any[]): boolean {
+  return Array.isArray(data) && data.length > 0 && data.every(row => row && typeof row === 'object');
+}
+
+// Logger simple para reemplazar el complejo
+const logger = {
+  info: (message: string, context?: any) => console.log(`[INFO] ${message}`, context || ''),
+  error: (message: string, error?: any, context?: any) => console.error(`[ERROR] ${message}`, error || '', context || ''),
+};
 
 // Utilitzar el client admin per a operacions de backend sense dependre de la sessió d'usuari
 const supabaseAdmin = createClient(
@@ -385,8 +394,7 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Actualitzar estat a generat amb dades del resultat
-    const docResult = result.documents[0]; // Primer (i únic) document
+    // Actualitzar estat a generat - VERSIÓ SIMPLIFICADA
     const originalData = excelData[0];
 
     await supabaseAdmin
@@ -395,7 +403,6 @@ export async function POST(request: NextRequest) {
         status: 'generated',
         row_data: {
           ...originalData,
-          smart_content: docResult.placeholderValues,
           smart_generation_id: result.generationId,
           generated_at: new Date().toISOString()
         },

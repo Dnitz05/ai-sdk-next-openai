@@ -28,8 +28,8 @@ describe('PromptPositionUtils', () => {
 
   test('calculatePromptPositions calculates and adjusts positions correctly', () => {
     const initialPrompts: IAPrompt[] = [
-      { id: 'p1', paragraphId: 'p1', content: '', status: 'draft', createdAt: new Date(), updatedAt: new Date(), position: 0, isExpanded: true },
-      { id: 'p2', paragraphId: 'p2', content: '', status: 'draft', createdAt: new Date(), updatedAt: new Date(), position: 0, isExpanded: true },
+      { id: 'p1', paragraphId: 'p1', content: '', status: 'draft', createdAt: new Date(), updatedAt: new Date(), position: 0, isExpanded: true, useExistingText: false },
+      { id: 'p2', paragraphId: 'p2', content: '', status: 'draft', createdAt: new Date(), updatedAt: new Date(), position: 0, isExpanded: true, useExistingText: false },
     ];
     const result = calculatePromptPositions(initialPrompts, documentRef, wrapperRef);
     expect(result[0].position).toBe(60);

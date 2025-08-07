@@ -1,55 +1,65 @@
 /**
- * SmartDocumentProcessor - Processador intel·ligent de documents
+ * SmartDocumentProcessor - Processador SIMPLE de documents
  * 
- * Aquesta classe implementa la nova arquitectura revolucionària per generar
- * múltiples informes en una sola passada amb coherència narrativa garantida.
+ * REFACTORITZACIÓ TOTAL: Sistema simplificat que usa placeholders estàndard {{PLACEHOLDER}}
+ * Elimina completament la complexitat legacy de JSON embebits i paragraphId
  * 
- * Data: 6 de juliol de 2025
+ * Data: 7 d'agost de 2025
  * Arquitecte: Cline
- * Objectiu: 20x més ràpid, 95% més fiable, 85% més simple
+ * Objectiu: 100% fiable, ultra-simple, rendiment màxim
  */
 
 import PizZip from 'pizzip';
 import Docxtemplater from 'docxtemplater';
 import supabaseServerClient from '@/lib/supabase/server';
-import { retryAsync, DEFAULT_API_RETRY_CONFIG } from '@/lib/utils/retry';
 import { withTimeout } from '@/lib/utils/timeout';
-import { logger } from '@/lib/utils/logger';
-import {
-  BatchProcessingConfig,
-  BatchProcessingResult,
-  ProcessedDocument,
-  MistralResponse,
-  SmartPlaceholder,
-  SMART_GENERATION_CONSTANTS,
-  PerformanceMetrics,
-} from './types';
+
+// ============================================================================
+// INTERFACES SIMPLIFICADES
+// ============================================================================
+
+export interface SimpleProcessingResult {
+  success: boolean;
+  generationId: string;
+  documentsGenerated: number;
+  processingTimeMs: number;
+  documentBuffer?: Buffer;
+  errorMessage?: string;
+}
+
+export interface PerformanceMetrics {
+  totalProcessingTime: number;
+  docxGenerationTime: number;
+  storageDownloadTime: number;
+  documentsPerSecond: number;
+}
+
+// ============================================================================
+// CLASSE PRINCIPAL SIMPLIFICADA
+// ============================================================================
 
 export class SmartDocumentProcessor {
   private supabase;
-  private mistralApiKey: string;
   private performanceMetrics: PerformanceMetrics;
 
   constructor() {
     this.supabase = supabaseServerClient;
-    this.mistralApiKey = process.env.MISTRAL_API_KEY || '';
     this.performanceMetrics = {
       totalProcessingTime: 0,
-      aiCallTime: 0,
       docxGenerationTime: 0,
-      storageUploadTime: 0,
+      storageDownloadTime: 0,
       documentsPerSecond: 0,
     };
   }
 
   // ============================================================================
-  // MÈTODE PRINCIPAL - PROCESSAMENT INDIVIDUAL (NOU)
+  // MÈTODE PRINCIPAL - PROCESSAMENT SIMPLE
   // ============================================================================
 
   /**
-   * Processa un únic document de manera ultra-optimitzada
-   * Aquest mètode està específicament dissenyat per a generacions individuals
-   * i seqüencials, evitant la sobrecàrrega del processament batch
+   * Processa un únic document amb placeholders simples {{PLACEHOLDER}}
+   * ELIMINAT: Tot el sistema complex de IA, JSON embebits, paragraphId
+   * AFEGIT: Mapeo directe Excel → Placeholders
    */
   async processSingle(
     templateContent: string,
@@ -57,703 +67,187 @@ export class SmartDocumentProcessor {
     rowData: any,
     templateId: string,
     userId: string
-  ): Promise<BatchProcessingResult> {
+  ): Promise<SimpleProcessingResult> {
     const startTime = Date.now();
     
     try {
-      console.log(`🚀 [SmartProcessor-Single] Iniciant processament individual optimitzat`);
+      console.log(`🚀 [SmartProcessor-Simple] Iniciant processament ultra-simple`);
+      console.log(`📊 [SmartProcessor-Simple] Dades Excel rebudes:`, Object.keys(rowData));
 
-      // 1. Extreure placeholders del template
-      const placeholders = this.extractPlaceholders(templateContent);
-      console.log(`📝 [SmartProcessor-Single] Placeholders trobats:`, placeholders.map(p => p.id));
-
-      // 2. Construir prompt optimitzat per a un sol document
-      const optimizedPrompt = this.buildSingleDocumentPrompt(
-        templateContent,
-        rowData,
-        placeholders
-      );
-
-      // 3. Crida eficient a Mistral AI amb timeout
-      const aiResponse = await this.callMistralAISingle(optimizedPrompt);
+      // 1. Descarregar plantilla DOCX
+      const templateBuffer = await this.downloadTemplateFromStorage(templateStoragePath);
       
-      if (!aiResponse.success) {
-        throw new Error(`Error en crida Mistral AI: ${aiResponse.errorMessage}`);
-      }
+      // 2. Preparar dades per substitució directa
+      const templateData = this.prepareTemplateData(rowData);
+      console.log(`📝 [SmartProcessor-Simple] Placeholders preparats:`, Object.keys(templateData));
 
-      // 4. Generar document DOCX individual
-      const document = await this.generateSingleDocx(
-        aiResponse.documentsData[0], // Utilitzar el primer (i únic) document
-        templateStoragePath,
-        rowData
-      );
+      // 3. Aplicar substitucions amb docxtemplater
+      const documentBuffer = await this.generateSimpleDocx(templateBuffer, templateData);
 
-      // 5. Calcular mètriques de rendiment
+      // 4. Calcular mètriques
       const processingTime = Date.now() - startTime;
       this.performanceMetrics.totalProcessingTime = processingTime;
       this.performanceMetrics.documentsPerSecond = 1 / (processingTime / 1000);
 
-      console.log(`✅ [SmartProcessor-Single] Document generat en ${processingTime}ms`);
+      console.log(`✅ [SmartProcessor-Simple] Document generat en ${processingTime}ms`);
 
       return {
         success: true,
-        generationId: `single_${Date.now()}`,
+        generationId: `simple_${Date.now()}`,
         documentsGenerated: 1,
         processingTimeMs: processingTime,
-        documents: [document],
+        documentBuffer,
       };
 
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : 'Error desconegut';
-      console.error(`❌ [SmartProcessor-Single] Error: ${errorMessage}`, error);
+      console.error(`❌ [SmartProcessor-Simple] Error: ${errorMessage}`, error);
       
       return {
         success: false,
         generationId: '',
         documentsGenerated: 0,
         processingTimeMs: Date.now() - startTime,
-        documents: [],
         errorMessage,
       };
     }
   }
 
   // ============================================================================
-  // MÈTODE PRINCIPAL - PROCESSAMENT BATCH (EXISTENT)
+  // PREPARACIÓ DE DADES SIMPLE
   // ============================================================================
 
   /**
-   * Processa múltiples informes en una sola crida IA
-   * Aquest és el mètode revolucionari que substitueix tot el sistema antic
+   * Prepara les dades Excel per substitució directa en placeholders {{PLACEHOLDER}}
+   * Mapeja headers Excel a placeholders estàndard
    */
-  async processBatch(config: BatchProcessingConfig): Promise<BatchProcessingResult> {
-    const startTime = Date.now();
+  private prepareTemplateData(rowData: any): Record<string, string> {
+    const templateData: Record<string, string> = {};
     
     try {
-      console.log(`🚀 [SmartProcessor] Iniciant processament batch:`, {
-        templateId: config.templateId,
-        documentsToGenerate: config.excelData.length,
-        userId: config.userId,
-      });
-
-      // 1. Crear registre inicial a la base de dades
-      const generationId = await this.createGenerationRecord(config);
-      
-      // 2. Extreure placeholders del template
-      const placeholders = this.extractPlaceholders(config.templateContent);
-      console.log(`📝 [SmartProcessor] Placeholders trobats:`, placeholders.map(p => p.id));
-
-      // 3. Construir prompt global intel·ligent
-      const globalPrompt = this.buildGlobalPrompt(
-        config.templateContent,
-        config.excelData,
-        placeholders
-      );
-
-      // 4. Crida única a Mistral AI (la màgia!)
-      const aiResponse = await this.callMistralAI(globalPrompt, config.excelData.length);
-      
-      if (!aiResponse.success) {
-        throw new Error(`Error en crida Mistral AI: ${aiResponse.errorMessage}`);
-      }
-
-      // 5. Generar documents DOCX amb format preservat
-      const documents = await this.generateDocxFiles(
-        aiResponse.documentsData,
-        config.templateStoragePath,
-        config.excelData,
-        generationId
-      );
-
-      // 6. Actualitzar registre amb resultats
-      const processingTime = Date.now() - startTime;
-      await this.updateGenerationRecord(generationId, {
-        status: 'completed',
-        generated_documents: documents,
-        processing_time: processingTime,
-        completed_at: new Date().toISOString(),
-      });
-
-      // 7. Calcular mètriques de rendiment
-      this.performanceMetrics.totalProcessingTime = processingTime;
-      this.performanceMetrics.documentsPerSecond = documents.length / (processingTime / 1000);
-
-      console.log(`✅ [SmartProcessor] Processament completat:`, {
-        generationId,
-        documentsGenerated: documents.length,
-        processingTimeMs: processingTime,
-        documentsPerSecond: this.performanceMetrics.documentsPerSecond.toFixed(2),
-      });
-
-      return {
-        success: true,
-        generationId,
-        documentsGenerated: documents.length,
-        processingTimeMs: processingTime,
-        documents,
-      };
-
-    } catch (error) {
-      const errorMessage = error instanceof Error ? error.message : 'Error desconegut';
-      console.error(`❌ [SmartProcessor] Error crític en processament batch: ${errorMessage}`, error);
-      
-      // Actualitzar registre amb error si existeix generationId
-      
-      return {
-        success: false,
-        generationId: '',
-        documentsGenerated: 0,
-        processingTimeMs: Date.now() - startTime,
-        documents: [],
-        errorMessage,
-      };
-    }
-  }
-
-  // ============================================================================
-  // EXTRACCIÓ DE PLACEHOLDERS
-  // ============================================================================
-
-  /**
-   * Extreu placeholders intel·ligents del template
-   * Format: {ID: instrucció completa}
-   */
-  private extractPlaceholders(templateContent: string): SmartPlaceholder[] {
-    const placeholders: SmartPlaceholder[] = [];
-    
-    // Regex per trobar placeholders format {ID: instrucció}
-    const placeholderRegex = /\{([A-Z_]+):\s*([^}]+)\}/g;
-    let match;
-
-    while ((match = placeholderRegex.exec(templateContent)) !== null) {
-      const [, id, instruction] = match;
-      
-      placeholders.push({
-        id: id.trim(),
-        instruction: instruction.trim(),
-      });
-    }
-
-    // Eliminar duplicats
-    const uniquePlaceholders = placeholders.filter((placeholder, index, self) =>
-      index === self.findIndex(p => p.id === placeholder.id)
-    );
-
-    return uniquePlaceholders;
-  }
-
-  // ============================================================================
-  // CONSTRUCCIÓ DEL PROMPT INDIVIDUAL (NOU)
-  // ============================================================================
-
-  /**
-   * Construeix un prompt ultra-optimitzat per a un únic document
-   * Aquest prompt és molt més eficient que buildGlobalPrompt per a un sol document
-   */
-  private buildSingleDocumentPrompt(
-    templateContent: string,
-    rowData: any,
-    placeholders: SmartPlaceholder[]
-  ): string {
-    return `
-TASCA: Genera contingut per UN ÚNIC document professional
-
-PLANTILLA:
-${templateContent}
-
-PLACEHOLDERS A SUBSTITUIR (${placeholders.length}):
-${placeholders.map(p => `- {${p.id}}: ${p.instruction}`).join('\n')}
-
-DADES D'AQUEST DOCUMENT:
-${JSON.stringify(rowData, null, 2)}
-
-INSTRUCCIONS:
-1. Substitueix TOTS els placeholders amb contingut adequat basat en les dades
-2. Mantén coherència gramatical i concordança de gènere/nombre
-3. Formata números, dates i imports segons estàndards catalans
-4. Utilitza un to professional i formal
-
-FORMAT DE SORTIDA:
-Retorna NOMÉS un objecte JSON amb els placeholders com a claus i el contingut generat com a valors.
-
-EXEMPLE:
-{
-  "CONTRACTISTA": "La contractista Maria Soler i Associats, S.L.",
-  "OBRA": "la reforma integral de les oficines centrals",
-  "IMPORT": "12.345,67 €"
-}
-
-RESPOSTA (només l'objecte JSON):
-`;
-  }
-
-  // ============================================================================
-  // CONSTRUCCIÓ DEL PROMPT GLOBAL (EXISTENT)
-  // ============================================================================
-
-  /**
-   * Construeix el prompt global intel·ligent per Mistral AI
-   * Aquest prompt és la clau de la coherència narrativa
-   */
-  private buildGlobalPrompt(
-    templateContent: string,
-    excelData: any[],
-    placeholders: SmartPlaceholder[]
-  ): string {
-    return `
-TASCA CRÍTICA: Processament Intel·ligent de Documents amb Coherència Narrativa
-
-Ets un expert en generació de documents professionals amb coherència lingüística perfecta.
-Processa aquest document substituint TOTS els placeholders mantenint coherència narrativa absoluta.
-
-DOCUMENT PLANTILLA:
-${templateContent}
-
-PLACEHOLDERS IDENTIFICATS (${placeholders.length}):
-${placeholders.map(p => `- {${p.id}}: ${p.instruction}`).join('\n')}
-
-DADES EXCEL (${excelData.length} files a processar):
-${JSON.stringify(excelData, null, 2)}
-
-INSTRUCCIONS ESPECÍFIQUES:
-1. Per cada fila de dades Excel, genera un document complet
-2. Substitueix TOTS els placeholders {ID: instrucció} segons les seves instruccions específiques
-3. Mantén coherència narrativa i gramatical en cada document individual
-4. Assegura concordança de gènere i nombre al llarg de tot el text
-5. Utilitza el context global per decisions intel·ligents (ex: si un contractista és dona, usa "La contractista")
-6. Formata números, dates i imports segons estàndards catalans/espanyols
-7. Mantén el to professional i formal apropiat per documents oficials
-
-FORMAT DE SORTIDA OBLIGATORI:
-Retorna un array JSON amb ${excelData.length} objectes, un per cada document.
-Cada objecte ha de tenir com a claus els IDs dels placeholders i com a valors el text final.
-
-EXEMPLE DE FORMAT:
-[
-  {
-    "CONTRACTISTA": "La contractista Maria Soler i Associats, S.L.",
-    "OBRA": "la reforma integral de les oficines centrals",
-    "IMPORT": "12.345,67 €"
-  },
-  {
-    "CONTRACTISTA": "El contractista Joan Pérez",
-    "OBRA": "la construcció del nou magatzem industrial",
-    "IMPORT": "25.000,00 €"
-  }
-]
-
-DOCUMENTS PROCESSATS (retorna només l'array JSON):
-`;
-  }
-
-  // ============================================================================
-  // CRIDA A MISTRAL AI INDIVIDUAL (NOU)
-  // ============================================================================
-
-  /**
-   * Crida optimitzada a Mistral AI per a un sol document amb resiliència integrada
-   * Aquesta crida està específicament dissenyada per a velocitat màxima i fiabilitat
-   */
-  private async callMistralAISingle(prompt: string): Promise<MistralResponse> {
-    const aiStartTime = Date.now();
-    const TIMEOUT_MS = 90000; // 90 segons timeout per a un sol document
-    
-    const logContext = {
-      component: 'SmartDocumentProcessor',
-      function: 'callMistralAISingle',
-    };
-
-    try {
-      logger.info('Iniciant crida optimitzada a Mistral AI amb resiliència', logContext);
-
-      // Funció de crida a Mistral que serà reintentada
-      const callMistralAPI = async (): Promise<{ data: any; aiContent: string }> => {
-        // Crear AbortController per timeout controlat
-        const controller = new AbortController();
-        const timeoutId = setTimeout(() => controller.abort(), TIMEOUT_MS);
-
-        try {
-          const response = await fetch('https://api.mistral.ai/v1/chat/completions', {
-            method: 'POST',
-            headers: {
-              'Content-Type': 'application/json',
-              'Authorization': `Bearer ${this.mistralApiKey}`,
-            },
-            signal: controller.signal,
-            body: JSON.stringify({
-              model: 'mistral-small-latest', // Model més ràpid per documents individuals
-              messages: [
-                {
-                  role: 'user',
-                  content: prompt,
-                },
-              ],
-              temperature: 0.3, // Menys creativitat = més rapidesa
-              max_tokens: 2000, // Límit més restrictiu per a un sol document
-            }),
-          });
-
-          clearTimeout(timeoutId);
-
-          if (!response.ok) {
-            throw new Error(`HTTP ${response.status}: ${response.statusText}`);
-          }
-
-          const data = await response.json();
-          const aiContent = data.choices[0]?.message?.content;
-
-          if (!aiContent) {
-            throw new Error('Resposta buida de Mistral AI');
-          }
-
-          return { data, aiContent };
-
-        } catch (error) {
-          clearTimeout(timeoutId);
-          throw error;
-        }
-      };
-
-      // Executar amb lògica de reintent
-      const { data, aiContent } = await retryAsync(callMistralAPI, {
-        ...DEFAULT_API_RETRY_CONFIG,
-        onRetry: (error, attempt) => {
-          logger.warn(
-            `Reintent ${attempt}/${DEFAULT_API_RETRY_CONFIG.retries} per crida a Mistral AI`,
-            logContext,
-            error
-          );
-        },
-      });
-
-      // Parsejar la resposta JSON
-      const documentData = this.parseAISingleResponse(aiContent);
-      
-      this.performanceMetrics.aiCallTime = Date.now() - aiStartTime;
-      
-      logger.metrics('Crida a Mistral AI completada amb èxit', {
-        aiCallTimeMs: this.performanceMetrics.aiCallTime,
-        tokensUsed: data.usage?.total_tokens || 0,
-      }, logContext);
-
-      return {
-        success: true,
-        documentsData: [documentData], // Empaquetar en array per compatibilitat
-        tokensUsed: data.usage?.total_tokens,
-      };
-
-    } catch (error) {
-      this.performanceMetrics.aiCallTime = Date.now() - aiStartTime;
-      
-      if (error instanceof Error && error.name === 'AbortError') {
-        const errorMessage = `Timeout de la IA després de ${TIMEOUT_MS/1000} segons`;
-        logger.error('Timeout en crida a Mistral AI', error, logContext);
+      // Mapejar directament les dades Excel
+      Object.keys(rowData).forEach(key => {
+        const value = rowData[key];
         
-        return {
-          success: false,
-          documentsData: [],
-          errorMessage,
-        };
-      }
+        // Convertir clau a format placeholder estàndard
+        const placeholder = key.toUpperCase().replace(/\s+/g, '_');
+        templateData[placeholder] = this.formatValue(value);
+        
+        // També mantenir la clau original per compatibilitat
+        templateData[key] = this.formatValue(value);
+      });
       
-      logger.error('Error crític en crida a Mistral AI', error, logContext);
+      // Afegir dades calculades comunes
+      templateData['DATA_ACTUAL'] = new Date().toLocaleDateString('ca-ES');
+      templateData['ANY_ACTUAL'] = new Date().getFullYear().toString();
+      templateData['MES_ACTUAL'] = (new Date().getMonth() + 1).toString().padStart(2, '0');
+      templateData['DIA_ACTUAL'] = new Date().getDate().toString().padStart(2, '0');
       
-      return {
-        success: false,
-        documentsData: [],
-        errorMessage: error instanceof Error ? error.message : 'Error desconegut en Mistral AI',
-      };
-    }
-  }
-
-  /**
-   * Parseja la resposta de Mistral AI per a un sol document
-   */
-  private parseAISingleResponse(aiContent: string): Record<string, string> {
-    try {
-      // Intentar extreure JSON de la resposta
-      const jsonMatch = aiContent.match(/\{[\s\S]*\}/);
-      if (!jsonMatch) {
-        throw new Error('No s\'ha trobat objecte JSON en la resposta');
-      }
-
-      const documentData = JSON.parse(jsonMatch[0]);
-
-      if (typeof documentData !== 'object' || documentData === null) {
-        throw new Error('La resposta no és un objecte vàlid');
-      }
-
-      return documentData;
-
+      console.log(`📋 [PrepareData] ${Object.keys(templateData).length} placeholders preparats`);
+      
+      return templateData;
+      
     } catch (error) {
-      console.error(`❌ [Parser-Single] Error parseant resposta AI:`, error);
-      console.error(`Contingut rebut:`, aiContent.substring(0, 500) + '...');
-      throw new Error(`Error parseant resposta de Mistral AI: ${error instanceof Error ? error.message : 'Error desconegut'}`);
+      console.error(`❌ [PrepareData] Error preparant dades:`, error);
+      throw new Error(`Error preparant dades per plantilla: ${error instanceof Error ? error.message : 'Error desconegut'}`);
     }
   }
 
-  // ============================================================================
-  // CRIDA A MISTRAL AI BATCH (EXISTENT)
-  // ============================================================================
-
   /**
-   * Realitza la crida única a Mistral AI
-   * Aquesta és la crida que substitueix 10+ crides del sistema antic
+   * Formata un valor per inserció en el document
    */
-  private async callMistralAI(prompt: string, expectedDocuments: number): Promise<MistralResponse> {
-    const aiStartTime = Date.now();
+  private formatValue(value: any): string {
+    if (value === null || value === undefined) {
+      return '';
+    }
     
-    try {
-      console.log(`🤖 [MistralAI] Iniciant crida única per ${expectedDocuments} documents...`);
-
-      const response = await fetch('https://api.mistral.ai/v1/chat/completions', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${this.mistralApiKey}`,
-        },
-        body: JSON.stringify({
-          model: SMART_GENERATION_CONSTANTS.MISTRAL_DEFAULTS.MODEL,
-          messages: [
-            {
-              role: 'user',
-              content: prompt,
-            },
-          ],
-          temperature: SMART_GENERATION_CONSTANTS.MISTRAL_DEFAULTS.TEMPERATURE,
-          max_tokens: SMART_GENERATION_CONSTANTS.MISTRAL_DEFAULTS.MAX_TOKENS,
-        }),
+    // Si és un número, formatear segons estàndards catalans
+    if (typeof value === 'number') {
+      return value.toLocaleString('ca-ES', {
+        minimumFractionDigits: 2,
+        maximumFractionDigits: 2,
       });
-
-      if (!response.ok) {
-        throw new Error(`HTTP ${response.status}: ${response.statusText}`);
-      }
-
-      const data = await response.json();
-      const aiContent = data.choices[0]?.message?.content;
-
-      if (!aiContent) {
-        throw new Error('Resposta buida de Mistral AI');
-      }
-
-      // Parsejar la resposta JSON
-      const documentsData = this.parseAIResponse(aiContent, expectedDocuments);
-      
-      this.performanceMetrics.aiCallTime = Date.now() - aiStartTime;
-      
-      console.log(`✅ [MistralAI] Crida completada:`, {
-        documentsProcessed: documentsData.length,
-        aiCallTimeMs: this.performanceMetrics.aiCallTime,
-        tokensUsed: data.usage?.total_tokens || 'N/A',
-      });
-
-      return {
-        success: true,
-        documentsData,
-        tokensUsed: data.usage?.total_tokens,
-      };
-
-    } catch (error) {
-      this.performanceMetrics.aiCallTime = Date.now() - aiStartTime;
-      console.error(`❌ [MistralAI] Error en crida:`, error);
-      
-      return {
-        success: false,
-        documentsData: [],
-        errorMessage: error instanceof Error ? error.message : 'Error desconegut en Mistral AI',
-      };
     }
-  }
-
-  /**
-   * Parseja la resposta de Mistral AI i valida el format
-   */
-  private parseAIResponse(aiContent: string, expectedDocuments: number): Record<string, string>[] {
-    try {
-      // Intentar extreure JSON de la resposta
-      const jsonMatch = aiContent.match(/\[[\s\S]*\]/);
-      if (!jsonMatch) {
-        throw new Error('No s\'ha trobat array JSON en la resposta');
-      }
-
-      const documentsData = JSON.parse(jsonMatch[0]);
-
-      if (!Array.isArray(documentsData)) {
-        throw new Error('La resposta no és un array');
-      }
-
-      if (documentsData.length !== expectedDocuments) {
-        console.warn(`⚠️ [Parser] Documents esperats: ${expectedDocuments}, rebuts: ${documentsData.length}`);
-      }
-
-      // Validar que cada document té les claus necessàries
-      documentsData.forEach((doc, index) => {
-        if (typeof doc !== 'object' || doc === null) {
-          throw new Error(`Document ${index} no és un objecte vàlid`);
-        }
-      });
-
-      return documentsData;
-
-    } catch (error) {
-      console.error(`❌ [Parser] Error parseant resposta AI:`, error);
-      console.error(`Contingut rebut:`, aiContent.substring(0, 500) + '...');
-      throw new Error(`Error parseant resposta de Mistral AI: ${error instanceof Error ? error.message : 'Error desconegut'}`);
+    
+    // Si és una data, formatear
+    if (value instanceof Date) {
+      return value.toLocaleDateString('ca-ES');
     }
+    
+    // Convertir a string i netejar
+    return String(value).trim();
   }
 
   // ============================================================================
-  // GENERACIÓ DE DOCUMENT DOCX INDIVIDUAL (NOU)
+  // GENERACIÓ DOCX SIMPLE
   // ============================================================================
 
   /**
-   * Genera un únic document DOCX de manera optimitzada
-   * Aquest mètode està específicament dissenyat per a generacions individuals
+   * Genera document DOCX amb substitució directa de placeholders
+   * USA: docxtemplater estàndard amb placeholders {{PLACEHOLDER}}
+   * ELIMINA: Tot el sistema complex de parsing JSON
    */
-  private async generateSingleDocx(
-    documentData: Record<string, string>,
-    templateStoragePath: string,
-    rowData: any
-  ): Promise<ProcessedDocument> {
+  private async generateSimpleDocx(
+    templateBuffer: Buffer,
+    templateData: Record<string, string>
+  ): Promise<Buffer> {
     const docxStartTime = Date.now();
     
     try {
-      console.log(`📄 [DocxGenerator-Single] Generant document DOCX individual...`);
+      console.log(`📄 [DocxGenerator-Simple] Generant document amb ${Object.keys(templateData).length} substitucions...`);
 
-      // Descarregar plantilla original
-      const templateBuffer = await this.downloadTemplateFromStorage(templateStoragePath);
-      
-      // Crear instància de docxtemplater
+      // Crear instància de docxtemplater amb configuració simple
       const zip = new PizZip(templateBuffer);
       const doc = new Docxtemplater(zip, {
-        paragraphLoop: SMART_GENERATION_CONSTANTS.DOCX_DEFAULTS.PARAGRAPH_LOOP,
-        linebreaks: SMART_GENERATION_CONSTANTS.DOCX_DEFAULTS.LINEBREAKS,
-        nullGetter: SMART_GENERATION_CONSTANTS.DOCX_DEFAULTS.NULL_GETTER,
+        paragraphLoop: true,
+        linebreaks: true,
+        nullGetter: () => '', // Retornar string buit per placeholders no trobats
+        errorLogging: false, // Desactivar logging d'errors per simplicitat
       });
 
-      // SUBSTITUCIÓ QUIRÚRGICA: només canvia el text dins de les etiquetes XML
-      doc.setData(documentData);
+      // Aplicar substitucions directes
+      doc.setData(templateData);
       doc.render();
 
       // Generar buffer del document final
       const documentBuffer = doc.getZip().generate({ type: 'nodebuffer' });
-
-      // Per a generacions individuals, no pugem a storage per defecte
-      // (es pot afegir en el futur si es necessita)
       
       this.performanceMetrics.docxGenerationTime = Date.now() - docxStartTime;
       
-      console.log(`✅ [DocxGenerator-Single] Document generat:`, {
-        docxGenerationTimeMs: this.performanceMetrics.docxGenerationTime,
-      });
+      console.log(`✅ [DocxGenerator-Simple] Document generat en ${this.performanceMetrics.docxGenerationTime}ms`);
 
-      return {
-        documentIndex: 0,
-        rowData: rowData,
-        placeholderValues: documentData,
-        documentBuffer,
-        storagePath: '', // No storage per defecte en mode individual
-      } as ProcessedDocument;
+      return documentBuffer;
 
     } catch (error) {
-      console.error(`❌ [DocxGenerator-Single] Error generant document:`, error);
-      throw error;
+      console.error(`❌ [DocxGenerator-Simple] Error generant document:`, error);
+      
+      // Si és un error de docxtemplater, proporcionar informació útil
+      if (error instanceof Error && 'properties' in error) {
+        const docxError = error as any;
+        console.error(`❌ [DocxGenerator-Simple] Error detallat:`, {
+          message: docxError.message,
+          properties: docxError.properties,
+        });
+      }
+      
+      throw new Error(`Error generant document DOCX: ${error instanceof Error ? error.message : 'Error desconegut'}`);
     }
   }
 
   // ============================================================================
-  // GENERACIÓ DE DOCUMENTS DOCX BATCH (EXISTENT)
-  // ============================================================================
-
-  /**
-   * Genera documents DOCX finals amb format preservat
-   * Utilitza docxtemplater per substitució quirúrgica
-   */
-  private async generateDocxFiles(
-    documentsData: Record<string, string>[],
-    templateStoragePath: string,
-    excelData: any[],
-    generationId: string
-  ): Promise<ProcessedDocument[]> {
-    const docxStartTime = Date.now();
-    
-    try {
-      console.log(`📄 [DocxGenerator] Generant ${documentsData.length} documents DOCX...`);
-
-      // Descarregar plantilla original UNA SOLA VEGADA
-      const templateBuffer = await this.downloadTemplateFromStorage(templateStoragePath);
-      
-      const processedDocuments: ProcessedDocument[] = [];
-
-      // Processar cada document en paral·lel (optimització)
-      const documentPromises = documentsData.map(async (docData, index) => {
-        try {
-          // Crear nova instància de docxtemplater per cada document
-          const zip = new PizZip(templateBuffer);
-          const doc = new Docxtemplater(zip, {
-            paragraphLoop: SMART_GENERATION_CONSTANTS.DOCX_DEFAULTS.PARAGRAPH_LOOP,
-            linebreaks: SMART_GENERATION_CONSTANTS.DOCX_DEFAULTS.LINEBREAKS,
-            nullGetter: SMART_GENERATION_CONSTANTS.DOCX_DEFAULTS.NULL_GETTER,
-          });
-
-          // SUBSTITUCIÓ QUIRÚRGICA: només canvia el text dins de les etiquetes XML
-          doc.setData(docData);
-          doc.render();
-
-          // Generar buffer del document final
-          const documentBuffer = doc.getZip().generate({ type: 'nodebuffer' });
-
-          // Pujar document a Storage
-          const storagePath = await this.uploadDocumentToStorage(
-            documentBuffer,
-            generationId,
-            index
-          );
-
-          return {
-            documentIndex: index,
-            rowData: excelData[index] || {},
-            placeholderValues: docData,
-            documentBuffer,
-            storagePath,
-          } as ProcessedDocument;
-
-        } catch (error) {
-          console.error(`❌ [DocxGenerator] Error generant document ${index}:`, error);
-          throw error;
-        }
-      });
-
-      // Esperar que tots els documents es processin
-      const results = await Promise.all(documentPromises);
-      processedDocuments.push(...results);
-
-      this.performanceMetrics.docxGenerationTime = Date.now() - docxStartTime;
-      
-      console.log(`✅ [DocxGenerator] Documents generats:`, {
-        totalDocuments: processedDocuments.length,
-        docxGenerationTimeMs: this.performanceMetrics.docxGenerationTime,
-      });
-
-      return processedDocuments;
-
-    } catch (error) {
-      console.error(`❌ [DocxGenerator] Error en generació DOCX:`, error);
-      throw error;
-    }
-  }
-
-  // ============================================================================
-  // GESTIÓ DE STORAGE
+  // GESTIÓ DE STORAGE SIMPLIFICADA
   // ============================================================================
 
   /**
    * Descarrega la plantilla original de Supabase Storage
    */
   private async downloadTemplateFromStorage(templatePath: string): Promise<Buffer> {
+    const downloadStartTime = Date.now();
     const STORAGE_TIMEOUT_MS = 30000; // 30 segons de timeout
 
     const downloadOperation = async () => {
+      console.log(`📥 [Storage] Descarregant plantilla: ${templatePath}`);
+      
       const { data, error } = await this.supabase.storage
         .from('template-docx')
         .download(templatePath);
@@ -766,113 +260,22 @@ DOCUMENTS PROCESSATS (retorna només l'array JSON):
         throw new Error('No s\'han rebut dades de la plantilla de Storage');
       }
 
-      return Buffer.from(await data.arrayBuffer());
+      const buffer = Buffer.from(await data.arrayBuffer());
+      console.log(`✅ [Storage] Plantilla descarregada: ${buffer.length} bytes`);
+      
+      return buffer;
     };
 
     try {
       const timeoutMessage = `Timeout de descàrrega de plantilla '${templatePath}' després de ${STORAGE_TIMEOUT_MS / 1000} segons`;
-      return await withTimeout(downloadOperation(), STORAGE_TIMEOUT_MS, timeoutMessage);
-    } catch (error) {
-        console.error(`❌ [Storage] Error en la descàrrega de la plantilla:`, error);
-        // Rellençar l'error per a que sigui capturat pel processador principal
-        throw error;
-    }
-  }
-
-  /**
-   * Puja document generat a Supabase Storage
-   */
-  private async uploadDocumentToStorage(
-    documentBuffer: Buffer,
-    generationId: string,
-    documentIndex: number
-  ): Promise<string> {
-    const uploadStartTime = Date.now();
-    
-    try {
-      const fileName = `document_${documentIndex + 1}.docx`;
-      const storagePath = `${SMART_GENERATION_CONSTANTS.STORAGE.BASE_PATH}/${generationId}/${fileName}`;
-
-      const { error } = await this.supabase.storage
-        .from(SMART_GENERATION_CONSTANTS.STORAGE.BUCKET)
-        .upload(storagePath, documentBuffer, {
-          contentType: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
-          upsert: true,
-        });
-
-      if (error) {
-        throw new Error(`Error pujant document: ${error.message}`);
-      }
-
-      this.performanceMetrics.storageUploadTime += Date.now() - uploadStartTime;
+      const buffer = await withTimeout(downloadOperation(), STORAGE_TIMEOUT_MS, timeoutMessage);
       
-      return storagePath;
-
+      this.performanceMetrics.storageDownloadTime = Date.now() - downloadStartTime;
+      
+      return buffer;
+      
     } catch (error) {
-      console.error(`❌ [Storage] Error pujant document ${documentIndex}:`, error);
-      throw error;
-    }
-  }
-
-  // ============================================================================
-  // GESTIÓ DE BASE DE DADES
-  // ============================================================================
-
-  /**
-   * Crea registre inicial a smart_generations
-   */
-  private async createGenerationRecord(config: BatchProcessingConfig): Promise<string> {
-    try {
-      const { data, error } = await this.supabase
-        .from('smart_generations')
-        .insert({
-          user_id: config.userId,
-          template_id: config.templateId,
-          template_content: config.templateContent,
-          excel_data: config.excelData,
-          num_documents: config.excelData.length,
-          status: 'processing',
-        })
-        .select('id')
-        .single();
-
-      if (error) {
-        throw new Error(`Error creant registre: ${error.message}`);
-      }
-
-      return data.id;
-
-    } catch (error) {
-      console.error(`❌ [Database] Error creant registre:`, error);
-      throw error;
-    }
-  }
-
-  /**
-   * Actualitza registre amb resultats
-   */
-  private async updateGenerationRecord(
-    generationId: string,
-    updates: Partial<{
-      status: string;
-      generated_documents: ProcessedDocument[];
-      processing_time: number;
-      completed_at: string;
-      error_message: string;
-    }>
-  ): Promise<void> {
-    try {
-      const { error } = await this.supabase
-        .from('smart_generations')
-        .update(updates)
-        .eq('id', generationId);
-
-      if (error) {
-        throw new Error(`Error actualitzant registre: ${error.message}`);
-      }
-
-    } catch (error) {
-      console.error(`❌ [Database] Error actualitzant registre:`, error);
+      console.error(`❌ [Storage] Error en la descàrrega de la plantilla:`, error);
       throw error;
     }
   }
@@ -889,25 +292,51 @@ DOCUMENTS PROCESSATS (retorna només l'array JSON):
   }
 
   /**
-   * Valida configuració abans del processament
+   * Valida que les dades Excel són vàlides per processament
    */
-  public validateConfig(config: BatchProcessingConfig): { valid: boolean; errors: string[] } {
+  public validateExcelData(rowData: any): { valid: boolean; errors: string[] } {
     const errors: string[] = [];
 
-    if (!config.templateId) errors.push('Template ID és obligatori');
-    if (!config.templateContent) errors.push('Template content és obligatori');
-    if (!config.templateStoragePath) errors.push('Template storage path és obligatori');
-    if (!config.userId) errors.push('User ID és obligatori');
-    if (!Array.isArray(config.excelData) || config.excelData.length === 0) {
-      errors.push('Excel data ha de ser un array no buit');
-    }
-    if (config.excelData.length > SMART_GENERATION_CONSTANTS.LIMITS.MAX_DOCUMENTS_PER_BATCH) {
-      errors.push(`Màxim ${SMART_GENERATION_CONSTANTS.LIMITS.MAX_DOCUMENTS_PER_BATCH} documents per batch`);
+    if (!rowData || typeof rowData !== 'object') {
+      errors.push('Les dades Excel han de ser un objecte vàlid');
+    } else {
+      const keys = Object.keys(rowData);
+      if (keys.length === 0) {
+        errors.push('Les dades Excel no poden estar buides');
+      }
+      
+      // Verificar que hi ha almenys algunes dades útils
+      const hasValidData = keys.some(key => {
+        const value = rowData[key];
+        return value !== null && value !== undefined && String(value).trim() !== '';
+      });
+      
+      if (!hasValidData) {
+        errors.push('Les dades Excel han de contenir almenys un valor vàlid');
+      }
     }
 
     return {
       valid: errors.length === 0,
       errors,
     };
+  }
+
+  /**
+   * Extreu placeholders del contingut de la plantilla (per debug)
+   */
+  public extractPlaceholdersFromTemplate(templateContent: string): string[] {
+    const placeholderRegex = /\{\{([^}]+)\}\}/g;
+    const placeholders: string[] = [];
+    let match;
+
+    while ((match = placeholderRegex.exec(templateContent)) !== null) {
+      const placeholder = match[1].trim();
+      if (!placeholders.includes(placeholder)) {
+        placeholders.push(placeholder);
+      }
+    }
+
+    return placeholders;
   }
 }

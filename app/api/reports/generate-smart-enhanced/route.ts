@@ -235,17 +235,15 @@ export async function POST(request: NextRequest) {
         throw new Error(result.errorMessage || 'Error en processament');
       }
       
-      // Actualitzar la generació amb el resultat
-      const docResult = result.documents[0];
-      const placeholderMapping = Object.entries(docResult.placeholderValues)
-        .map(([key, value]) => ({ placeholder: key, generatedContent: value }));
+      // Actualitzar la generació amb el resultat - VERSIÓ SIMPLIFICADA
+      if (!result.documentBuffer) {
+        throw new Error('No s\'ha generat cap document');
+      }
       
       const { error: updateError } = await supabase
         .from('generations')
         .update({
           status: 'generated',
-          content: JSON.stringify(placeholderMapping),
-          document_path: docResult.storagePath,
           updated_at: new Date().toISOString(),
           error_message: null
         })
@@ -257,11 +255,13 @@ export async function POST(request: NextRequest) {
       
       console.log(`✅ [API-Trigger] Generació ${generationId} completada amb èxit`);
       
-      return NextResponse.json({
-        success: true,
-        generationId: generationId,
-        message: 'Generació completada amb èxit',
-        documentPath: docResult.storagePath
+      // Retornar document directament per descàrrega
+      return new Response(result.documentBuffer, {
+        status: 200,
+        headers: {
+          'Content-Type': 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+          'Content-Disposition': `attachment; filename="informe_${generationId}.docx"`,
+        },
       });
       
     } catch (error) {
