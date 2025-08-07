@@ -39,15 +39,15 @@ export async function POST(request: NextRequest) {
 
   try {
     // ========== DEBUG LOGGING DETALLAT DEL WORKER ==========
-    console.log('[DEBUG WORKER] ========== Inici Worker ==========');
-    console.log('[DEBUG WORKER] Request method:', request.method);
-    console.log('[DEBUG WORKER] Request URL:', request.url);
-    console.log('[DEBUG WORKER] All headers received:', Object.fromEntries(request.headers.entries()));
-    console.log('[DEBUG WORKER] Auth header raw:', request.headers.get('Authorization'));
-    console.log('[DEBUG WORKER] Content-Type header:', request.headers.get('Content-Type'));
-    console.log('[DEBUG WORKER] User-Agent header:', request.headers.get('User-Agent'));
-    console.log('[DEBUG WORKER] x-internal-request header:', request.headers.get('x-internal-request'));
-    console.log('[DEBUG WORKER] x-vercel-protection-bypass header:', request.headers.get('x-vercel-protection-bypass'));
+    console.error('[DEBUG WORKER] ========== Inici Worker ==========');
+    console.error('[DEBUG WORKER] Request method:', request.method);
+    console.error('[DEBUG WORKER] Request URL:', request.url);
+    console.error('[DEBUG WORKER] All headers received:', Object.fromEntries(request.headers.entries()));
+    console.error('[DEBUG WORKER] Auth header raw:', request.headers.get('Authorization'));
+    console.error('[DEBUG WORKER] Content-Type header:', request.headers.get('Content-Type'));
+    console.error('[DEBUG WORKER] User-Agent header:', request.headers.get('User-Agent'));
+    console.error('[DEBUG WORKER] x-internal-request header:', request.headers.get('x-internal-request'));
+    console.error('[DEBUG WORKER] x-vercel-protection-bypass header:', request.headers.get('x-vercel-protection-bypass'));
     
     // 1. Verificació del Secret del Worker
     // 1. Verificació del Secret del Worker usant l'estàndard 'Authorization: Bearer'
@@ -57,17 +57,17 @@ export async function POST(request: NextRequest) {
     const authToken = authHeader?.replace('Bearer ', '');
     const expectedToken = process.env.WORKER_SECRET_TOKEN;
 
-    console.log('[DEBUG WORKER] ========== Token Validation ==========');
-    console.log('[DEBUG WORKER] Auth header exists:', !!authHeader);
-    console.log('[DEBUG WORKER] Auth header value:', authHeader);
-    console.log('[DEBUG WORKER] Auth token extracted:', authToken);
-    console.log('[DEBUG WORKER] Auth token length:', authToken?.length);
-    console.log('[DEBUG WORKER] Auth token prefix:', authToken?.substring(0, 10));
-    console.log('[DEBUG WORKER] Expected token exists:', !!expectedToken);
-    console.log('[DEBUG WORKER] Expected token length:', expectedToken?.length);
-    console.log('[DEBUG WORKER] Expected token prefix:', expectedToken?.substring(0, 10));
-    console.log('[DEBUG WORKER] Tokens match (exact):', authToken?.trim() === expectedToken?.trim());
-    console.log('[DEBUG WORKER] ================================================');
+    console.error('[DEBUG WORKER] ========== Token Validation ==========');
+    console.error('[DEBUG WORKER] Auth header exists:', !!authHeader);
+    console.error('[DEBUG WORKER] Auth header value:', authHeader);
+    console.error('[DEBUG WORKER] Auth token extracted:', authToken);
+    console.error('[DEBUG WORKER] Auth token length:', authToken?.length);
+    console.error('[DEBUG WORKER] Auth token prefix:', authToken?.substring(0, 10));
+    console.error('[DEBUG WORKER] Expected token exists:', !!expectedToken);
+    console.error('[DEBUG WORKER] Expected token length:', expectedToken?.length);
+    console.error('[DEBUG WORKER] Expected token prefix:', expectedToken?.substring(0, 10));
+    console.error('[DEBUG WORKER] Tokens match (exact):', authToken?.trim() === expectedToken?.trim());
+    console.error('[DEBUG WORKER] ================================================');
 
     if (!expectedToken) {
       console.error('[DEBUG WORKER] CRITICAL: WORKER_SECRET_TOKEN not configured');
@@ -91,7 +91,7 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ success: false, error: 'Accés no autoritzat' }, { status: 401 });
     }
 
-    console.log('[DEBUG WORKER] ✅ Token validation successful');
+    console.error('[DEBUG WORKER] ✅ Token validation successful');
 
     logger.info('Processant nova tasca de generació amb sistema millorat', logContext);
 

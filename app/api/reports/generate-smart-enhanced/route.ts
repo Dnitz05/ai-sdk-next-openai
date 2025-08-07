@@ -187,20 +187,20 @@ export async function POST(request: NextRequest) {
       }
 
       // ========== DEBUG LOGGING DETALLAT ==========
-      console.log('[DEBUG TRIGGER] ========== Inici Debug Worker ==========');
-      console.log('[DEBUG TRIGGER] Worker URL construida:', constructedUrl);
-      console.log('[DEBUG TRIGGER] Worker URL usada:', workerUrl);
-      console.log('[DEBUG TRIGGER] Use fixed URL:', useFixedUrl);
-      console.log('[DEBUG TRIGGER] Protocol:', protocol);
-      console.log('[DEBUG TRIGGER] Host:', host);
-      console.log('[DEBUG TRIGGER] Base URL:', baseUrl);
-      console.log('[DEBUG TRIGGER] Token disponible:', !!workerToken);
-      console.log('[DEBUG TRIGGER] Token length:', workerToken?.length);
-      console.log('[DEBUG TRIGGER] Token prefix:', workerToken?.substring(0, 10));
-      console.log('[DEBUG TRIGGER] User ID:', user.id);
-      console.log('[DEBUG TRIGGER] Project ID:', projectId);
-      console.log('[DEBUG TRIGGER] Generation ID:', generationId);
-      console.log('[DEBUG TRIGGER] ================================================');
+      console.error('[DEBUG TRIGGER] ========== Inici Debug Worker ==========');
+      console.error('[DEBUG TRIGGER] Worker URL construida:', constructedUrl);
+      console.error('[DEBUG TRIGGER] Worker URL usada:', workerUrl);
+      console.error('[DEBUG TRIGGER] Use fixed URL:', useFixedUrl);
+      console.error('[DEBUG TRIGGER] Protocol:', protocol);
+      console.error('[DEBUG TRIGGER] Host:', host);
+      console.error('[DEBUG TRIGGER] Base URL:', baseUrl);
+      console.error('[DEBUG TRIGGER] Token disponible:', !!workerToken);
+      console.error('[DEBUG TRIGGER] Token length:', workerToken?.length);
+      console.error('[DEBUG TRIGGER] Token prefix:', workerToken?.substring(0, 10));
+      console.error('[DEBUG TRIGGER] User ID:', user.id);
+      console.error('[DEBUG TRIGGER] Project ID:', projectId);
+      console.error('[DEBUG TRIGGER] Generation ID:', generationId);
+      console.error('[DEBUG TRIGGER] ================================================');
       
       // CANVI CLAU: Ara fem 'await' i gestionem la resposta del worker
       const workerResponse = await fetch(workerUrl, {
