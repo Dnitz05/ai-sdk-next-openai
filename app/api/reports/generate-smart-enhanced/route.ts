@@ -170,7 +170,12 @@ export async function POST(request: NextRequest) {
     const protocol = request.headers.get('x-forwarded-proto') || 'http';
     const host = request.headers.get('host') || 'localhost:3000';
     const baseUrl = `${protocol}://${host}`;
-    const workerUrl = `${baseUrl}/api/worker/generation-processor`;
+    const constructedUrl = `${baseUrl}/api/worker/generation-processor`;
+
+    // TODO: ELIMINAR DESPRÉS DEL DEBUG - URL hardcodejada temporalment
+    const FIXED_WORKER_URL = 'https://ai-sdk-next-openai-94c61ocle-dnitzs-projects.vercel.app/api/worker/generation-processor';
+    const useFixedUrl = true; // Canviar a false per usar URL dinàmica
+    const workerUrl = useFixedUrl ? FIXED_WORKER_URL : constructedUrl;
 
     console.log(`🔧 [API-Trigger] Invocant worker a: ${workerUrl}`);
 
@@ -180,13 +185,32 @@ export async function POST(request: NextRequest) {
       if (!workerToken) {
         throw new Error('WORKER_SECRET_TOKEN no està configurat al servidor trigger.');
       }
+
+      // ========== DEBUG LOGGING DETALLAT ==========
+      console.log('[DEBUG TRIGGER] ========== Inici Debug Worker ==========');
+      console.log('[DEBUG TRIGGER] Worker URL construida:', constructedUrl);
+      console.log('[DEBUG TRIGGER] Worker URL usada:', workerUrl);
+      console.log('[DEBUG TRIGGER] Use fixed URL:', useFixedUrl);
+      console.log('[DEBUG TRIGGER] Protocol:', protocol);
+      console.log('[DEBUG TRIGGER] Host:', host);
+      console.log('[DEBUG TRIGGER] Base URL:', baseUrl);
+      console.log('[DEBUG TRIGGER] Token disponible:', !!workerToken);
+      console.log('[DEBUG TRIGGER] Token length:', workerToken?.length);
+      console.log('[DEBUG TRIGGER] Token prefix:', workerToken?.substring(0, 10));
+      console.log('[DEBUG TRIGGER] User ID:', user.id);
+      console.log('[DEBUG TRIGGER] Project ID:', projectId);
+      console.log('[DEBUG TRIGGER] Generation ID:', generationId);
+      console.log('[DEBUG TRIGGER] ================================================');
       
       // CANVI CLAU: Ara fem 'await' i gestionem la resposta del worker
       const workerResponse = await fetch(workerUrl, {
         method: 'POST',
         headers: {
+          'Authorization': `Bearer ${workerToken}`, // Primer per visibilitat
           'Content-Type': 'application/json',
-          'Authorization': `Bearer ${workerToken}`
+          'x-vercel-protection-bypass': process.env.VERCEL_PROTECTION_BYPASS || '',
+          'User-Agent': 'Internal-Worker-Call',
+          'x-internal-request': 'true'
         },
         body: JSON.stringify({
           projectId,
@@ -200,21 +224,42 @@ export async function POST(request: NextRequest) {
       // Comprovar si el worker ha respost correctament
       if (!workerResponse.ok) {
         let errorMessage;
+        let errorText = '';
         const contentType = workerResponse.headers.get('content-type');
+        
+        // ========== DEBUG ERROR LOGGING DETALLAT ==========
+        console.error('[DEBUG TRIGGER] ========== Worker Error Details ==========');
+        console.error('[DEBUG TRIGGER] Worker response status:', workerResponse.status);
+        console.error('[DEBUG TRIGGER] Worker response statusText:', workerResponse.statusText);
+        console.error('[DEBUG TRIGGER] Worker response headers:', Object.fromEntries(workerResponse.headers.entries()));
+        console.error('[DEBUG TRIGGER] Worker response content-type:', contentType);
+        
+        try {
+          errorText = await workerResponse.text();
+          console.error('[DEBUG TRIGGER] Worker response body:', errorText);
+        } catch (textError) {
+          console.error('[DEBUG TRIGGER] Error reading worker response body:', textError);
+          errorText = 'Could not read response body';
+        }
         
         // Si la resposta sembla JSON, la parsegem. Si no, agafem el text.
         if (contentType && contentType.includes('application/json')) {
           try {
-            const errorData = await workerResponse.json();
+            const errorData = JSON.parse(errorText);
             errorMessage = errorData.error || errorData.details || `El worker ha fallat amb estat ${workerResponse.status}`;
+            console.error('[DEBUG TRIGGER] Parsed JSON error:', errorData);
           } catch (e) {
             errorMessage = `El worker ha retornat una resposta JSON invàlida amb estat ${workerResponse.status}`;
+            console.error('[DEBUG TRIGGER] JSON parse error:', e);
           }
         } else {
           // La resposta no és JSON (probablement una pàgina d'error HTML de Vercel)
           errorMessage = `El worker ha retornat una resposta no esperada (possiblement un error d'infraestructura) amb estat ${workerResponse.status}`;
+          console.error('[DEBUG TRIGGER] Non-JSON response detected');
         }
         
+        console.error('[DEBUG TRIGGER] Final error message:', errorMessage);
+        console.error('[DEBUG TRIGGER] ================================================');
         console.error(`❌ [API-Trigger] El worker ha fallat (Estat ${workerResponse.status}):`, errorMessage);
 
         // --- BLINDATGE FIABLE DE L'ESTAT D'ERROR ---
