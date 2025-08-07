@@ -101,7 +101,7 @@ export async function POST(request: NextRequest) {
     console.log(`🚀 [Migration] Iniciant sistema de migració universal`);
 
     const body = await request.json();
-    const { mode = 'single', templateId, dryRun = false, adminMode = false } = body;
+    const { mode = 'single', templateId, dryRun = false, adminMode = false, force = false } = body;
 
     // Per operacions administratives, saltar autenticació d'usuari
     if (!adminMode) {
@@ -126,7 +126,7 @@ export async function POST(request: NextRequest) {
         );
       }
 
-      const result = await migrateTemplate(templateId, dryRun);
+      const result = await migrateTemplate(templateId, dryRun, force);
       return NextResponse.json(result);
       
     } else if (mode === 'all') {
@@ -163,7 +163,7 @@ export async function POST(request: NextRequest) {
 // MIGRACIÓ D'UNA PLANTILLA
 // ============================================================================
 
-async function migrateTemplate(templateId: string, dryRun: boolean = false): Promise<MigrationResult> {
+async function migrateTemplate(templateId: string, dryRun: boolean = false, force: boolean = false): Promise<MigrationResult> {
   try {
     console.log(`🔧 [Migration] Migrant plantilla ${templateId} (dryRun: ${dryRun})`);
 
@@ -217,7 +217,7 @@ async function migrateTemplate(templateId: string, dryRun: boolean = false): Pro
     // 3. Analitzar i migrar contingut
     const migrationResult = await migrateDocumentContent(buffer);
 
-    if (!migrationResult.hasLegacyContent) {
+    if (!migrationResult.hasLegacyContent && !force) {
       return { 
         templateId, 
         success: true, 
@@ -225,6 +225,10 @@ async function migrateTemplate(templateId: string, dryRun: boolean = false): Pro
         stats: migrationResult.stats,
         originalPath: docxPath
       };
+    }
+
+    if (force) {
+      console.log(`🔧 [Migration] Mode FORCE activat - re-processant plantilla independentment de l'estat`);
     }
 
     console.log(`🔄 [Migration] Contingut legacy detectat, migrant...`);
@@ -478,13 +482,148 @@ async function analyzeAllTemplates(): Promise<{
 }
 
 // ============================================================================
+// UNIFICACIÓ DE PLACEHOLDERS TRENCATS
+// ============================================================================
+
+function unifyBrokenPlaceholders(content: string): string {
+  console.log(`🔧 [Migration] Iniciant unificació de placeholders trencats...`);
+  
+  // 1. Trobar i unificar placeholders trencats genèrics
+  // Pattern: {{QUAL...SEVOL}} dividit entre tags XML
+  content = content.replace(
+    /(\{\{[^}<>]*)<\/\w+[^>]*>[^<]*<\w+[^>]*>([^}<>]*\}\})/g,
+    '$1$2'
+  );
+  
+  // 2. Cas específic: PLACEHOLDER trencat
+  content = content.replace(
+    /\{\{PLAC<\/\w+[^>]*>[^<]*<\w+[^>]*>EHOLDER\}\}/g,
+    '{{PLACEHOLDER}}'
+  );
+  
+  // 3. Netejar espais i salts de línia dins placeholders
+  content = content.replace(
+    /\{\{([^}]+)\}\}/g,
+    (match, inner) => `{{${inner.replace(/\s+/g, ' ').trim()}}}`
+  );
+  
+  // 4. Unificar qualsevol placeholder trencat genèric
+  // Buscar {{ seguit de contingut, tags XML, més contingut i }}
+  let iterations = 0;
+  let previousContent = '';
+  
+  while (iterations < 5 && content !== previousContent) { // Màxim 5 iteracions per evitar bucles infinits
+    previousContent = content;
+    content = content.replace(
+      /(\{\{[^}<>]*?)(<\/?\w+[^>]*>)+([^}<>]*?\}\})/g,
+      (match, start, tags, end) => {
+        // Eliminar tots els tags XML dins del placeholder
+        console.log(`🔧 [Migration] Unificant placeholder trencat: ${match.substring(0, 50)}...`);
+        return start + end;
+      }
+    );
+    iterations++;
+  }
+  
+  // 5. Casos específics addicionals per placeholders comuns
+  const commonPlaceholders = [
+    { broken: /\{\{NOM<[^>]*>[^<]*<[^>]*>([^}]*)\}\}/g, fixed: '{{NOM}}' },
+    { broken: /\{\{ADREC<[^>]*>[^<]*<[^>]*>A\}\}/g, fixed: '{{ADRECA}}' },
+    { broken: /\{\{IMPORT<[^>]*>[^<]*<[^>]*>([^}]*)\}\}/g, fixed: '{{IMPORT}}' },
+    { broken: /\{\{DATA<[^>]*>[^<]*<[^>]*>([^}]*)\}\}/g, fixed: '{{DATA}}' },
+  ];
+  
+  commonPlaceholders.forEach(({ broken, fixed }) => {
+    if (broken.test(content)) {
+      console.log(`🔧 [Migration] Corregint placeholder comú: ${fixed}`);
+      content = content.replace(broken, fixed);
+    }
+  });
+  
+  console.log(`✅ [Migration] Unificació de placeholders completada`);
+  return content;
+}
+
+// ============================================================================
+// VALIDACIÓ DE PLANTILLA MIGRADA
+// ============================================================================
+
+async function validateMigratedTemplate(buffer: Buffer): Promise<{
+  valid: boolean;
+  issues: string[];
+  placeholderCount: number;
+}> {
+  try {
+    const zip = new PizZip(buffer);
+    const content = zip.file('word/document.xml')?.asText() || '';
+    
+    const issues: string[] = [];
+    
+    // Buscar placeholders trencats
+    const brokenPattern = /\{\{[^}]*<[^>]+>[^}]*\}\}/;
+    if (brokenPattern.test(content)) {
+      issues.push('Placeholders amb tags XML interns detectats');
+    }
+    
+    // Buscar tags parcials
+    if (content.includes('{{PLAC') && !content.includes('{{PLACEHOLDER}}')) {
+      issues.push('Placeholder PLAC incomplet detectat');
+    }
+    
+    // Buscar tags malformats
+    const malformedTags = content.match(/\{[^{]|[^}]\}/g);
+    if (malformedTags && malformedTags.length > 0) {
+      issues.push(`${malformedTags.length} tags malformats detectats`);
+    }
+    
+    // Validar amb docxtemplater
+    try {
+      const Docxtemplater = require('docxtemplater');
+      const doc = new Docxtemplater(zip, {
+        paragraphLoop: true,
+        linebreaks: true,
+        nullGetter: () => ''
+      });
+      doc.render({}); // Prova de renderització buida
+    } catch (e: any) {
+      if (e.properties?.errors) {
+        issues.push(`Errors docxtemplater: ${e.properties.errors.length}`);
+        e.properties.errors.forEach((error: any, index: number) => {
+          issues.push(`  Error ${index + 1}: ${error.properties?.explanation || error.message}`);
+        });
+      } else {
+        issues.push(`Error docxtemplater: ${e.message}`);
+      }
+    }
+    
+    const placeholderCount = (content.match(/\{\{[^}]+\}\}/g) || []).length;
+    
+    return { 
+      valid: issues.length === 0, 
+      issues,
+      placeholderCount
+    };
+  } catch (error) {
+    return {
+      valid: false,
+      issues: [`Error validant plantilla: ${error instanceof Error ? error.message : 'Error desconegut'}`],
+      placeholderCount: 0
+    };
+  }
+}
+
+// ============================================================================
 // MIGRACIÓ DEL CONTINGUT DEL DOCUMENT
 // ============================================================================
 
 async function migrateDocumentContent(buffer: Buffer): Promise<DocumentMigrationResult> {
   try {
     const zip = new PizZip(buffer);
-    const content = zip.file('word/document.xml')?.asText() || '';
+    let content = zip.file('word/document.xml')?.asText() || '';
+    
+    // NOVA FASE: Pre-processament per unificar placeholders trencats
+    console.log(`🔧 [Migration] Aplicant pre-processament per placeholders trencats...`);
+    content = unifyBrokenPlaceholders(content);
     
     let migratedContent = content;
     const stats: MigrationStats = {
