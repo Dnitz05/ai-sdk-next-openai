@@ -123,7 +123,7 @@ export async function POST(request: NextRequest) {
     // --- FASE 3: Validació d'Integritat de la Plantilla (versió robusta) ---
     const { data: templateData, error: templateError } = await supabase
       .from('plantilla_configs')
-      .select('final_html, ai_instructions, template_content, docx_storage_path, base_docx_storage_path, placeholder_docx_storage_path')
+      .select('*')
       .eq('id', project.template_id)
       .single();
 
