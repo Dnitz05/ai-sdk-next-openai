@@ -206,40 +206,37 @@ export async function POST(request: NextRequest) {
         throw new Error(`No es pot trobar la plantilla: ${templateError?.message}`);
       }
       
-      // MAPPING CORRECTE - usar camps que SÍ existeixen
-      const templateContent = template.final_html || 
-                             JSON.stringify(template.ai_instructions) || 
-                             null;
-                             
-      const docxPath = template.docx_storage_path || 
-                      template.placeholder_docx_storage_path || 
+      // SISTEMA SIMPLE: Usar directament el DOCX amb placeholders
+      // Prioritzar placeholder_docx_storage_path (format simple) sobre altres
+      const docxPath = template.placeholder_docx_storage_path || 
+                      template.docx_storage_path || 
                       template.base_docx_storage_path ||
                       template.indexed_docx_storage_path ||
                       null;
       
-      // Verificar que la plantilla té els camps necessaris
-      if (!templateContent || !docxPath) {
-        console.error('[API-Trigger] Plantilla incompleta:', {
-          hasContent: !!templateContent,
-          hasDocxPath: !!docxPath,
+      // Verificar que la plantilla té el DOCX necessari
+      if (!docxPath) {
+        console.error('[API-Trigger] Plantilla sense DOCX:', {
           paths: {
-            docx_storage_path: template.docx_storage_path,
             placeholder: template.placeholder_docx_storage_path,
+            docx_storage_path: template.docx_storage_path,
             base: template.base_docx_storage_path,
             indexed: template.indexed_docx_storage_path
           }
         });
-        throw new Error('La plantilla no té contingut o fitxer DOCX configurat');
+        throw new Error('La plantilla no té fitxer DOCX configurat');
       }
       
-      // Crear processador i executar
+      console.log(`📄 [API-Trigger] Usant DOCX: ${docxPath}`);
+      
+      // Crear processador i executar amb sistema simple
       const processor = new SmartDocumentProcessor();
       
       const result = await processor.processSingle(
-        templateContent,
+        '', // templateContent no necessari per sistema simple
         docxPath,
         generation.row_data,
-        project.template_id,  // ✅ CORREGIT: template_id
+        project.template_id,
         user.id
       );
       

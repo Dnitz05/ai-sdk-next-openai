@@ -76,11 +76,11 @@ export async function generatePlaceholderDocxWithIds(
         continue;
       }
       
-      // Generar el placeholder JSON unificat
-      const jsonPlaceholder = generateUnifiedJsonPlaceholder(paragraphId, data, paragraphInfo.originalText);
+      // Generar el placeholder simple
+      const simplePlaceholder = generateSimplePlaceholder(paragraphId, data, paragraphInfo.originalText);
       
-      // Substituir tot el paràgraf pel placeholder JSON
-      replaceAllTextInParagraph(paragraphInfo.paragraphElement, jsonPlaceholder, xmlDoc);
+      // Substituir tot el paràgraf pel placeholder simple
+      replaceAllTextInParagraph(paragraphInfo.paragraphElement, simplePlaceholder, xmlDoc);
       
       modificationsCount++;
       console.log(`[generatePlaceholderDocxWithIds] ✅ Paràgraf substituït per placeholder JSON: ${paragraphId} (${paragraphInfo.method})`);
@@ -426,13 +426,13 @@ function applyExcelPlaceholdersToText(text: string, excelMappings: ExcelLinkMapp
 }
 
 /**
- * Genera un placeholder JSON unificat per a un paràgraf
+ * Genera un placeholder simple per a un paràgraf
  * @param paragraphId ID del paràgraf
  * @param data Dades del paràgraf (Excel + IA)
  * @param originalText Text original del paràgraf
- * @returns Placeholder JSON com a string
+ * @returns Placeholder simple com a string
  */
-function generateUnifiedJsonPlaceholder(
+function generateSimplePlaceholder(
   paragraphId: string, 
   data: ParagraphData, 
   originalText: string
@@ -440,43 +440,22 @@ function generateUnifiedJsonPlaceholder(
   const hasExcel = data.excelMappings.length > 0;
   const hasAI = data.aiInstructions.length > 0;
   
-  let placeholder: UnifiedPlaceholder;
-  
-  if (hasExcel && hasAI) {
-    // COMBINAT: Excel + IA
-    placeholder = {
-      paragraphId,
-      type: 'combined',
-      baseTextWithPlaceholders: applyExcelPlaceholdersToText(originalText, data.excelMappings),
-      aiInstruction: {
-        prompt: data.aiInstructions[0].prompt || 'Processa aquest text segons les instruccions.',
-        useExistingText: data.aiInstructions[0].useExistingText
-      }
-    };
-    console.log(`[generateUnifiedJsonPlaceholder] 🔗 Placeholder COMBINAT per ${paragraphId}`);
-  } else if (hasExcel) {
-    // NOMÉS EXCEL
-    placeholder = {
-      paragraphId,
-      type: 'excel_only',
-      baseTextWithPlaceholders: applyExcelPlaceholdersToText(originalText, data.excelMappings)
-    };
-    console.log(`[generateUnifiedJsonPlaceholder] 📊 Placeholder EXCEL per ${paragraphId}`);
-  } else {
-    // NOMÉS IA
-    placeholder = {
-      paragraphId,
-      type: 'ai_only',
-      baseText: originalText,
-      aiInstruction: {
-        prompt: data.aiInstructions[0].prompt || 'Processa aquest text segons les instruccions.',
-        useExistingText: data.aiInstructions[0].useExistingText
-      }
-    };
-    console.log(`[generateUnifiedJsonPlaceholder] 🤖 Placeholder IA per ${paragraphId}`);
+  if (hasExcel) {
+    // Si té Excel mappings, usar el primer header normalitzat
+    const header = data.excelMappings[0].excelHeader;
+    if (header) {
+      const normalizedHeader = header.toUpperCase().replace(/\s+/g, '_').replace(/[^A-Z0-9_]/g, '');
+      console.log(`[generateSimplePlaceholder] 📊 Placeholder EXCEL per ${paragraphId}: {{${normalizedHeader}}}`);
+      return `{{${normalizedHeader}}}`;
+    }
+  } else if (hasAI) {
+    // Si només té IA, generar placeholder genèric basat en l'ID
+    const aiPlaceholder = `AI_${paragraphId.split('-').pop()?.toUpperCase() || 'CONTENT'}`;
+    console.log(`[generateSimplePlaceholder] 🤖 Placeholder IA per ${paragraphId}: {{${aiPlaceholder}}}`);
+    return `{{${aiPlaceholder}}}`;
   }
   
-  // Convertir a JSON i encapsular
-  const jsonString = JSON.stringify(placeholder, null, 0);
-  return `{{UNIFIED_PLACEHOLDER:${jsonString}}}`;
+  // Fallback genèric si no hi ha Excel ni IA
+  console.log(`[generateSimplePlaceholder] 🔧 Placeholder genèric per ${paragraphId}: {{PLACEHOLDER}}`);
+  return '{{PLACEHOLDER}}';
 }
